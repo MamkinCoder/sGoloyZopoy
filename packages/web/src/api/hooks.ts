@@ -1,0 +1,256 @@
+import type {
+  ApplicationDetailDTO,
+  ApplicationDTO,
+  CareerSiteDTO,
+  ChatMessageDTO,
+  ChatThreadDTO,
+  DedupRowDTO,
+  HealthDTO,
+  Paged,
+  ProfileDTO,
+  ResumesDTO,
+  RunDTO,
+  RunEventDTO,
+  StartRunBody,
+  StatsDTO,
+  UserDTO,
+} from "@sgz/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isRunActive } from "../lib/status";
+import { api, qs } from "./client";
+
+export type StatsRange = "today" | "7d" | "30d" | "all";
+export type SettingsMap = Record<string, unknown>;
+
+export const keys = {
+  me: ["me"] as const,
+  users: ["users"] as const,
+  profile: (slug: string) => ["profile", slug] as const,
+  stats: (slug: string, range: StatsRange) => ["stats", slug, range] as const,
+  applications: (slug: string, params: ApplicationsParams) => ["applications", slug, params] as const,
+  application: (id: number) => ["application", id] as const,
+  resumes: (slug: string) => ["resumes", slug] as const,
+  chats: (slug: string) => ["chats", slug] as const,
+  chatMessages: (id: number) => ["chat-messages", id] as const,
+  runs: (slug: string | undefined, limit: number) => ["runs", slug ?? "all", limit] as const,
+  run: (id: number) => ["run", id] as const,
+  runEvents: (id: number) => ["run-events", id] as const,
+  activeRun: ["run-active"] as const,
+  dedup: (id: number) => ["dedup", id] as const,
+  careerSites: (slug: string) => ["career-sites", slug] as const,
+  adapters: ["adapters"] as const,
+  health: ["health"] as const,
+  settings: ["settings"] as const,
+};
+
+// ---- auth
+export const useMe = () =>
+  useQuery({
+    queryKey: keys.me,
+    queryFn: () => api<{ authenticated: boolean; auth_required?: boolean }>("/me", { silent: true }),
+    retry: false,
+    staleTime: 60_000,
+  });
+
+export function useLogin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (password: string) => api<{ ok: true }>("/login", { method: "POST", body: { password }, silent: true }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.me }),
+  });
+}
+
+export function useLogout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<{ ok: true }>("/logout", { method: "POST" }),
+    onSuccess: () => qc.clear(),
+  });
+}
+
+// ---- users & profile
+export const useUsers = () => useQuery({ queryKey: keys.users, queryFn: () => api<UserDTO[]>("/users"), staleTime: 60_000 });
+
+export function useUpdateUser(slug: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<UserDTO>) => api<UserDTO>(`/users/${slug}`, { method: "PUT", body: patch }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.users }),
+  });
+}
+
+export const useProfile = (slug: string) =>
+  useQuery({ queryKey: keys.profile(slug), queryFn: () => api<ProfileDTO>(`/users/${slug}/profile`) });
+
+export function useSaveProfile(slug: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (p: ProfileDTO) => api<ProfileDTO>(`/users/${slug}/profile`, { method: "PUT", body: p }),
+    onSuccess: (data) => qc.setQueryData(keys.profile(slug), data),
+  });
+}
+
+export const useStats = (slug: string, range: StatsRange) =>
+  useQuery({
+    queryKey: keys.stats(slug, range),
+    queryFn: () => api<StatsDTO>(`/users/${slug}/stats${qs({ range })}`),
+    refetchInterval: 30_000,
+  });
+
+// ---- applications
+export interface ApplicationsParams {
+  status?: string; // comma-separated
+  source?: string;
+  since?: string;
+  until?: string;
+  q?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export const useApplications = (slug: string, params: ApplicationsParams) =>
+  useQuery({
+    queryKey: keys.applications(slug, params),
+    queryFn: () => api<Paged<ApplicationDTO>>(`/users/${slug}/applications${qs({ ...params })}`),
+    placeholderData: (prev) => prev,
+  });
+
+export const useApplication = (id: number | null) =>
+  useQuery({
+    queryKey: keys.application(id ?? 0),
+    queryFn: () => api<ApplicationDetailDTO>(`/applications/${id}`),
+    enabled: id != null,
+  });
+
+// ---- resumes
+export const useResumes = (slug: string) =>
+  useQuery({ queryKey: keys.resumes(slug), queryFn: () => api<ResumesDTO>(`/users/${slug}/resumes`) });
+
+export function useResumeAction(slug: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (arg: { action: "sync" | "touch" | "expand"; max?: number }) =>
+      api<{ run_id: number }>(`/users/${slug}/resumes/${arg.action}`, {
+        method: "POST",
+        body: arg.action === "expand" ? { max: arg.max } : undefined,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.activeRun });
+      qc.invalidateQueries({ queryKey: ["runs"] });
+      qc.invalidateQueries({ queryKey: keys.health });
+    },
+  });
+}
+
+// ---- chats
+export const useChats = (slug: string) =>
+  useQuery({ queryKey: keys.chats(slug), queryFn: () => api<ChatThreadDTO[]>(`/users/${slug}/chats`), refetchInterval: 60_000 });
+
+export const useChatMessages = (id: number | null) =>
+  useQuery({
+    queryKey: keys.chatMessages(id ?? 0),
+    queryFn: () => api<ChatMessageDTO[]>(`/chats/${id}/messages`),
+    enabled: id != null,
+  });
+
+// ---- runs
+export const useRuns = (slug: string | undefined, limit = 50) =>
+  useQuery({
+    queryKey: keys.runs(slug, limit),
+    queryFn: () => api<RunDTO[]>(`/runs${qs({ user: slug, limit })}`),
+    refetchInterval: 15_000,
+  });
+
+export const useRun = (id: number) =>
+  useQuery({
+    queryKey: keys.run(id),
+    queryFn: () => api<RunDTO>(`/runs/${id}`),
+    refetchInterval: (q) => (isRunActive(q.state.data?.status) ? 5_000 : false),
+  });
+
+export const useRunEvents = (id: number, enabled = true) =>
+  useQuery({
+    queryKey: keys.runEvents(id),
+    queryFn: () => api<RunEventDTO[]>(`/runs/${id}/events?after=0`),
+    enabled,
+    staleTime: Infinity,
+  });
+
+export const useActiveRun = () =>
+  useQuery({ queryKey: keys.activeRun, queryFn: () => api<RunDTO | null>("/runs/active"), refetchInterval: 10_000 });
+
+export const useDedup = (id: number, enabled = true) =>
+  useQuery({ queryKey: keys.dedup(id), queryFn: () => api<DedupRowDTO[]>(`/runs/${id}/dedup`), enabled });
+
+export function useStartRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: StartRunBody) => api<{ run_id: number }>("/runs", { method: "POST", body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["runs"] });
+      qc.invalidateQueries({ queryKey: keys.activeRun });
+      qc.invalidateQueries({ queryKey: keys.health });
+    },
+  });
+}
+
+export function useStopRun(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<{ ok: boolean }>(`/runs/${id}/stop`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.run(id) });
+      qc.invalidateQueries({ queryKey: keys.activeRun });
+    },
+  });
+}
+
+// ---- career sites
+export const useCareerSites = (slug: string) =>
+  useQuery({ queryKey: keys.careerSites(slug), queryFn: () => api<CareerSiteDTO[]>(`/users/${slug}/career-sites`) });
+
+export const useAdapters = () =>
+  useQuery({ queryKey: keys.adapters, queryFn: () => api<string[]>("/adapters"), staleTime: Infinity });
+
+export type CareerSiteBody = Pick<CareerSiteDTO, "name" | "baseUrl" | "ats" | "profile" | "enabled">;
+
+export function useCareerSiteMutations(slug: string) {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: keys.careerSites(slug) });
+  const create = useMutation({
+    mutationFn: (body: CareerSiteBody) => api<CareerSiteDTO>(`/users/${slug}/career-sites`, { method: "POST", body }),
+    onSuccess: invalidate,
+  });
+  const update = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Partial<CareerSiteBody> }) =>
+      api<CareerSiteDTO>(`/career-sites/${id}`, { method: "PUT", body }),
+    onSuccess: invalidate,
+  });
+  const remove = useMutation({
+    mutationFn: (id: number) => api<{ ok: boolean }>(`/career-sites/${id}`, { method: "DELETE" }),
+    onSuccess: invalidate,
+  });
+  // Queue a `career` run that onboards one configured site.
+  const onboard = useMutation({
+    mutationFn: (id: number) => api<{ run_id: number }>(`/users/${slug}/career-sites/${id}/onboard`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["runs"] });
+      qc.invalidateQueries({ queryKey: keys.activeRun });
+    },
+  });
+  return { create, update, remove, onboard };
+}
+
+// ---- system
+export const useHealth = () =>
+  useQuery({ queryKey: keys.health, queryFn: () => api<HealthDTO>("/health", { silent: true }), refetchInterval: 10_000, retry: false });
+
+export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: () => api<SettingsMap>("/settings") });
+
+export function useSaveSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: SettingsMap) => api<SettingsMap>("/settings", { method: "PUT", body: patch }),
+    onSuccess: (data) => qc.setQueryData(keys.settings, data),
+  });
+}

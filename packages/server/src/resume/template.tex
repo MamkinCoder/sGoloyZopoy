@@ -1,0 +1,47 @@
+\documentclass[a4paper]{ReadableCV}
+
+\usepackage{etoolbox}
+\makeatletter
+\@ifundefined{ordinal}{}{\let\ordinal\relax}
+\makeatother
+
+\color{black}
+
+\begin{document}
+
+\setPageColour{white}
+\setHeaderAlignment{left}
+\setHeadingColours{BlueGreen}
+\setContactLocation{opposite}
+{{#photo}}
+\setImage{{{photo}}}
+{{/photo}}
+
+\setYourName{{{name}}}
+\setYourJobTitle{{{title}}}
+{{contacts}}
+
+\showHeader
+\setSectionAlignment{left}
+{{#about}}
+\newHeading{О себе}
+
+{{about}}
+{{/about}}
+{{#skills}}
+\newHeading{Технический стек}
+
+{{skills}}
+{{/skills}}
+{{#jobs}}
+\newHeading{Опыт работы}
+\setJobCompanyOrder{CompanyFirst}
+
+{{jobs}}
+{{/jobs}}
+{{#education}}
+\newHeading{Образование}
+
+{{education}}
+{{/education}}
+\end{document}

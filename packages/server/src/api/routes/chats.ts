@@ -1,0 +1,33 @@
+import { Hono } from "hono";
+import type { ChatThreadDTO } from "@sgz/shared";
+import type { ApiDeps } from "../deps.js";
+import { badRequest } from "../errors.js";
+import { idParam, userOr404 } from "./common.js";
+
+export function chatRoutes({ store }: ApiDeps): Hono {
+  const r = new Hono();
+
+  r.get("/users/:slug/chats", (c) => {
+    const u = userOr404(store, c.req.param("slug"));
+    const threads = store.listChatThreads(u.id, c.req.query("state") || undefined);
+    const out: ChatThreadDTO[] = threads.map((t) => {
+      const msgs = store.listChatMessages(t.id);
+      const v = t.vacancyId === null ? null : store.getVacancy(t.vacancyId);
+      return {
+        ...t,
+        vacancy: v ? { id: v.id, title: v.title, company: v.company, url: v.url } : null,
+        unanswered: msgs.filter((m) => m.direction === "in" && m.isQuestion && !m.answered).length,
+        last_message: msgs.at(-1)?.text ?? null,
+      };
+    });
+    return c.json(out);
+  });
+
+  r.get("/chats/:id/messages", (c) => {
+    const id = idParam(c);
+    if (id === 0) throw badRequest("invalid id");
+    return c.json(store.listChatMessages(id));
+  });
+
+  return r;
+}

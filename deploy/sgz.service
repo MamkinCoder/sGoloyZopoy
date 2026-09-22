@@ -1,0 +1,58 @@
+# sGoloyZopoy — systemd unit. Installed by scripts/install-pi.sh to /etc/systemd/system/sgz.service.
+#
+# Memory budget (Pi 4B, 1.8 GB, zram swap, this box is also the home gateway):
+#   MemoryHigh  = soft cap: the kernel throttles/reclaims the cgroup above it (node + chromium + claude + pdflatex).
+#   MemoryMax   = hard cap: OOM-kill *inside this cgroup only* — never sing-box / pihole-FTL / unbound.
+#   OOMScoreAdjust=800 makes the global OOM killer prefer us over anything else on the box.
+#   KillMode=control-group makes sure orphaned chromium / claude children die with the service.
+[Unit]
+Description=sGoloyZopoy job-application runner + panel
+Documentation=file:///opt/sgz/app/docs/RUNBOOK.md
+After=network-online.target unbound.service pihole-FTL.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rpi
+Group=rpi
+WorkingDirectory=/opt/sgz/app
+# Values in .env override Environment= below (systemd reads EnvironmentFile after Environment).
+# sync-data.sh therefore strips SGZ_DATA_DIR / SGZ_REPO_DIR from the copy it ships to the Pi.
+Environment=SGZ_DATA_DIR=/opt/sgz/data
+Environment=SGZ_REPO_DIR=/opt/sgz/app
+Environment=NODE_ENV=production
+Environment=HOME=/home/rpi
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+# Binary defaults for the Pi; .env (shipped by sync-data.sh) may override. XELATEX_BIN is the frozen config name
+# for "the LaTeX engine" - the CV class (ReadableCV.cls, memoir) is compiled with pdflatex, so it points there.
+Environment=CHROMIUM_BIN=/usr/bin/chromium
+Environment=CLAUDE_BIN=/usr/local/bin/claude
+Environment=XELATEX_BIN=/usr/bin/pdflatex
+EnvironmentFile=/opt/sgz/data/.env
+ExecStart=/usr/local/bin/node packages/server/dist/cli.js serve
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=40
+KillMode=control-group
+KillSignal=SIGTERM
+
+MemoryAccounting=yes
+MemoryHigh=1050M
+MemoryMax=1300M
+MemorySwapMax=600M
+OOMScoreAdjust=800
+Nice=5
+IOSchedulingClass=idle
+LimitNOFILE=8192
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sgz
+
+# Light hardening. NoNewPrivileges is deliberately NOT set: chromium's sandbox helper may need it.
+PrivateTmp=yes
+ProtectSystem=full
+ReadWritePaths=/opt/sgz/data /opt/sgz/app /home/rpi
+
+[Install]
+WantedBy=multi-user.target

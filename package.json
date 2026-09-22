@@ -8,6 +8,10 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "dev": "pnpm --filter @sgz/server dev",
-    "sgz": "pnpm --filter @sgz/server sgz"
+    "sgz": "pnpm --filter @sgz/server sgz",
+    "check-leaks": "bash scripts/check-leaks.sh",
+    "deploy": "bash scripts/deploy.sh",
+    "sync-data": "bash scripts/sync-data.sh",
+    "pi-status": "bash scripts/pi-status.sh"
   }
 }

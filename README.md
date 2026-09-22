@@ -33,7 +33,16 @@ pnpm -r typecheck && pnpm -r test
 pnpm sgz hh-login --user yaroslav
 pnpm sgz run --user yaroslav --source hh --dry-run --limit 5
 pnpm dev                      # serve on :3002
+pnpm --filter @sgz/web dev     # separate terminal: Vite panel with /api proxy
 ```
+
+The API serves the compiled panel after deployment. During development, open the Vite URL.
+With an empty `SGZ_PANEL_PASSWORD`, the panel opens without a login screen.
+Use `SGZ_RUNNER=false pnpm dev` to run the panel/API without daily scheduled applications.
+
+Career-site setup and resume tools are available through `pnpm sgz site` and `pnpm sgz resume`.
+Start with a supervised dry run before enabling daily applications; browser sessions and Claude login
+must be configured on the machine that runs the service.
 
 ## Deploy to the Pi
 
