@@ -28,7 +28,7 @@ Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=CHROMIUM_BIN=/usr/bin/chromium
 Environment=CLAUDE_BIN=/usr/local/bin/claude
 Environment=XELATEX_BIN=/usr/bin/pdflatex
-EnvironmentFile=/opt/sgz/data/.env
+EnvironmentFile=-/opt/sgz/data/.env
 ExecStart=/usr/local/bin/node packages/server/dist/cli.js serve
 Restart=on-failure
 RestartSec=10
