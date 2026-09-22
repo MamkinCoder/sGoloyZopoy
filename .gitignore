@@ -1,0 +1,20 @@
+# personal data — NEVER commit
+data/
+*.db
+*.db-*
+*.pdf
+*.env
+.env*
+!data.example/
+!data.example/**
+hh-cookies*.json
+*.cls
+snapshots/
+
+# build
+/bin/
+/dist/
+web/node_modules/
+web/dist/
+*.log
+.DS_Store

@@ -1,0 +1,67 @@
+# Copy to data/users/<slug>/profile.yaml and fill in. This file is the ONLY source of facts the LLM
+# may use about you. Everything not listed here will not be claimed.
+full_name: "Имя Фамилия"
+email: "you@example.com"
+phone: "+7 900 000-00-00"
+telegram: "@handle"
+city: "Санкт-Петербург"
+citizenship: "РФ"
+relocation: "готов к переезду в любой регион России и за границу"
+work_formats: [remote, office, hybrid]
+salary_from: 0        # 0 → never name a figure
+salary_to: 0
+currency: RUR
+experience: "2,5 года коммерческого опыта"
+languages: ["русский - родной", "английский - C2"]
+directions: [go-backend, node-backend, react, vue, fullstack]
+
+summary: |
+  Backend-разработчик, основной язык Go. Писал интеграции поверх внешних API, биллинг и
+  рекуррентные подписки, кэширование на Redis, CI/CD и мониторинг. Также Node.js/TypeScript,
+  React/Next.js.
+
+verified_skills:
+  - Go
+  - TypeScript
+  - Node.js
+  - React
+  - Next.js
+  - Python
+  - Redis
+  - Docker
+  - CI/CD
+  - Grafana
+  - Playwright
+  - S3
+  - ЮKassa
+  - Linux
+
+never_claim_skills:
+  - Kubernetes
+  - Kafka
+  - RabbitMQ
+  - ClickHouse
+  - MongoDB
+  - Keycloak
+  - neo4j
+  - FastAPI
+  - SQLAlchemy
+
+hh_queries:
+  - "Go разработчик"
+  - "Golang"
+  - "Node.js разработчик"
+  - "React разработчик"
+  - "Vue разработчик"
+  - "Fullstack разработчик"
+hh_area: ""            # "" = no region filter
+exclude_words: [Senior, Lead, Head, Architect, Тимлид, стажёр, Intern, 1C, 1С, PHP, Bitrix]
+company_blacklist: []
+
+# Free facts for questionnaires and chat-bots. Keys are what the question is about.
+extra:
+  "готовность к командировкам": "да"
+  "формат работы": "любой - удалённо, офис, гибрид"
+  "когда готов выйти": "в течение 2 недель"
+  "гражданство": "РФ"
+  "образование": "ИТМО, информационная безопасность, неоконченное"
