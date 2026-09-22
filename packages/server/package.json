@@ -1,0 +1,28 @@
+{
+  "name": "@sgz/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "sgz": "./dist/cli.js" },
+  "scripts": {
+    "dev": "tsx src/cli.ts serve",
+    "sgz": "tsx src/cli.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sgz/shared": "workspace:*",
+    "@browserbasehq/stagehand": "^4.1.0",
+    "hono": "^4.7.0",
+    "@hono/node-server": "^1.14.0",
+    "zod": "^4.0.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "tsx": "^4.19.0",
+    "vitest": "^3.2.0",
+    "@types/node": "^22.15.0"
+  }
+}

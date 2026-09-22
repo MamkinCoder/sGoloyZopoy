@@ -5,7 +5,9 @@ picks the best resume from a pool, writes short cover letters, answers screening
 employer chat-bots, builds tailored LaTeX resumes for career sites, reports to Telegram, and shows
 everything in a web panel.
 
-Single Go binary + React SPA + SQLite. LLM via Claude Code headless (`claude -p`). Browser via go-rod.
+TypeScript monorepo (pnpm): Node 22 server + React SPA + SQLite (`node:sqlite`). Browser automation
+via **Stagehand v4** (natural-language `act/extract/observe` over CDP, selector cache, self-healing).
+LLM via Claude Code headless (`claude -p`, subscription) — also plugged into Stagehand as its model.
 
 ## Layout
 
@@ -45,5 +47,5 @@ go run ./cmd/sgz serve
 ## Deploy to the Pi
 
 ```
-make build-pi deploy sync-data
+scripts/deploy.sh && scripts/sync-data.sh
 ```

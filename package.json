@@ -1,0 +1,13 @@
+{
+  "name": "sgoloyzopoy",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "engines": { "node": ">=22.18.0" },
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "dev": "pnpm --filter @sgz/server dev",
+    "sgz": "pnpm --filter @sgz/server sgz"
+  }
+}

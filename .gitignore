@@ -18,3 +18,7 @@ web/node_modules/
 web/dist/
 *.log
 .DS_Store
+node_modules/
+packages/*/dist/
+packages/server/spa/
+*.tsbuildinfo
