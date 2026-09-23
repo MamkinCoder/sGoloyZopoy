@@ -2,14 +2,14 @@ import type { Notifier, Run, User } from "@sgz/shared";
 import { chunkMessage, formatAlert, formatReport } from "./format.js";
 
 export interface TelegramOptions {
-  baseUrl?: string; // default https://api.telegram.org
   fetch?: typeof fetch;
-  sleep?: (ms: number) => Promise<void>;
   tz?: string;
   warn?: (msg: string) => void;
 }
 
 const RETRIES = 3;
+const BASE = "https://api.telegram.org";
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export function createTelegram(token: string, chatId: string, panelUrl: string, opts: TelegramOptions = {}): Notifier {
   const warn = opts.warn ?? ((m: string) => console.error(m));
@@ -17,16 +17,14 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
     warn("telegram: no bot token, notifications disabled");
     return { report: async () => undefined, alert: async () => undefined };
   }
-  const base = (opts.baseUrl ?? "https://api.telegram.org").replace(/\/+$/, "");
   const doFetch = opts.fetch ?? fetch;
-  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
   async function sendOne(chat: string, text: string, extra: Record<string, unknown> = {}): Promise<void> {
     let lastErr = "";
     for (let attempt = 1; attempt <= RETRIES; attempt++) {
       let res: Response;
       try {
-        res = await doFetch(`${base}/bot${token}/sendMessage`, {
+        res = await doFetch(`${BASE}/bot${token}/sendMessage`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ chat_id: chat, text, parse_mode: "HTML", disable_web_page_preview: true, ...extra }),
@@ -85,11 +83,10 @@ export interface TelegramCommands {
  * Returns a stop function. One consumer per bot token.
  */
 export function startTelegramCallbacks(token: string, onTap: (data: string) => Promise<string>, opts: TelegramOptions & { commands?: TelegramCommands } = {}): () => void {
-  const base = (opts.baseUrl ?? "https://api.telegram.org").replace(/\/+$/, "");
   const doFetch = opts.fetch ?? fetch;
   const warn = opts.warn ?? ((m: string) => console.error(m));
   const api = async <T>(method: string, body: unknown): Promise<T> => {
-    const res = await doFetch(`${base}/bot${token}/${method}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const res = await doFetch(`${BASE}/bot${token}/${method}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const j = (await res.json()) as { ok: boolean; result: T; description?: string };
     if (!j.ok) throw new Error(`telegram ${method}: ${j.description ?? res.status}`);
     return j.result;
@@ -120,7 +117,7 @@ export function startTelegramCallbacks(token: string, onTap: (data: string) => P
         }
       } catch (e) {
         warn(`telegram callbacks: ${e instanceof Error ? e.message : String(e)}`);
-        await new Promise((r) => setTimeout(r, 10_000));
+        await sleep(10_000);
       }
     }
   })();

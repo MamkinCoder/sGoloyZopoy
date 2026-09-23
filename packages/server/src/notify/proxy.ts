@@ -11,7 +11,7 @@ export const telegramFetch = (env: NodeJS.ProcessEnv = process.env): typeof fetc
   return p && /^http:\/\//.test(p) ? proxiedFetch(p) : undefined;
 };
 
-export function proxiedFetch(proxyUrl: string): typeof fetch {
+function proxiedFetch(proxyUrl: string): typeof fetch {
   const proxy = new URL(proxyUrl);
   const agent = new https.Agent({ keepAlive: false });
   // Tunnel each TLS connection through CONNECT host:443.

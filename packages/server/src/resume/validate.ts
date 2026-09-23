@@ -1,9 +1,10 @@
 // Guard-rails for LLM-tailored CVs: facts (jobs, education, identity) must survive tailoring untouched,
 // never_claim skills must not appear, and sizes must stay one-page friendly.
 import type { CV } from "@sgz/shared";
+import { claimRegex } from "../llm/guards.js";
 
-export const MAX_BULLET_CHARS = 220;
-export const MAX_ABOUT_CHARS = 900;
+const MAX_BULLET_CHARS = 220;
+const MAX_ABOUT_CHARS = 900;
 
 const norm = (s: string): string => s.replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -13,14 +14,8 @@ function diffSets(base: string[], tailored: string[]): { missing: string[]; adde
   return { missing: base.filter((x) => !t.has(x)), added: tailored.filter((x) => !b.has(x)) };
 }
 
-function claimRegex(term: string): RegExp {
-  const escaped = term.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // JS \b is ASCII-only, so build Unicode-aware boundaries by hand ("Go" must not match "Google")
-  return new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, "iu");
-}
-
 /** Every text field of the CV with a human-readable path, for token scans. */
-export function cvTextFields(cv: CV): { path: string; text: string }[] {
+function cvTextFields(cv: CV): { path: string; text: string }[] {
   const out: { path: string; text: string }[] = [{ path: "title", text: cv.title }, { path: "about", text: cv.about }];
   cv.skills.forEach((g, i) => {
     out.push({ path: `skills[${i}].name`, text: g.name });
@@ -61,7 +56,7 @@ export function validateCV(base: CV, tailored: CV, neverClaim: string[]): string
   if (terms.length) {
     const fields = cvTextFields(tailored);
     for (const term of terms) {
-      const re = claimRegex(term);
+      const re = claimRegex([term])!; // Unicode-aware boundaries: "Go" does not match "Google"
       for (const f of fields) if (re.test(f.text)) v.push(`never_claim «${term}» found in ${f.path}`);
     }
   }

@@ -4,9 +4,7 @@ import { extractJson } from "./claude.js";
 
 type GenerateParams = Parameters<StagehandLLM["generate"]>[0];
 
-export interface StagehandExec {
-  (req: { tier: Tier; prompt: string; schema?: unknown }): Promise<{ text: string; structured?: unknown }>;
-}
+type StagehandExec = (req: { tier: Tier; prompt: string; schema?: unknown }) => Promise<{ text: string; structured?: unknown }>;
 
 const TIERS: Tier[] = ["fast", "write", "tailor"];
 
@@ -30,14 +28,14 @@ export function stagehandAdapter(exec: StagehandExec, tier: Tier = stagehandTier
     async generate(p) {
       const fmt = p.responseFormat;
       const wantsJson = fmt?.type === "json_schema";
-      const r = await exec({ tier, prompt: flattenMessages(p), schema: fmt?.type === "json_schema" ? fmt.schema : undefined });
+      const r = await exec({ tier, prompt: flattenMessages(p), schema: wantsJson ? fmt.schema : undefined });
       if (!wantsJson) return { text: r.text };
       let structured = r.structured;
       if (structured === undefined) {
         try {
           structured = extractJson(r.text);
         } catch {
-          structured = undefined;
+          // no JSON in the text: structured stays undefined
         }
       }
       const text = structured !== undefined && !r.text.trim() ? JSON.stringify(structured) : r.text;

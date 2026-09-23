@@ -2,13 +2,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-export type TemplateVars = Record<string, unknown>;
+type TemplateVars = Record<string, unknown>;
 
-export const PROMPTS_DIR = fileURLToPath(new URL("../../prompts/", import.meta.url));
+const PROMPTS_DIR = fileURLToPath(new URL("../../prompts/", import.meta.url));
 
 const cache = new Map<string, string>();
 
-export function loadTemplate(name: string): string {
+function loadTemplate(name: string): string {
   let t = cache.get(name);
   if (t === undefined) {
     t = readFileSync(`${PROMPTS_DIR}${name}.md`, "utf8");

@@ -20,7 +20,7 @@ import type {
   Vacancy,
 } from "@sgz/shared";
 import { z, type ZodType } from "zod";
-import { ClaudeError, DEFAULT_TIMEOUT_MS, TIER_MODEL, extractJson, runClaude } from "./claude.js";
+import { ClaudeError, TIER_MODEL, extractJson, runClaude } from "./claude.js";
 import { neverClaimList, profileForLLM, renderHistory, renderQuestions, renderResumes, renderVacancies, renderVacancy } from "./format.js";
 import { LIMITS, blockedTech, ensureDecisions, enforceMax, normalizeProse, sanitizeLetter, stripLinkSentences, stripNeverClaimSentences } from "./guards.js";
 import {
@@ -39,19 +39,14 @@ import { guardTailoredCV } from "./tailor.js";
 import { renderPrompt } from "./template.js";
 
 export { renderPrompt } from "./template.js";
-export { FakeLLM } from "./fake.js";
-export { extractJson } from "./claude.js";
 
-export const DECIDE_BATCH = 5; // smaller batches: faster calls on the Pi, a failed batch loses less
-export const DECIDE_PARALLEL = Math.max(1, Number(process.env.SGZ_DECIDE_PARALLEL ?? 2) || 1);
-export const RESUME_TEXT_MAX = 6000;
+const DECIDE_BATCH = 5; // smaller batches: faster calls on the Pi, a failed batch loses less
+const DECIDE_PARALLEL = Math.max(1, Number(process.env.SGZ_DECIDE_PARALLEL ?? 2) || 1);
+const RESUME_TEXT_MAX = 6000;
 const RETRY_SUFFIX = "\n\nВерни ТОЛЬКО JSON по схеме, без текста до и после.";
 
 export interface LLMOptions {
-  timeoutMs?: number;
   env?: Record<string, string>;
-  /** Pass zod-derived `--json-schema` for object outputs when the binary supports it (default true). */
-  useJsonSchema?: boolean;
 }
 
 interface Ctx {
@@ -84,8 +79,7 @@ async function invoke(ctx: Ctx, task: string, tier: Tier, prompt: string, attemp
       cwd: ctx.cfg.repoDir,
       tier,
       prompt,
-      timeoutMs: ctx.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      schema: ctx.opts.useJsonSchema === false ? undefined : jsonSchema,
+      schema: jsonSchema,
       env: ctx.opts.env,
     });
     return { r, log };
@@ -120,17 +114,14 @@ async function call<T>(ctx: Ctx, o: CallOpts<T>): Promise<T> {
 
 function toJsonSchema(schema: ZodType): unknown {
   try {
-    // The Pi's claude validates --json-schema with a draft-07 validator that rejects zod's
-    // "$schema": draft/2020-12 tag; the schema body itself is draft-07 compatible.
-    const { $schema: _drop, ...rest } = z.toJSONSchema(schema, { io: "output" }) as Record<string, unknown>;
-    return rest;
+    return z.toJSONSchema(schema, { io: "output" }); // buildArgs drops the "$schema" tag
   } catch {
     return undefined;
   }
 }
 
 function makeClient(ctx: Ctx): LLMClient {
-  const client: LLMClient = {
+  return {
     async decide(input: DecideInput): Promise<Decision[]> {
       const batches: Vacancy[][] = [];
       for (let i = 0; i < input.vacancies.length; i += DECIDE_BATCH) batches.push(input.vacancies.slice(i, i + DECIDE_BATCH));
@@ -171,6 +162,7 @@ function makeClient(ctx: Ctx): LLMClient {
       // A reply may go out together with needs_human (e.g. «да, пришлите тестовое» + ping the human);
       // unknown skills hold the reply until the human answers in Telegram.
       const unknown_skills = r.unknown_skills.map((s) => s.trim()).filter(Boolean).slice(0, 5);
+      const reason = enforceMax(r.reason, LIMITS.reason);
       const at = r.interview_at ? new Date(r.interview_at) : null;
       const interview_at = at && !Number.isNaN(at.getTime()) ? at.toISOString() : null;
       if (choices.length && !unknown_skills.length) {
@@ -178,15 +170,15 @@ function makeClient(ctx: Ctx): LLMClient {
         // An empty reply (offer, documents, rejection) presses nothing; a loose match counts only when it is unambiguous.
         const norm = (s: string) => s.trim().toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, "");
         const want = norm(r.reply);
-        if (!want) return { reply: "", needs_human: r.needs_human, reason: enforceMax(r.reason, LIMITS.reason), unknown_skills, interview_at };
+        if (!want) return { reply: "", needs_human: r.needs_human, reason, unknown_skills, interview_at };
         const loose = choices.filter((c) => want.includes(norm(c)) || norm(c).includes(want));
         const picked = choices.find((c) => norm(c) === want) ?? (loose.length === 1 ? loose[0] : undefined);
         return picked
-          ? { reply: picked, needs_human: r.needs_human, reason: enforceMax(r.reason, LIMITS.reason), unknown_skills, interview_at }
+          ? { reply: picked, needs_human: r.needs_human, reason, unknown_skills, interview_at }
           : { reply: "", needs_human: true, reason: enforceMax(`не выбрал вариант из кнопок: ${r.reply}`, LIMITS.reason), unknown_skills, interview_at };
       }
       const reply = unknown_skills.length ? "" : sanitizeLetter(r.reply, blockedTech(profile), LIMITS.chatReply);
-      return { reply, needs_human: r.needs_human, reason: enforceMax(r.reason, LIMITS.reason), unknown_skills, interview_at };
+      return { reply, needs_human: r.needs_human, reason, unknown_skills, interview_at };
     },
 
     async summarizeResume(resumeText: string): Promise<ResumeSummary> {
@@ -270,7 +262,6 @@ function makeClient(ctx: Ctx): LLMClient {
       return makeClient({ ...ctx, runId });
     },
   };
-  return client;
 }
 
 async function decideBatch(ctx: Ctx, profile: Profile, resumes: HHResume[], vacancies: Vacancy[]): Promise<Decision[]> {
@@ -293,7 +284,7 @@ async function decideBatch(ctx: Ctx, profile: Profile, resumes: HHResume[], vaca
 }
 
 /** `tailored` survives only for an approved poor fit with a usable title; skills ⊆ verified_skills. */
-export function guardTailored(profile: Profile, d: Decision): Decision {
+function guardTailored(profile: Profile, d: Decision): Decision {
   const { tailored, ...rest } = d;
   const fit = d.resume_fit ?? "good";
   if (!d.apply || fit !== "poor" || !tailored) return { ...rest, resume_fit: fit };

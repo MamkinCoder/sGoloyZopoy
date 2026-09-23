@@ -10,8 +10,6 @@ export const DEFAULT_LATEX_BIN = "pdflatex";
 
 export interface BuildPdfOptions {
   latexBin?: string;
-  /** @deprecated alias of latexBin kept for the original xelatex-era contract */
-  xelatexBin?: string;
   texDir: string;
   texSource: string;
   outPdf: string;
@@ -61,22 +59,16 @@ function run(bin: string, args: string[], cwd: string, timeoutMs: number): Promi
 }
 
 /** ≤40 log lines starting a little before the last "!" error marker (or simply the last 40 lines). */
-export function errorTail(log: string, lines = 40): string {
+function errorTail(log: string, lines = 40): string {
   const all = log.split("\n");
-  let last = -1;
-  for (let i = all.length - 1; i >= 0; i--) {
-    if (all[i]!.startsWith("!")) {
-      last = i;
-      break;
-    }
-  }
+  const last = all.findLastIndex((l) => l.startsWith("!"));
   const start = last < 0 ? Math.max(0, all.length - lines) : Math.max(0, last - 5);
   return all.slice(start, start + lines).join("\n").trim();
 }
 
 export async function buildPdf(opts: BuildPdfOptions): Promise<{ log: string }> {
   const { texDir, texSource, outPdf, timeoutMs = 120_000 } = opts;
-  const bin = opts.latexBin ?? opts.xelatexBin ?? DEFAULT_LATEX_BIN;
+  const bin = opts.latexBin ?? DEFAULT_LATEX_BIN;
   if (!(await stat(texDir).catch(() => null))?.isDirectory()) throw new Error(`texDir is not a directory: ${texDir}`);
   const work = await mkdtemp(join(tmpdir(), "sgz-tex-"));
   try {
@@ -114,9 +106,6 @@ export async function latexAvailable(bin = DEFAULT_LATEX_BIN): Promise<boolean> 
     return false;
   }
 }
-
-/** @deprecated use latexAvailable */
-export const xelatexAvailable = latexAvailable;
 
 /**
  * Map the frozen Config.xelatexBin to the engine ReadableCV needs: its default value "xelatex" is

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockedTech, containsNeverClaim, enforceMax, ensureDecisions, normalizeProse, pickResumeId, sanitizeLetter, splitSentences, stripLinkSentences, stripNeverClaimSentences } from "../../src/llm/guards.js";
+import { blockedTech, enforceMax, ensureDecisions, normalizeProse, pickResumeId, sanitizeLetter, splitSentences, stripLinkSentences, stripNeverClaimSentences } from "../../src/llm/guards.js";
 import { renderTemplate } from "../../src/llm/template.js";
 import { resumes, vacancies } from "./fixtures.js";
 
@@ -13,9 +13,6 @@ describe("guards", () => {
   it("drops never_claim sentences with cyrillic-aware word boundaries", () => {
     const never = ["Kubernetes", "Kafka"];
     expect(stripNeverClaimSentences("Работал с Go. Разворачивал в Kubernetes кластере. Знаю Redis.", never)).toBe("Работал с Go. Знаю Redis.");
-    expect(containsNeverClaim("использую kafka-connect", never)).toBe(true);
-    expect(containsNeverClaim("Kafkaesque story", never)).toBe(false);
-    expect(containsNeverClaim("ничего", [])).toBe(false);
   });
 
   it("keeps honest «not in production» sentences, still drops claims", () => {

@@ -2,7 +2,7 @@
 import type { Decision, HHResume, Vacancy } from "@sgz/shared";
 
 // URLs, t.me, @handles, emails, host/path, bare profile hosts, RU/international phones.
-export const LINK_RE =
+const LINK_RE =
   /https?:\/\/|www\.|t\.me|@[a-z0-9_]{4,}|[\w.+-]+@[\w-]+\.[a-z]{2,}|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\/|\b(?:github|gitlab|bitbucket|linkedin|habr|leetcode|vk|telegram)\.(?:com|ru|org|me)\b|\+\d[\d\s()-]{8,}\d|\b8[\s(-]*\d{3}[\s)-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}\b/i;
 const EMOJI_RE = /[\p{Extended_Pictographic}\u{FE0F}]/gu;
 const SENTENCE_RE = /[^.!?\n]+(?:[.!?]+|\n|$)/g;
@@ -38,12 +38,8 @@ export function splitSentences(text: string): string[] {
   return out;
 }
 
-export function hasLink(s: string): boolean {
-  return LINK_RE.test(s);
-}
-
 export function stripLinkSentences(text: string): string {
-  return joinSentences(splitSentences(text).filter((s) => !hasLink(s)));
+  return joinSentences(splitSentences(text).filter((s) => !LINK_RE.test(s)));
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -53,11 +49,6 @@ export function claimRegex(tokens: string[]): RegExp | null {
   const parts = tokens.map((t) => t.trim()).filter(Boolean).map(escapeRe);
   if (!parts.length) return null;
   return new RegExp(`(?:^|[^\\p{L}\\p{N}_])(?:${parts.join("|")})(?=$|[^\\p{L}\\p{N}_])`, "iu");
-}
-
-export function containsNeverClaim(text: string, never: string[]): boolean {
-  const re = claimRegex(never);
-  return re ? re.test(text) : false;
 }
 
 // An honest «X в продакшене не использовал» is what the prompts ask for; it is not a claim.
@@ -94,9 +85,8 @@ export function normalizeProse(text: string): string {
     .trim();
 }
 
-/** Everything a letter or chat reply must satisfy, in one call. */
 /** Well-known technologies a letter may only mention when the seeker lists them in verified_skills. */
-export const COMMON_TECH = [
+const COMMON_TECH = [
   "Kubernetes", "k8s", "Kafka", "RabbitMQ", "ClickHouse", "Elasticsearch", "MongoDB", "Cassandra", "Java", "Kotlin", "Scala",
   "C#", ".NET", "PHP", "Laravel", "Ruby", "Rust", "C++", "Swift", "1C", "Terraform", "Ansible", "AWS", "GCP", "Azure", "gRPC",
   "Airflow", "Spark", "Hadoop", "Angular", "Svelte", "Flutter", "Unity", "Oracle", "MySQL", "Jenkins", "OpenShift",
@@ -111,6 +101,7 @@ export function blockedTech(p: { verified_skills: string[]; never_claim_skills: 
   return [...p.never_claim_skills, ...COMMON_TECH.filter((t) => !verified(t) && !(alt(t) && verified(alt(t)!)))];
 }
 
+/** Everything a letter or chat reply must satisfy, in one call. */
 export function sanitizeLetter(text: string, never: string[], max: number): string {
   const cleaned = stripNeverClaimSentences(stripLinkSentences(normalizeProse(text)), never);
   return enforceMax(cleaned, max);

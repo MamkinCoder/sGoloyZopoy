@@ -90,18 +90,6 @@ export const TailorSchema = z.object({ cv: CVSchema, changes: z.array(z.string()
 
 export const CoverLetterSchema = z.object({ cover_letter: z.string() });
 
-export const SiteOnboardSchema = z.object({
-  ats: z.string().default("custom"),
-  listing_url: z.string().default(""),
-  jobs_json_url: z.string().default(""),
-  apply_mode: z.enum(["ats_api", "agent"]).default("agent"),
-  discover_hints: z.string().default(""),
-  apply_hints: z.string().default(""),
-  notes: z.string().default(""),
-});
-
-export const PickElementSchema = z.object({ idx: z.coerce.number().int(), reason: z.string().default("") });
-
 /** Accepts `[...]`, `{items:[...]}`, `{decisions:[...]}` etc. — models love wrapping arrays. */
 export function unwrapArray(v: unknown): unknown {
   if (Array.isArray(v)) return v;

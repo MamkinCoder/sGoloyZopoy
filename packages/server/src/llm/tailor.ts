@@ -4,7 +4,7 @@ import { LIMITS, blockedTech, claimRegex, enforceMax, normalizeProse, stripNever
 
 const norm = (s: string) => s.trim().toLowerCase();
 
-export function allowedTools(profile: Profile, base: CV): Set<string> {
+function allowedTools(profile: Profile, base: CV): Set<string> {
   const set = new Set<string>();
   for (const s of profile.verified_skills) set.add(norm(s));
   for (const g of base.skills) for (const i of g.items) set.add(norm(i));

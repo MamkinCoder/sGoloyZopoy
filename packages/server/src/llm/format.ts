@@ -1,7 +1,7 @@
 // Renders domain objects into the plain-text blocks the prompt templates expect.
 import type { ChatMessage, HHResume, Profile, Question, Vacancy } from "@sgz/shared";
 
-export const DESCRIPTION_MAX = 3000;
+const DESCRIPTION_MAX = 3000;
 
 /** Profile as the model may see it. Contacts are dropped unless a form needs them. */
 export function profileForLLM(p: Profile, opts: { contacts?: boolean } = {}): Record<string, unknown> {
@@ -13,7 +13,7 @@ export function neverClaimList(p: Profile): string {
   return p.never_claim_skills.length ? p.never_claim_skills.join(", ") : "(список пуст)";
 }
 
-export function isEnglish(text: string): boolean {
+function isEnglish(text: string): boolean {
   const latin = (text.match(/[a-z]/gi) ?? []).length;
   const cyr = (text.match(/[а-яё]/gi) ?? []).length;
   return latin > cyr * 2 && latin > 40;

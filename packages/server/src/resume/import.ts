@@ -95,7 +95,7 @@ export function importTex(tex: string): ImportResult {
 // ---------- text utilities ----------
 
 /** Remove `% ...` comments (not `\%`) line by line. Lines that were only a comment vanish. */
-export function stripComments(src: string): string {
+function stripComments(src: string): string {
   return src
     .split("\n")
     .map((line) => {
@@ -123,7 +123,7 @@ function documentBody(src: string): string {
 }
 
 /** Read one `{...}` group at `pos` (leading whitespace allowed). Nested braces are balanced. */
-export function readGroup(src: string, pos: number): { value: string; end: number } | null {
+function readGroup(src: string, pos: number): { value: string; end: number } | null {
   let i = pos;
   while (i < src.length && /\s/.test(src[i]!)) i++;
   if (src[i] !== "{") return null;
@@ -163,7 +163,7 @@ function skipOptional(src: string, pos: number): number {
 const INLINE_WRAPPERS = /\\(?:uline|textbf|textit|emph|underline|texttt)\{([^{}]*)\}/g;
 
 /** LaTeX text → plain text: strip inline formatting, unescape specials, normalise dashes/spaces. */
-export function unescapeLatex(s: string): string {
+function unescapeLatex(s: string): string {
   let t = s;
   for (let guard = 0; guard < 5 && INLINE_WRAPPERS.test(t); guard++) {
     t = t.replace(INLINE_WRAPPERS, "$1");
@@ -304,7 +304,7 @@ function parseSkills(text: string, warnings: string[]): CV["skills"] {
 }
 
 /** Split "a, b (x, y), c" on commas that are not inside parentheses. */
-export function splitList(s: string): string[] {
+function splitList(s: string): string[] {
   const out: string[] = [];
   let depth = 0;
   let cur = "";
