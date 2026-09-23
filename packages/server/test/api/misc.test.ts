@@ -95,6 +95,7 @@ describe("system", () => {
       chat_track_since: "2026-09-23",
       chat_followup_days: "7",
       career_per_site: "3",
+      career_per_aggregator: "8",
       career_sites_per_run: "1",
       career_autopilot: "1",
       run_max_min: "0",

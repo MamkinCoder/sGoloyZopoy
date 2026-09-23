@@ -2,8 +2,9 @@
 // closed) → build PDF → cover letter → QUEUED for human review. Nothing is submitted automatically:
 // the panel starts stage send:<id> (submit) or inspect:<id> (fill the form, don't submit) per item.
 import { mkdirSync } from "node:fs";
-import { paths, RunAbortError, Status, type Answer, type CV, type CareerSite, type Decision, type Discovered, type Question, type Vacancy } from "@sgz/shared";
+import { paths, RunAbortError, Status, type ATSKind, type Answer, type CV, type CareerSite, type Decision, type Discovered, type Question, type Vacancy } from "@sgz/shared";
 import { dailyBudget } from "./budget.js";
+import { atsClientFor } from "../career/ats/index.js";
 import type { RunContext } from "./context.js";
 import { classify, titleScore, companyLimitSettings, createRunCompanyTracker, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
 import { isStop, newApp } from "./hh.js";
@@ -134,7 +135,9 @@ export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPla
     let fails = 0;
     try {
       // Spread wide: at most career_per_site vacancies per site per run.
-      const cap = Math.min(budget, Number(ctx.store.getSetting("career_per_site") || 3) || 3);
+      // Job boards (Habr Career) list hundreds of employers: a bigger share than one company's site.
+      const perSite = atsClientFor(site.ats as ATSKind)?.aggregator ? Number(ctx.store.getSetting("career_per_aggregator") || 8) || 8 : Number(ctx.store.getSetting("career_per_site") || 3) || 3;
+      const cap = Math.min(budget, perSite);
       budget -= cap - (await runSite(ctx, u, site, cap, plan.apply, companyTracker));
     } catch (e) {
       if (e instanceof RunAbortError || isStop(e)) throw e;

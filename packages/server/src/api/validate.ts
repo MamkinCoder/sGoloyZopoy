@@ -169,6 +169,7 @@ export const SETTING_KEYS = [
   "chat_track_since",
   "chat_followup_days",
   "career_per_site",
+  "career_per_aggregator",
   "career_sites_per_run",
   "career_autopilot",
   "run_max_min",
@@ -191,6 +192,7 @@ export const SettingsSchema = z
     feedback_request: boolish, // "0" = don't ask for feedback after a rejection
     career_sites_per_run: numish, // sites per autopilot chunk (between chat polls)
     career_autopilot: boolish, // "0" = no automatic career gathering between chat polls
+    career_per_aggregator: numish, // same for job boards (Habr Career), default 8
     career_per_site: numish, // max vacancies queued per career site per run (spread wide)
     run_max_min: numish, // watchdog: max minutes per run, "0" = built-in caps (20 chats/touch, 30 career chunk, 150 full)
     chat_track_since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD"), // chats modified since this day are tracked

@@ -204,7 +204,7 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       else `queued*3 + min(found,10)*0.2 + days since last visit - 5*fails` (30-day yield, see
       `GET /users/:slug/career-sites`). A site with 5+ consecutive failed visits waits a week.
     - `site_fail:<site id>` (internal, written by the runner): consecutive onboarding/discovery failures, reset on a clean visit.
-    - `career_per_site`: max vacancies queued per site per run, default 3.
+    - `career_per_site`: max vacancies queued per site per run, default 3; `career_per_aggregator`: same for job boards (Habr Career), default 8.
     - Every ~4h it also runs hh stage `touch` (raise resumes in search).
   - Telegram (`sgz serve` with a bot token):
     - `queue_tg_cards`: `"1"` (default) sends a card per new review-queue item with «Отправить» (starts
