@@ -58,7 +58,7 @@ export async function serve(): Promise<void> {
   const start = (req: Omit<RunRequest, "dryRun" | "limit" | "trigger">) =>
     app.runner.start({ ...req, dryRun: false, limit: 0, trigger: "schedule" }).catch((e: unknown) => console.error(`sgz serve: ${req.stage}: ${errMessage(e)}`));
   const startChatPoll = () => {
-    if (app.runner.active()) return;
+    if (!(chatPollMin > 0) || app.runner.active()) return;
     lastChatPoll = Date.now();
     // The interval counts from the poll's end: a slow poll must still leave room for career chunks.
     void start({ userSlug: "all", source: "hh", stage: "chats" }).then(async (id) => {
@@ -78,6 +78,7 @@ export async function serve(): Promise<void> {
     if (app.runner.active()) return;
     // «Отправить» tapped in Telegram while a run was busy: those go first.
     if (await startPendingSend(app.store, app.runner).catch((e: unknown) => (console.error(`sgz serve: queued send: ${errMessage(e)}`), false))) return;
+    if (app.runner.active()) return; // a panel / Telegram run started during the await
     const job = nextJob({
       now: Date.now(),
       lastChatPoll,
@@ -91,10 +92,8 @@ export async function serve(): Promise<void> {
         })?.slug ?? null,
     });
     if (job?.kind === "chats") startChatPoll();
-    else if (job?.kind === "touch") {
-      app.store.setSetting("touch_last_at", new Date().toISOString());
-      void start({ userSlug: "all", source: "hh", stage: "touch" });
-    } else if (job?.kind === "career") void start({ userSlug: job.userSlug, source: "career", stage: "rotate" });
+    // touch_last_at only once the run really started: a RunBusyError must not skip the raise for 4 h.
+    else if (job?.kind === "touch") void start({ userSlug: "all", source: "hh", stage: "touch" }).then((id) => typeof id === "number" && app.store.setSetting("touch_last_at", new Date().toISOString())); else if (job?.kind === "career") void start({ userSlug: job.userSlug, source: "career", stage: "rotate" });
   };
   // Telegram buttons: queue cards (send / skip) and «есть / нет» answers for unknown skills (update the
   // profile, then answer the waiting chats). /status and /queue answer from the configured chats.
@@ -116,7 +115,7 @@ export async function serve(): Promise<void> {
         return cb.has ? `✅ ${skill} добавлен в навыки, отвечаю работодателю` : `❌ ${skill} отмечен как «нет», отвечаю работодателю`;
       }, { fetch: telegramFetch(), commands: { chatIds: [app.cfg.tgChatId, ...app.store.listUsers().map((u) => u.tgChatId)].filter(Boolean), onCommand } })
     : null;
-  const chatPoll = app.cfg.runnerEnabled && chatPollMin > 0 ? setInterval(() => void tick(), 60_000) : null;
+  const chatPoll = app.cfg.runnerEnabled ? setInterval(() => void tick(), 60_000) : null;
   // Evening digest: once a day at settings.digest_at ("" = off), independent of the runner.
   const digestTimer = app.cfg.tgBotToken
     ? setInterval(() => {

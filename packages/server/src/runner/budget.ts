@@ -1,6 +1,7 @@
 // Throttle, memory guard and daily budget: the three things that keep the Pi and hh.ru happy.
 import { readFileSync } from "node:fs";
 import { RunAbortError, Status, type Config, type Logger, type Store, type User } from "@sgz/shared";
+import { addDays, zonedParts, zonedToUtc } from "../scheduler/tz.js";
 
 export function readMemAvailableMB(): number {
   if (process.platform !== "linux") return 4096;
@@ -47,10 +48,18 @@ export async function guardMemory(stage: string, o: MemoryGuardOpts): Promise<vo
   throw new RunAbortError(Status.FAILED_LOW_MEMORY, `only ${second} MB available after closing the browser (need ${o.cfg.memoryGuardMB})`);
 }
 
-/** min(daily limit − sent today, req.limit || ∞); never negative. */
-export function dailyBudget(store: Store, user: User, sources: string[], dailyLimit: number, reqLimit: number, dayISO: string): number {
+/** UTC bounds [since, until) of `now`'s local day in tz. */
+export function dayBoundsUtc(now: Date, tz: string): { since: string; until: string } {
+  const p = zonedParts(now, tz);
+  const next = addDays(p, 1);
+  return { since: zonedToUtc(p.y, p.m, p.d, 0, 0, tz).toISOString(), until: zonedToUtc(next.y, next.m, next.d, 0, 0, tz).toISOString() };
+}
+
+/** min(daily limit − sent during now's local day, req.limit || ∞); never negative. */
+export function dailyBudget(store: Store, user: User, sources: string[], dailyLimit: number, reqLimit: number, now: Date, tz: string): number {
+  const { since, until } = dayBoundsUtc(now, tz);
   let sentToday = 0;
-  for (const s of sources) sentToday += store.countSentToday(user.id, s, dayISO);
+  for (const s of sources) sentToday += store.countSentToday(user.id, s, since, until);
   const remaining = Math.max(0, dailyLimit - sentToday);
   return reqLimit > 0 ? Math.min(remaining, reqLimit) : remaining;
 }

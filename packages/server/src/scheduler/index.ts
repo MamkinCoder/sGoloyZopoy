@@ -79,18 +79,32 @@ export function createScheduler(svc: RunService, opts: SchedulerOptions): Schedu
       if (!running) return;
       if (now().getTime() < target.getTime() - 1000) return schedule(); // capped timeout: keep waiting
       floor = target.getTime() + 60_000;
-      void fire().finally(schedule);
+      void fire().then((busy) => (busy ? retry() : schedule()));
     }, Math.min(delay, MAX_TIMEOUT));
   };
 
-  const fire = async () => {
+  // The autopilot keeps the runner busy most of the day: a busy slot waits for it instead of losing the day's run.
+  const retry = () => {
+    if (!running) return;
+    timer = setT(() => {
+      timer = null;
+      if (running) void fire().then((busy) => (busy ? retry() : schedule()));
+    }, 60_000);
+  };
+
+  /** True when the runner was busy and the slot is still owed. */
+  const fire = async (): Promise<boolean> => {
     try {
       const id = await svc.start({ userSlug: "all", source: "all", dryRun: false, limit: 0, trigger: "schedule" });
       log(`scheduler: started run #${id}`);
     } catch (e) {
-      if (e instanceof RunBusyError) log("scheduler: a run is already active, skipping");
-      else log(`scheduler: start failed: ${e instanceof Error ? e.message : String(e)}`);
+      if (e instanceof RunBusyError) {
+        log("scheduler: a run is already active, retrying in a minute");
+        return true;
+      }
+      log(`scheduler: start failed: ${e instanceof Error ? e.message : String(e)}`);
     }
+    return false;
   };
 
   return {

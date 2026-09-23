@@ -12,6 +12,11 @@ describe("autopilot nextJob", () => {
     expect(nextJob(base)).toEqual({ kind: "career", userSlug: "y" });
   });
 
+  it("chat bot off (SGZ_CHAT_POLL_MIN=0 or garbage): no chats, career still runs", () => {
+    expect(nextJob({ ...base, lastChatPoll: 0, chatPollMs: 0 })).toEqual({ kind: "career", userSlug: "y" });
+    expect(nextJob({ ...base, lastChatPoll: 0, chatPollMs: NaN })).toEqual({ kind: "career", userSlug: "y" });
+  });
+
   it("idle when career is off or nothing is due", () => {
     expect(nextJob({ ...base, careerOn: false })).toBeNull();
     expect(nextJob({ ...base, careerDue: () => null })).toBeNull();

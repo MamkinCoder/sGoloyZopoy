@@ -16,7 +16,8 @@ export interface AutopilotState {
 }
 
 export function nextJob(s: AutopilotState): AutopilotJob {
-  if (s.now - s.lastChatPoll >= s.chatPollMs) return { kind: "chats" };
+  // chatPollMs <= 0 (or NaN): the chat bot is off, the rest of the autopilot still runs.
+  if (s.chatPollMs > 0 && s.now - s.lastChatPoll >= s.chatPollMs) return { kind: "chats" };
   if (s.now - Date.parse(s.touchLastAt || "1970-01-01") >= TOUCH_EVERY_MS) return { kind: "touch" };
   if (!s.careerOn) return null;
   const userSlug = s.careerDue();

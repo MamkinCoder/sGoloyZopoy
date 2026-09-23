@@ -90,6 +90,15 @@ describe("applications", () => {
     expect(snap.headers.get("content-type")).toContain("text/html");
     expect(await snap.text()).toBe("<h1>snap</h1>");
 
+    // a career send snapshots as career-<slug>-<id> in the send run's own dir, not the discovery run's
+    const site = h.store.upsertVacancy({ ...h.store.getApplication(a1!.id)!.vacancy, id: undefined, source: "acme", externalId: "https://acme.test/job/9" } as never);
+    const siteApp = h.store.insertApplication({ ...h.store.getApplication(a1!.id)!.application, vacancyId: site.id, runId: 3 });
+    expect((await (await h.get(`/api/applications/${siteApp.id}`)).json()).snapshot_url).toBeNull();
+    const sendDir = paths.snapshots(h.cfg, 12);
+    mkdirSync(sendDir, { recursive: true });
+    writeFileSync(`${sendDir}/career-acme-https_acme_test_job_9.html`, "<h1>form</h1>");
+    expect(await (await h.get(`/api/applications/${siteApp.id}/snapshot`)).text()).toBe("<h1>form</h1>");
+
     expect((await h.get("/api/applications/999")).status).toBe(404);
     expect((await h.get("/api/applications/abc")).status).toBe(400);
   });

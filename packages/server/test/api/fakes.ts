@@ -164,9 +164,14 @@ export class FakeStore implements Store {
     const a = this.applications.find((x) => x.id === id);
     return a ? this.row(a) : null;
   }
-  updateApplicationStatus(id: number, status: Application["status"], detail: string) {
-    const a = this.applications.find((x) => x.id === id);
+  updateApplicationStatus(id: number, status: Application["status"], detail: string, from?: Application["status"]) {
+    const a = this.applications.find((x) => x.id === id && (!from || x.status === from));
     if (a) Object.assign(a, { status, reasonDetail: detail });
+    return !!a;
+  }
+  touchApplication(id: number) {
+    const a = this.applications.find((x) => x.id === id);
+    if (a) a.createdAt = nowISO();
   }
   updateApplicationCoverLetter(id: number, text: string) {
     const a = this.applications.find((x) => x.id === id);
@@ -190,8 +195,11 @@ export class FakeStore implements Store {
     const size = Math.min(f.pageSize ?? 50, 200);
     return { items: rows.slice((page - 1) * size, page * size), total };
   }
-  countSentToday() {
-    return 0;
+  countSentToday(userId: number, source: string, since: string, until: string) {
+    return this.applications.filter((a) => {
+      const src = this.vacancies.find((v) => v.id === a.vacancyId)?.source ?? "";
+      return a.userId === userId && ["SENT", "QUEUED", "SKIP_MANUAL"].includes(a.status) && (source === "career" ? src !== "hh" : src === source) && a.createdAt >= since && a.createdAt < until;
+    }).length;
   }
   insertQuestionnaireAnswers(applicationId: number, qs: QuestionnaireAnswer["question"][], as: QuestionnaireAnswer["answer"][]) {
     qs.forEach((q, i) => this.qa.push({ id: this.nextId(), applicationId, question: q, answer: as[i]!, createdAt: nowISO() }));

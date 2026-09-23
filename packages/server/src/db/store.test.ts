@@ -9,6 +9,7 @@ import { openStore, seedDefaultUsers, type SqliteStore } from "./index.js";
 let store: SqliteStore;
 const today = new Date().toISOString().slice(0, 10);
 const past = "2000-01-01T00:00:00.000Z";
+const day = [`${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`] as const;
 const future = "2999-01-01T00:00:00.000Z";
 
 const userFixture = (slug: string) => ({
@@ -179,11 +180,13 @@ describe("applications", () => {
     const old = store.insertApplication(appFixture(u.id, hh2.id));
     store.db.prepare("UPDATE applications SET created_at = ? WHERE id = ?").run(past, old.id);
     store.insertApplication(appFixture(u.id, site.id));
-    expect(store.countSentToday(u.id, "hh", today)).toBe(1);
-    expect(store.countSentToday(u.id, "hh", `${today}T12:00:00Z`)).toBe(1);
-    expect(store.countSentToday(u.id, "acme", today)).toBe(1);
-    expect(store.countSentToday(u.id, "career", today)).toBe(1);
-    expect(store.countSentToday(u.id, "hh", "2000-01-01")).toBe(1);
+    expect(store.countSentToday(u.id, "hh", ...day)).toBe(1);
+    expect(store.countSentToday(u.id, "acme", ...day)).toBe(1);
+    expect(store.countSentToday(u.id, "career", ...day)).toBe(1);
+    expect(store.countSentToday(u.id, "hh", past, `${past.slice(0, 10)}T23:59:59.999Z`)).toBe(1);
+    // 00:30 in Moscow on Jan 2 is stored as Jan 1 21:30Z: Moscow's Jan 2 bounds still count it
+    store.db.prepare("UPDATE applications SET created_at = ? WHERE id = ?").run("2026-01-01T21:30:00.000Z", old.id);
+    expect(store.countSentToday(u.id, "hh", "2026-01-01T21:00:00.000Z", "2026-01-02T21:00:00.000Z")).toBe(1);
   });
 
   it("review queue: QUEUED/SKIP_MANUAL block reprocessing and count as queued today; latestPerVacancy", () => {
@@ -193,7 +196,7 @@ describe("applications", () => {
     const q = store.insertApplication(appFixture(u.id, v1.id, { status: Status.QUEUED, coverLetter: "a" }));
     const skip = store.insertApplication(appFixture(u.id, v2.id, { status: Status.SKIP_FILTER }));
     expect(store.hasSentApplication(u.id, v1.id)).toBe(true);
-    expect(store.countSentToday(u.id, "career", today)).toBe(1);
+    expect(store.countSentToday(u.id, "career", ...day)).toBe(1);
     store.updateApplicationCoverLetter(q.id, "b");
     store.insertQuestionnaireAnswers(q.id, [{ idx: 0, text: "?", kind: "text", required: false }], [{ idx: 0, text: "!" }]);
     store.deleteQuestionnaireAnswers(q.id);

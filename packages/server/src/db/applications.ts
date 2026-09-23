@@ -67,6 +67,7 @@ type ApplicationsRepo = Pick<
   | "getApplication"
   | "updateApplicationStatus"
   | "updateApplicationCoverLetter"
+  | "touchApplication"
   | "listApplications"
   | "countSentToday"
   | "insertQuestionnaireAnswers"
@@ -131,11 +132,15 @@ export function applicationsRepo(s: Sql): ApplicationsRepo {
       const r = s.get(`${ROW_SELECT} WHERE a.id = ?`, id);
       return r ? mapRow(r) : null;
     },
-    updateApplicationStatus(id, status, detail) {
-      s.run("UPDATE applications SET status = ?, reason_detail = ? WHERE id = ?", status, detail, id);
+    updateApplicationStatus(id, status, detail, from) {
+      const sql = `UPDATE applications SET status = ?, reason_detail = ? WHERE id = ?${from ? " AND status = ?" : ""}`;
+      return s.run(sql, status, detail, id, ...(from ? [from] : [])).changes > 0;
     },
     updateApplicationCoverLetter(id, text) {
       s.run("UPDATE applications SET cover_letter = ? WHERE id = ?", text, id);
+    },
+    touchApplication(id) {
+      s.run("UPDATE applications SET created_at = ? WHERE id = ?", nowISO(), id);
     },
     listApplications(f) {
       const where: string[] = [];
@@ -176,17 +181,16 @@ export function applicationsRepo(s: Sql): ApplicationsRepo {
       return { items, total };
     },
     // QUEUED/SKIP_MANUAL only exist for career sites, where the daily limit means "queued per day".
-    // created_at is UTC; the runner passes its local date. Day boundaries are compared on the UTC
-    // string, which is off by the TZ offset around midnight - acceptable for a daily limit.
-    countSentToday(userId, source, dayISO) {
-      const day = dayISO.slice(0, 10);
+    // created_at is UTC ISO; the runner passes the local day's UTC bounds.
+    countSentToday(userId, source, sinceISO, untilISO) {
       const c = sourceClause("v", source);
       const r = s.get(
         `SELECT COUNT(*) AS n FROM applications a JOIN vacancies v ON v.id = a.vacancy_id
-         WHERE a.user_id = ? AND a.status IN ('SENT','QUEUED','SKIP_MANUAL') AND ${c.sql} AND substr(a.created_at, 1, 10) = ?`,
+         WHERE a.user_id = ? AND a.status IN ('SENT','QUEUED','SKIP_MANUAL') AND ${c.sql} AND a.created_at >= ? AND a.created_at < ?`,
         userId,
         ...c.params,
-        day,
+        sinceISO,
+        untilISO,
       );
       return num((r as Row).n);
     },

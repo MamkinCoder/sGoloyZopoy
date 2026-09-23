@@ -6,8 +6,9 @@ import { escapeHtml } from "../notify/format.js";
 
 const PENDING = "queue_send_pending";
 
-export const queueButtons = (id: number) => [
-  { text: "🚀 Отправить", data: `q:s:${id}` },
+/** `canSend` = false for boards the human applies to by hand (Habr Career): no «Отправить». */
+export const queueButtons = (id: number, canSend = true) => [
+  ...(canSend ? [{ text: "🚀 Отправить", data: `q:s:${id}` }] : []),
   { text: "⏭ Пропустить", data: `q:k:${id}` },
 ];
 

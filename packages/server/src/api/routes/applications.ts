@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { FILTERED_STATUSES, paths, Status, type ApplicationDetailDTO, type ApplicationRow, type FilteredItemDTO, type Paged, type ApplicationDTO, type QueueItemDTO, type RunRequest } from "@sgz/shared";
 import { cvFileName } from "../../career/agent-apply.js";
+import { manualApplyOnly } from "../../career/agent.js";
 import type { ApiDeps } from "../deps.js";
 import { badRequest, notFound } from "../errors.js";
 import { guardedFile } from "../files.js";
@@ -12,6 +13,19 @@ import { idParam, toApplicationDTO, userOr404 } from "./common.js";
 /** `${snapshots(run)}/${externalId}*.html` if such a file exists. externalId may be a URL for
  *  career sites, so match by prefix on the directory listing rather than by glob. */
 function findSnapshot(deps: ApiDeps, row: ApplicationRow): string | null {
+  // A career send/inspect runs later than discovery, in its own run dir, as applyViaAgent's `career-<slug>-<id>`.
+  if (row.vacancy.source !== "hh") {
+    const root = paths.snapshots(deps.cfg);
+    const name = `career-${row.vacancy.source}-${row.vacancy.externalId.replace(/[^a-z0-9]+/gi, "_").slice(0, 60)}`.replace(/[^a-z0-9._-]/gi, "_");
+    const hit = existsSync(root)
+      ? readdirSync(root)
+          .filter((d) => /^run-\d+$/.test(d))
+          .sort((a, b) => Number(b.slice(4)) - Number(a.slice(4)))
+          .map((d) => join(root, d, `${name}.html`))
+          .find((f) => existsSync(f))
+      : undefined;
+    if (hit) return hit;
+  }
   const dir = paths.snapshots(deps.cfg, row.application.runId);
   if (!existsSync(dir)) return null;
   const prefix = row.vacancy.externalId.replace(/[^\w.-]+/g, "_");
@@ -150,7 +164,10 @@ export function applicationRoutes(deps: ApiDeps): Hono {
   for (const mode of ["send", "inspect", "retailor"] as const) {
     r.post(`/applications/:id/${mode}`, async (c) => {
       const id = idParam(c);
-      return c.json({ run_id: await startFor(queuedOr400(id), "career", `${mode}:${id}`) }, 202);
+      const row = queuedOr400(id);
+      if (mode === "send" && manualApplyOnly(store.listCareerSites(row.application.userId).find((s) => s.slug === row.vacancy.source)?.ats ?? "custom"))
+        throw badRequest("этот сайт принимает отклик только вручную: откликнитесь на сайте и нажмите «Отправил вручную»");
+      return c.json({ run_id: await startFor(row, "career", `${mode}:${id}`) }, 202);
     });
   }
 
