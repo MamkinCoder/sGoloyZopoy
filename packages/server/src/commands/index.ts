@@ -1,6 +1,7 @@
 // Command registry. Each workstream adds its command file and registers it here (append-only).
 import { db } from "./db.js";
 import { hhLogin } from "./hh-login.js";
+import { habrLogin } from "./habr-login.js";
 import { hhRecord } from "./hh-record.js";
 import { run } from "./run.js";
 import { serve } from "./serve.js";
@@ -15,6 +16,7 @@ export const commands: Record<string, Command> = {
   serve,
   pool,
   "hh-login": hhLogin,
+  "habr-login": habrLogin,
   "hh-record": hhRecord,
   db,
   resume,

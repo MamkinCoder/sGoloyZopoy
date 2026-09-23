@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // sgz CLI entrypoint. Subcommands register themselves in ./commands/index.ts (workstream G wires them).
-//   sgz serve | run | hh-login | hh-record | pool | resume | site | db | version
+//   sgz serve | run | hh-login | habr-login | hh-record | pool | resume | site | db | version
 import { readFileSync } from "node:fs";
 import tls from "node:tls";
 
