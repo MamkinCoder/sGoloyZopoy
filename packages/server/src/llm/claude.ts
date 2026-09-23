@@ -4,7 +4,7 @@ import type { Tier } from "@sgz/shared";
 import { claudeMutex } from "./mutex.js";
 
 export const TIER_MODEL: Record<Tier, string> = { fast: "haiku", write: "sonnet", tailor: "opus" };
-export const DEFAULT_TIMEOUT_MS = 300_000; // decide batches with long vacancy texts take >3 min on the Pi
+const DEFAULT_TIMEOUT_MS = 300_000; // decide batches with long vacancy texts take >3 min on the Pi
 const STDERR_TAIL = 2000;
 
 export interface RunClaudeOpts {

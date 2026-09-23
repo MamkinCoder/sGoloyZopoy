@@ -31,7 +31,7 @@ function templatePath(): string {
   throw new Error("resume/template.tex not found next to render.js or in src/resume");
 }
 
-export function loadTemplate(): string {
+function loadTemplate(): string {
   return readFileSync(templatePath(), "utf8");
 }
 
@@ -45,7 +45,7 @@ function contactPlacement(cv: CVDoc): { macro: (keyof CV["contacts"])[]; text: (
   return { macro, text };
 }
 
-export function renderContacts(cv: CVDoc): string {
+function renderContacts(cv: CVDoc): string {
   return contactPlacement(cv)
     .macro.filter((k) => cv.contacts[k].trim())
     .map((k) => `\\${CONTACT_MACROS[k]}{${esc(cv.contacts[k])}}`)
@@ -64,7 +64,7 @@ function renderAbout(cv: CVDoc): string {
   return parts.join("\n\n");
 }
 
-export function renderSkills(cv: CV): string {
+function renderSkills(cv: CV): string {
   return cv.skills
     .filter((g) => g.items.length > 0 || g.name.trim())
     .map((g) => `\\textbf{${esc(g.name)}:} ${g.items.map(esc).join(", ")}`)
@@ -78,7 +78,7 @@ function renderBullets(bullets: string[]): string {
   return ["\\begin{itemize}\\setlength{\\itemsep}{0pt}\\setlength{\\parskip}{0pt}", ...items.map((b) => `  \\item ${b}`), "\\end{itemize}"].join("\n");
 }
 
-export function renderJob(job: CV["jobs"][number]): string {
+function renderJob(job: CV["jobs"][number]): string {
   return [
     `% ${job.company.replace(/\n/g, " ")}`,
     `\\newRole{${esc(job.period)}}{${esc(job.role)}}{${esc(job.company)}}{${esc(job.location)}}`,
@@ -90,7 +90,7 @@ export function renderJob(job: CV["jobs"][number]): string {
   ].join("\n");
 }
 
-export function renderEducation(cv: CV): string {
+function renderEducation(cv: CV): string {
   return cv.education
     .map((e) => {
       let line = esc(e.institution);

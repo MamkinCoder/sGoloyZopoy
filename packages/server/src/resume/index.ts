@@ -1,6 +1,5 @@
-export { loadCV, saveCV, normalizeCV, emptyCV, type CVDoc } from "./yaml.js";
-export { importTex, type ImportResult } from "./import.js";
+// Loaded dynamically by app.ts (adaptResume); the CLI imports the modules directly.
+export { loadCV } from "./yaml.js";
 export { renderTex } from "./render.js";
-export { escapeLatex } from "./escape.js";
-export { buildPdf, latexAvailable, xelatexAvailable, resolveLatexBin, LatexBuildError, DEFAULT_LATEX_BIN, type BuildPdfOptions } from "./build.js";
+export { buildPdf } from "./build.js";
 export { validateCV } from "./validate.js";
