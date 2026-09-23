@@ -108,7 +108,7 @@ export function createRunner(deps: RunnerDeps): Runner {
       if (active) throw new RunBusyError();
       const userId = req.userSlug === "all" ? null : (store.getUserBySlug(req.userSlug)?.id ?? null);
       if (req.userSlug !== "all" && userId === null) throw new Error(`unknown user "${req.userSlug}"`);
-      const run = store.insertRun({ userId, source: req.source, trigger: req.trigger, status: "running", stats: emptyRunStats(req.dryRun), tgSent: false, error: "" });
+      const run = { ...store.insertRun({ userId, source: req.source, trigger: req.trigger, status: "running", stats: emptyRunStats(req.dryRun), tgSent: false, error: "" }), stage: req.stage };
       hub.open(run.id);
       const controller = new AbortController();
       const entry: Active = { run, controller, promise: Promise.resolve(run) };

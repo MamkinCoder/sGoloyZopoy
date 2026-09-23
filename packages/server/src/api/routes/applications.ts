@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { FILTERED_STATUSES, paths, Status, type ApplicationDetailDTO, type ApplicationRow, type FilteredItemDTO, type Paged, type ApplicationDTO, type QueueItemDTO, type RunRequest } from "@sgz/shared";
 import { cvFileName } from "../../career/agent-apply.js";
 import { manualApplyOnly } from "../../career/agent.js";
+import { sendingNow } from "../../runner/queue-cards.js";
 import type { ApiDeps } from "../deps.js";
 import { badRequest, notFound } from "../errors.js";
 import { guardedFile } from "../files.js";
@@ -174,6 +175,7 @@ export function applicationRoutes(deps: ApiDeps): Hono {
   r.post("/applications/:id/skip", (c) => {
     const id = idParam(c);
     queuedOr400(id);
+    if (sendingNow(runner, id)) return c.json({ error: "сейчас отправляется" }, 409);
     store.updateApplicationStatus(id, Status.SKIP_MANUAL, "skipped in panel");
     return c.json({ ok: true });
   });
@@ -182,6 +184,7 @@ export function applicationRoutes(deps: ApiDeps): Hono {
   r.post("/applications/:id/mark-sent", (c) => {
     const id = idParam(c);
     queuedOr400(id);
+    if (sendingNow(runner, id)) return c.json({ error: "сейчас отправляется" }, 409);
     store.updateApplicationStatus(id, Status.SENT, "отправлено вручную");
     return c.json({ ok: true });
   });

@@ -45,10 +45,14 @@ const startSend = (store: Store, runner: Pick<RunService, "start">, id: number, 
 };
 
 /** Applies a card tap; returns the note appended to the card. */
+/** True while the active run is submitting this queue item: skipping or marking it sent then would race the submit. */
+export const sendingNow = (runner: Pick<RunService, "active">, id: number): boolean => runner.active()?.stage === `send:${id}`;
+
 export async function handleQueueTap(store: Store, runner: Pick<RunService, "start" | "active">, cb: { send: boolean; id: number }): Promise<string> {
   const row = store.getApplication(cb.id);
   if (!row || row.application.status !== Status.QUEUED) return `уже обработано${row ? ` (${row.application.status})` : ""}`;
   if (!cb.send) {
+    if (sendingNow(runner, cb.id)) return "🚀 уже отправляется, пропустить нельзя";
     store.updateApplicationStatus(cb.id, Status.SKIP_MANUAL, "skipped in telegram");
     return "⏭ пропущено";
   }

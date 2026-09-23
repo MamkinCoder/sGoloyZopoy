@@ -312,6 +312,8 @@ export interface Run {
   stats: RunStats;
   tgSent: boolean;
   error: string;
+  /** The requested stage while the run is active (in memory only, not stored). */
+  stage?: string;
 }
 
 export type Stage =

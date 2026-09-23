@@ -55,6 +55,17 @@ describe("review queue", () => {
     expect((await h.json("PUT", `/api/applications/${q.id}/cover-letter`, { text: "x" })).status).toBe(400);
   });
 
+  it("skip and mark-sent are refused while that item is being sent", async () => {
+    const h = await harness();
+    const q = seed(h).mk("acme", "QUEUED");
+    h.runner.activeRun = { id: 9, stage: `send:${q.id}` } as never;
+    expect((await h.json("POST", `/api/applications/${q.id}/skip`)).status).toBe(409);
+    expect((await h.json("POST", `/api/applications/${q.id}/mark-sent`)).status).toBe(409);
+    expect(h.store.getApplication(q.id)!.application.status).toBe("QUEUED");
+    h.runner.activeRun = { id: 9, stage: "chats" } as never;
+    expect((await h.json("POST", `/api/applications/${q.id}/skip`)).status).toBe(200);
+  });
+
   it("mark-sent records a manual application, only while queued", async () => {
     const h = await harness();
     const q = seed(h).mk("acme", "QUEUED");
