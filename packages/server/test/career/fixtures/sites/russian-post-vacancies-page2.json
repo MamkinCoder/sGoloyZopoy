@@ -1,0 +1,17 @@
+{
+  "content": [
+    {
+      "addressLocation": "обл. Московская, г. Раменское, с. Константиново, влд. 4",
+      "direction": "POST_OFFICE",
+      "id": 44874,
+      "isAvailableForApplicantsWithDisabilities": false,
+      "isAvailableForStudents": false,
+      "jobName": "Оператор связи в отделение Почты",
+      "salary": 36000,
+      "schedule": "SHIFT",
+      "shortDescription": "Работа в стабильной компании, удобный график работы, уровень дохода от 30000 руб.",
+      "vacancyType": "PUBLIC"
+    }
+  ],
+  "totalElements": 3
+}

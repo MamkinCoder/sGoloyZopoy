@@ -1,0 +1,23 @@
+{
+  "count": 3,
+  "next": null,
+  "previous": "https://career.samolet.ru/api/integrations/skillaz/vacancies/?limit=2&page=1",
+  "results": [
+    {
+      "id": 33954,
+      "uuid": "63f1a2b615709aa16886ad2d",
+      "name": "Менеджер по показам",
+      "education": { "id": 4, "skillazId": "4", "name": "Высшее-Специалист", "isActive": true },
+      "workExperiences": { "id": 1, "skillazId": "1", "name": "От 1 года до 3 лет", "isActive": true },
+      "specialization": { "id": 8, "skillazId": "8", "name": "Коммерция и продажи", "isActive": true },
+      "region": { "id": 3, "skillazId": "3", "name": "Санкт-Петербург", "isActive": true },
+      "workplaceType": { "id": 5, "skillazId": "5", "name": "Объект", "isActive": true },
+      "workSchedule": { "id": 12, "skillazId": "999998", "name": "2/2", "isActive": true },
+      "employmentType": { "id": 1, "skillazId": "1", "name": "Полная занятость", "isActive": true },
+      "externalUrl": "https://career.samolet.ru/vakansii/view/63f1a2b615709aa16886ad2d/",
+      "recruiters": [{ "id": 3, "fullName": "Recruiter Three", "phone": "+70000000002", "email": "recruiter3@example.com" }],
+      "saved": false,
+      "whySamolet": "<p><span>#КОДСамолета</span><br>Мы не ждем, мы действуем</p>"
+    }
+  ]
+}

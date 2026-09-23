@@ -1,0 +1,27 @@
+[
+  {
+    "id": 160546,
+    "date": "2026-09-22T17:15:32",
+    "slug": "assistent-po-ohrane-truda",
+    "status": "publish",
+    "type": "vacancy",
+    "link": "https://job.inventive.ru/vacancy/assistent-po-ohrane-truda/",
+    "title": { "rendered": "Ассистент по охране труда" },
+    "content": {
+      "rendered": "<p>Если давно присматривался к этой роли &#8212; самое время попробовать.</p>\n<ul class=\"wp-block-list\">\n<li>Разработка и актуализация локальных нормативных актов по охране труда;</li>\n<li>Организация и контроль проведения СОУТ и ОПР;</li>\n</ul>\n",
+      "protected": false
+    }
+  },
+  {
+    "id": 160500,
+    "date": "2026-09-20T10:00:00",
+    "slug": "prodavecz-magazina-mir-kubikov-v-trcz-kazan-moll",
+    "status": "publish",
+    "type": "vacancy",
+    "link": "https://job.inventive.ru/vacancy/prodavecz-magazina-mir-kubikov-v-trcz-kazan-moll/",
+    "title": { "rendered": "Продавец магазина Мир Кубиков в ТРЦ Казань Молл" },
+    "content": {
+      "rendered": "<p>Приглашаем продавца-консультанта в магазин Мир Кубиков.</p>\n<ul class=\"wp-block-list\">\n<li>Консультирование покупателей;</li>\n<li>Работа с кассой;</li>\n</ul>\n"
+    }
+  }
+]

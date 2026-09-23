@@ -1,0 +1,32 @@
+{
+  "success": true,
+  "data": {
+    "vacancies": [
+      {
+        "external_id": 131443955,
+        "name": "Golang-разработчик в команду VPN",
+        "city": "Санкт-Петербург",
+        "employment": "Полная",
+        "experience": "От 3 до 6 лет",
+        "alternate_url": "https://hh.ru/vacancy/131443955"
+      },
+      {
+        "external_id": 131720041,
+        "name": "Senior QA Automation Engineer (Python)",
+        "city": "Санкт-Петербург",
+        "employment": "Полная",
+        "experience": "От 3 до 6 лет",
+        "alternate_url": "https://hh.ru/vacancy/131720041"
+      },
+      {
+        "external_id": 134914388,
+        "name": "Senior DevOps Engineer",
+        "city": "Санкт-Петербург",
+        "employment": "Полная",
+        "experience": "Более 6 лет",
+        "alternate_url": "https://hh.ru/vacancy/134914388"
+      }
+    ],
+    "amount": 3
+  }
+}

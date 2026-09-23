@@ -1,0 +1,33 @@
+{
+  "count": 3,
+  "next": "https://job.beeline.ru/api/v1/vacancies/?limit=2&offset=2",
+  "previous": null,
+  "results": [
+    {
+      "id": "d180561e-8b97-41a3-bda9-d3f633c7dfac",
+      "name": "AI Engineer / Разработчик агентских систем в ИБ",
+      "grade": "Более 5 лет",
+      "gross_salary_from": "",
+      "gross_salary_to": "",
+      "location_address": null,
+      "supervisor": false,
+      "internship_program": null,
+      "role": "AI Engineer",
+      "work_format": ["Дистанционный"],
+      "city": []
+    },
+    {
+      "id": "cedf3deb-fca2-4802-91ee-9361bfb4a645",
+      "name": "Эксперт по анализу защищенности веб-приложений/Пентестер",
+      "grade": "Более 5 лет",
+      "gross_salary_from": "",
+      "gross_salary_to": "",
+      "location_address": null,
+      "supervisor": false,
+      "internship_program": null,
+      "role": "Пентестер",
+      "work_format": ["Дистанционный"],
+      "city": []
+    }
+  ]
+}

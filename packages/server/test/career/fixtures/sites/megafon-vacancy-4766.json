@@ -1,0 +1,20 @@
+{
+  "id": 4766,
+  "title": "Application DevOps Engineer",
+  "publishedAt": 1789721175,
+  "minSalary": null,
+  "maxSalary": null,
+  "description": "<p>Развитие CI/CD пайплайнов для продуктовых команд</p><p>Автоматизация деплоя приложений</p>",
+  "requirements": "<p>Опыт с Kubernetes и Docker от 2 лет</p><p>Знание Jenkins или GitLab CI</p>",
+  "conditions": "<p>Официальное трудоустройство</p>",
+  "city": { "id": 1, "title": "Москва" },
+  "experience": "1-3 года",
+  "specialties": ["DevOps/SRE"],
+  "workingSchedule": "5/2 полный рабочий день",
+  "sector": { "id": 3, "title": "ИТ-решения", "slug": "it-reshenia" },
+  "type": "PROFESSIONAL",
+  "keySkills": [{ "id": 11, "title": "Kubernetes" }],
+  "slug": "application-devops-engineer-4766",
+  "cvRequired": true,
+  "organisation": { "id": 1, "title": "МегаФон" }
+}

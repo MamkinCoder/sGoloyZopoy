@@ -1,0 +1,27 @@
+{
+  "resultCode": "OK",
+  "payload": {
+    "vacancies": [
+      {
+        "title": "Старший ML-инженер",
+        "category": "tcareer_it",
+        "shortDescription": "Создавайте и запускайте AI-решения на базе LLM Platform",
+        "salary": null,
+        "tags": ["Senior", "1 – 5 лет", "5/2"],
+        "urlSlug": "7ff59d6a-4032-49a7-9b45-45628da7bfa6",
+        "seoSlug": "starshij-ml-inzhener"
+      },
+      {
+        "title": "Лид продукта",
+        "subtitle": "Москва",
+        "category": "tcareer_it",
+        "shortDescription": "Развивайте интернет-эквайринг",
+        "salary": null,
+        "tags": ["Гибрид", "Senior", "Lead", "5/2"],
+        "urlSlug": "d783d9e8-68f6-464d-a7a8-da037d084b20",
+        "seoSlug": "lid-produkta"
+      }
+    ],
+    "nextPagination": { "offset": 2, "isFinished": true, "totalCount": 2 }
+  }
+}

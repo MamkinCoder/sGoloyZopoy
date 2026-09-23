@@ -12,8 +12,8 @@ export interface ATSClientImpl extends ATSClient {
 
 export const atsId = (kind: ATSKind, id: string | number): string => `${kind}:${id}`;
 
-/** "greenhouse:123" → "123"; anything else unchanged. */
-export const rawId = (externalId: string): string => externalId.replace(/^[a-z_]+:/, "");
+/** "greenhouse:123" / "site:mts:123" → "123"; anything else unchanged. */
+export const rawId = (externalId: string): string => externalId.replace(/^(?:site:[a-z0-9-]+|[a-z_]+):/, "");
 
 export const slugRe = "[a-z0-9][a-z0-9_.-]*";
 

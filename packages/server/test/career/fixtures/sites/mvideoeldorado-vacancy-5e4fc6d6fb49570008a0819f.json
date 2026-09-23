@@ -1,0 +1,17 @@
+{
+  "vacancy": {
+    "external_id": "5e4fc6d6fb49570008a0819f",
+    "title": "Продавец",
+    "city_name": "МО, Солнечногорский р-н",
+    "work_location": "Зеленоград, Ржавки, 2-й мкр., 20, Zеленопарк (1 этаж)",
+    "salary_from": 0,
+    "salary_to": 120000,
+    "currency": "₽",
+    "work_formats": ["В офисе"],
+    "employment_types": ["Полная занятость"],
+    "description": "",
+    "responsibility_prof": "<ul><li>Продавать качественную технику</li><li>Консультировать клиентов</li></ul>",
+    "requirements_prof": "<ul><li>Стремление работать и зарабатывать</li></ul>",
+    "offer_prof": "<ul><li>Работаешь с 1 дня по ТК РФ</li><li>Получаешь стабильный доход</li></ul>"
+  }
+}

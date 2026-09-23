@@ -1,0 +1,19 @@
+{
+  "totalCount": 1,
+  "count": 1,
+  "actionStatus": "Success",
+  "message": null,
+  "data": [
+    {
+      "id": 477,
+      "categoryId": 8,
+      "cityName": "Москва",
+      "cityId": 1,
+      "departmentId": 228,
+      "name": "Стажер",
+      "descriptionBlocks": [
+        { "name": "VacancyDescription", "content": "<p><strong>Департамент «Корпоративный университет»</strong></p><ul><li>Неоконченное высшее образование</li></ul>" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "count": 3,
+  "next": "https://career.samolet.ru/api/integrations/skillaz/vacancies/?limit=2&page=2",
+  "previous": null,
+  "results": [
+    {
+      "id": 25844,
+      "uuid": "62b8e7f615709aa16886ad1c",
+      "name": "Заместитель директора по строительству сетей и головных сооружений",
+      "education": { "id": 4, "skillazId": "4", "name": "Высшее-Специалист", "isActive": true },
+      "workExperiences": { "id": 1, "skillazId": "1", "name": "От 1 года до 3 лет", "isActive": true },
+      "specialization": { "id": 12, "skillazId": "12", "name": "Строительство", "isActive": true },
+      "region": { "id": 2, "skillazId": "2", "name": "Москва", "isActive": true },
+      "workplaceType": { "id": 5, "skillazId": "5", "name": "Объект", "isActive": true },
+      "workSchedule": { "id": 11, "skillazId": "999999", "name": "5/2", "isActive": true },
+      "employmentType": { "id": 1, "skillazId": "1", "name": "Полная занятость", "isActive": true },
+      "externalUrl": "https://career.samolet.ru/vakansii/view/62b8e7f615709aa16886ad1c/",
+      "recruiters": [{ "id": 1, "fullName": "Recruiter One", "phone": "+70000000000", "email": "recruiter1@example.com" }],
+      "saved": false,
+      "whySamolet": "<p><span>#КОДСамолета</span><br>Мы партнеры для всех, кто выбирает Самолет</p>"
+    },
+    {
+      "id": 53404,
+      "uuid": "68dbf2cb5e163e6e648bb561",
+      "name": "Инженер технической поддержки",
+      "education": { "id": 4, "skillazId": "4", "name": "Высшее-Специалист", "isActive": true },
+      "workExperiences": { "id": 2, "skillazId": "2", "name": "От 3 до 6 лет", "isActive": true },
+      "specialization": { "id": 7, "skillazId": "7", "name": "Информационные технологии", "isActive": true },
+      "region": { "id": 2, "skillazId": "2", "name": "Москва", "isActive": true },
+      "workplaceType": { "id": 1, "skillazId": "1", "name": "Офис", "isActive": true },
+      "workSchedule": { "id": 11, "skillazId": "999999", "name": "5/2", "isActive": true },
+      "employmentType": { "id": 1, "skillazId": "1", "name": "Полная занятость", "isActive": true },
+      "externalUrl": "https://career.samolet.ru/vakansii/view/68dbf2cb5e163e6e648bb561/",
+      "recruiters": [{ "id": 2, "fullName": "Recruiter Two", "phone": "+70000000001", "email": "recruiter2@example.com" }],
+      "saved": false,
+      "whySamolet": "<p><span>#КОДСамолета</span><br>Я отвечаю за результат и отношусь к делу, как к своему</p>"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "data": [
+    {
+      "id": 1893938,
+      "position_id": 58,
+      "salary_from": 48000,
+      "salary_to": 56000,
+      "schedule": "shift",
+      "status": "published",
+      "published_at": "2026-09-23T01:22:25.379Z",
+      "position_title": "Дежурный по переезду",
+      "locality_name": "Издревая",
+      "direction_title": "Управление перевозочным процессом"
+    },
+    {
+      "id": 1893930,
+      "position_id": 1155,
+      "salary_from": 100000,
+      "salary_to": 100000,
+      "schedule": "fully",
+      "status": "published",
+      "published_at": "2026-09-23T00:39:57.674Z",
+      "position_title": "Оператор дефектоскопной тележки",
+      "locality_name": "Холмск",
+      "direction_title": "Пассажирские перевозки"
+    }
+  ],
+  "meta": { "count": 3, "page": 1, "pages": 2 }
+}

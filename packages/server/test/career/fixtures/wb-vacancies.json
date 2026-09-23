@@ -1,0 +1,29 @@
+{
+  "data": {
+    "items": [
+      {
+        "id": 39490,
+        "name": "Senior QA Automation engineer в WB Chat",
+        "city_title": "",
+        "direction_title": "Тестирование",
+        "direction_role_title": "",
+        "experience_type_title": "От 5 лет",
+        "employment_types": [{ "id": 2, "title": "Удаленно" }]
+      },
+      {
+        "id": 34767,
+        "name": "Менеджер проектов",
+        "city_title": "Москва",
+        "direction_title": "Управление проектами",
+        "direction_role_title": "",
+        "experience_type_title": "От 3 лет",
+        "employment_types": [
+          { "id": 1, "title": "Гибрид" },
+          { "id": 3, "title": "Офис" }
+        ]
+      }
+    ],
+    "range": { "count": 2, "limit": 100, "offset": 0 }
+  },
+  "status": 200
+}

@@ -1,0 +1,231 @@
+{
+  "success": true,
+  "data": {
+    "page": {
+      "id": 7,
+      "title": "Вакансия",
+      "slug": "vacancy",
+      "is_published": 1,
+      "content": [
+        {
+          "data": {
+            "id": 8068,
+            "parent": null,
+            "position": "Аналитик данных",
+            "money": null,
+            "vacancy_location": "Москва",
+            "grade": "",
+            "speciality": "Engineering",
+            "slug": "speciality-engineering",
+            "subspeciality": "Data",
+            "work_format": "Удалёнка"
+          },
+          "type": "vacancy_main"
+        },
+        {
+          "data": {
+            "text": "<p>Мы ищем <strong>Data-аналитика</strong>, который не просто выдает выгрузки по запросу, а глубоко погружается в бизнес-контекст, умеет самостоятельно разбираться в задачах, предлагать сильные решения и защищать свои результаты перед C-level.</p>"
+          },
+          "type": "vacancy_text"
+        },
+        {
+          "data": {
+            "image_url": [
+              "https://media.dodostatic.net/image/01a08537eb3271ffb6aa5a20abd10029.jpg"
+            ]
+          },
+          "type": "vacancy_image"
+        },
+        {
+          "data": {
+            "title": "мы ожидаем",
+            "text": "<ul><li><strong>Обладаете бизнес-мышлением.</strong> Умеете докопаться до истинной потребности заказчика, подсветить риски и открыто сказать, если запрос не принесет компании пользы, предложив альтернативу;</li><li><strong>Самостоятельны.</strong> Можете сами разбить большую задачу на шаги, погрузиться в контекст и выдать готовый, осмысленный результат без микроменеджмента и постоянного контроля;</li><li><strong>Уверенно кодите.</strong> Регулярно и на хорошем уровне используете <strong>Python</strong> и <strong>SQL;</strong></li><li><strong>Понимаете ML на практике.</strong> Знаете, как применить основные модели в исследованиях (регрессия, классификация, кластеризация, прогнозирование временных рядов);</li><li><strong>Умеете рассказывать истории по данным.</strong> Классно и понятно визуализируете результаты (мы только за, если вы используете AI для презентаций) и умеете доходчиво доносить свои мысли до нетехнической аудитории.</li></ul><p>Будет плюсом, если у вас уже есть опыт работы в ритейле или e-commerce.</p><p><br></p>"
+          },
+          "type": "vacancy_expectation"
+        },
+        {
+          "data": {
+            "title": "тебе предстоит",
+            "text": "<ul><li><strong>Проводить исследования для стейкхолдеров и C-level.</strong> Например, продумать методологию оценки новинок в меню, разложить по полочкам причины оттока клиентов или проверить сложные гипотезы об эффективности акций (тут пригодятся <em>causal inference</em> и продвинутые A/B-тесты);</li><li><strong>Прогнозировать и копать до сути.</strong> Заниматься факторным анализом, строить прогнозы и находить истинные причины просадок или взрывного роста ключевых метрик;</li><li><strong>Быть полноценным партнером для бизнеса.</strong> Общаться напрямую с маркетингом, бизнес-девелопментом и топ-менеджментом: проводить интервью, выявлять реальные боли, декомпозировать задачи и презентовать инсайты;</li><li><strong>Визуализировать смыслы.</strong> Строить понятные графики в Python, чтобы наглядно демонстрировать инсайты, а также формировать ТЗ на создание продуктовых витрин и дашбордов;</li><li><strong>Автоматизировать рутину.</strong> Создавать фреймворки и инструменты, которые упростят оценку бизнес-процессов для всей команды</li></ul><p><br></p>"
+          },
+          "type": "vacancy_you_will"
+        },
+        {
+          "data": {
+            "title": "мы предлагаем",
+            "text": "<ul><li>Работу в глобальной компании с амбициозными целями и масштабными задачами.</li><li>Лучший стек инструментов для аналитики на рынке РФ.</li><li>Возможность прямо влиять на бизнес.</li><li>Культуру свободы и ответственности. Мы ценим тех, кто готов принимать решения и брать за них ответственность.</li><li>Гибкий формат. Можно работать из дома или офиса в Москве/Санкт-Петербурге/.</li><li>Прозрачные условия, возможности для роста и развития.</li><li>Оплачиваемое обучение. Курсы, конференции, профильная литература и софинансирование английского в Skyeng.</li><li>Заботу о сотрудниках. ДМС с первого дня, включая стоматологию, и поддержка ментального здоровья через Alter.</li></ul><p><br></p><p><br></p>"
+          },
+          "type": "vacancy_benefits"
+        },
+        {
+          "data": {
+            "text": null,
+            "title": "<p>Откликнуться на вакансию</p>",
+            "nda_text": "<p>Даю согласие на обработку персональных данных</p>",
+            "legal_text": "<p>Обработка персональных данных на условиях, определенных в <a href=\"https://dodoteam.ru/privacy/\"><span style=\"text-decoration: underline;\">Политике</span></a>, и в целях рассмотрения моей кандидатуры на вакансию</p>",
+            "name_required": true,
+            "email_required": true,
+            "phone_required": true,
+            "resume_required": true,
+            "name_placeholder": "Имя",
+            "after_submit_text": null,
+            "email_placeholder": "Почта",
+            "lastname_required": true,
+            "phone_placeholder": "Телефон",
+            "resume_placeholder": "Ссылка на резюме",
+            "submit_placeholder": "Откликнуться",
+            "title_empty_search": null,
+            "about_yourself_limit": "3000",
+            "drag_n_drop_required": true,
+            "lastname_placeholder": "Фамилия",
+            "about_yourself_required": true,
+            "drag_n_drop_placeholder": "PDF, DOC, DOCX, TXT до 20 МБ",
+            "after_submit_placeholder": null,
+            "about_yourself_placeholder": "Расскажи о себе",
+            "drag_n_drop_mobile_placeholder": "Загрузите файл резюме",
+            "drag_n_drop_desktop_placeholder": "Перетащите или загрузите файл резюме",
+            "talent_pool_text": "<p>Хочу в кадровый резерв (так мы сможем писать вам о подходящих вакансиях)</p>",
+            "talent_pool_legal_text": "<p>Направления информации об открытых вакансиях и карьерных мероприятиях, и на включение в кадровый резерв согласно <a href=\"https://dodoteam.ru/regulations-personnel/\"><span style=\"text-decoration: underline;\">Положению</span></a></p>"
+          },
+          "type": "feedback_form"
+        },
+        {
+          "data": {
+            "cards": [
+              {
+                "text": "<p>Расскажем о команде, роли и задачах. Узнаем о твоём предыдущем опыте работы и проектах. На некоторые из вакансий этому этапу предшествует телефонное интервью.&nbsp;&nbsp;</p>",
+                "title": "Интервью с рекрутером",
+                "duration": "до 5 дней"
+              },
+              {
+                "text": "<p>Оценим твои hard'ы. Иногда после этого этапа мы даем тестовое задание.</p>",
+                "title": "Техническое интервью",
+                "duration": "от 1 до 3 дней"
+              },
+              {
+                "text": "<p>Продуктовое интервью (для аналитиков и ряда других ролей): оценка продуктового мышления, умения генерировать гипотезы, приоритизировать задачи и мыслить бизнес-метриками.</p>",
+                "title": "Продуктовая секция *",
+                "duration": "2-4 дня"
+              },
+              {
+                "text": "<p>Знакомство с потенциальным лидером команды, чтобы лучше понять цели продукта, а также – мэтчатся ли ваши ценности и подходы к работе.</p>",
+                "title": "Финальное интервью",
+                "duration": "от 1 до 3 дней"
+              },
+              {
+                "text": "<p>В случае положительного решения, презентуем оффер и расскажем, что ждёт дальше.</p>",
+                "title": "Презентация оффера",
+                "duration": null
+              },
+              {
+                "text": "<p>Дело за малым: откликайся на вакансию, а мы вернемся как можно скорее.&nbsp;</p>",
+                "title": "Cупер :)",
+                "duration": null
+              }
+            ],
+            "title": "ЧЕГО ЖДАТЬ НА СОБЕСЕДОВАНИИ?"
+          },
+          "type": "interview"
+        },
+        {
+          "data": {
+            "count": "6",
+            "title": "открытые вакансии",
+            "vacancies": [
+              {
+                "id": 15257,
+                "parent": null,
+                "brand": "Engineering",
+                "position": "Инженер данных  ",
+                "speciality": "Engineering",
+                "slug": "speciality-engineering",
+                "subspeciality": "Data",
+                "speciality_order": 6,
+                "subspeciality_order": 165,
+                "vacancy_location": "",
+                "work_format": [
+                  "Удалёнка"
+                ]
+              },
+              {
+                "id": 15131,
+                "parent": null,
+                "brand": "Engineering",
+                "position": "Продакт-оунер (Drinkit)",
+                "speciality": "Engineering",
+                "slug": "speciality-engineering",
+                "subspeciality": "Product/Project management",
+                "speciality_order": 6,
+                "subspeciality_order": 268,
+                "vacancy_location": "",
+                "work_format": [
+                  "Гибрид",
+                  "Удалёнка"
+                ]
+              },
+              {
+                "id": 15043,
+                "parent": null,
+                "brand": "Engineering",
+                "position": "iOS Разработчик",
+                "speciality": "Engineering",
+                "slug": "speciality-engineering",
+                "subspeciality": "Mobile ",
+                "speciality_order": 6,
+                "subspeciality_order": 265,
+                "vacancy_location": "Москва, Санкт-Петербург, Сыктывкар, Нижний Новгород",
+                "work_format": [
+                  "Удалёнка"
+                ]
+              },
+              {
+                "id": 15019,
+                "parent": null,
+                "brand": "Engineering",
+                "position": "Аналитик данных (Маркетинг)",
+                "speciality": "Engineering",
+                "slug": "speciality-engineering",
+                "subspeciality": "Data",
+                "speciality_order": 6,
+                "subspeciality_order": 165,
+                "vacancy_location": "Москва, Санкт-Петербург, Нижний Новгород, Сыктывкар",
+                "work_format": [
+                  "Удалёнка"
+                ]
+              },
+              {
+                "id": 14979,
+                "parent": null,
+                "brand": "Engineering",
+                "position": "Фуллстек QA-инженер",
+                "speciality": "Engineering",
+                "slug": "speciality-engineering",
+                "subspeciality": "QA",
+                "speciality_order": 6,
+                "subspeciality_order": 273,
+                "vacancy_location": "",
+                "work_format": []
+              },
+              {
+                "id": 8068,
+                "parent": null,
+                "brand": "Engineering",
+                "position": "Аналитик данных",
+                "speciality": "Engineering",
+                "slug": "speciality-engineering",
+                "subspeciality": "Data",
+                "speciality_order": 6,
+                "subspeciality_order": 165,
+                "vacancy_location": "Москва",
+                "work_format": [
+                  "Удалёнка"
+                ]
+              }
+            ]
+          },
+          "type": "vacancy_similar"
+        }
+      ]
+    }
+  }
+}

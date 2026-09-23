@@ -1,0 +1,18 @@
+{
+  "results": [
+    {
+      "id": 306,
+      "title": "Менеджер вводного урока (Английский язык)",
+      "slug": "menedzher-vvodnogo-uroka-eng",
+      "department_description": "<p>Skyeng — EdTech-компания, которая обучает людей всех возрастов.</p>",
+      "work_description": "<ul><li>Проводить вводные уроки английского языка для новых учеников.</li></ul>",
+      "requirements": "<ul><li>Уровень английского от Upper-Intermediate.</li></ul>",
+      "benefits": "<ul><li>График 5/2, удалённо.</li></ul>",
+      "huntflow_vacancy_id": null,
+      "tags": [{ "id": 53, "title": "Продажи", "slug": "prodazhi", "tag_type": { "id": 1, "title": "Направления" } }],
+      "position_category": { "id": 1, "title": "Line" },
+      "color": "#E4FBFF"
+    }
+  ],
+  "meta": { "total": 3, "page_size": 2, "current_page": 2, "last_page": 2 }
+}

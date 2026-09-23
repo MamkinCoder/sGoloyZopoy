@@ -1,0 +1,69 @@
+{
+  "filters": {
+    "cities": [
+      {
+        "cityId": 65,
+        "title": "Москва",
+        "count": 1
+      },
+      {
+        "cityId": 99,
+        "title": "Санкт-Петербург",
+        "count": 2
+      },
+      {
+        "cityId": 1,
+        "title": "Алексин",
+        "count": 0
+      }
+    ]
+  },
+  "searchResult": {
+    "totalCount": 2,
+    "itemsPerPage": 1000,
+    "currentPage": 0,
+    "totalPagesCount": 1,
+    "items": [
+      {
+        "vacancyId": 60002,
+        "title": "Аналитик данных",
+        "responsibilities": "<ol><li>Расчет метрик эффективности</li></ol>",
+        "requirements": "<p>Power BI, SQL</p>",
+        "conditions": "<ul><li>Удаленная работа</li></ul>",
+        "vacancyNumber": "61002",
+        "subdivisionId": null,
+        "subdivisionTitle": null,
+        "cityId": 99,
+        "cityTitle": "Санкт-Петербург",
+        "addressId": 1,
+        "addressTitle": "Санкт-Петербург",
+        "metro": [],
+        "salaryFrom": 90000,
+        "salaryTo": 110000,
+        "businessDirectionId": 4,
+        "businessDirectionTitle": "Офис",
+        "isHideOnCareer": false
+      },
+      {
+        "vacancyId": 60003,
+        "title": "Скрытая вакансия",
+        "responsibilities": "<p>тест</p>",
+        "requirements": "<p>тест</p>",
+        "conditions": "<p>тест</p>",
+        "vacancyNumber": "61003",
+        "subdivisionId": null,
+        "subdivisionTitle": null,
+        "cityId": 99,
+        "cityTitle": "Санкт-Петербург",
+        "addressId": 1,
+        "addressTitle": "Санкт-Петербург",
+        "metro": [],
+        "salaryFrom": 0,
+        "salaryTo": 0,
+        "businessDirectionId": 4,
+        "businessDirectionTitle": "Офис",
+        "isHideOnCareer": true
+      }
+    ]
+  }
+}

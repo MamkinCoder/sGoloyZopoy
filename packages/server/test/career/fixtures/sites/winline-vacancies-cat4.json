@@ -1,0 +1,22 @@
+[
+  {
+    "id": 484,
+    "name": "Оператор call-центра в офис",
+    "url": "https://rabota.winline.ru/vacancy/operator-call-centra-v-ofis-10",
+    "hot": false,
+    "last_record": false,
+    "departments": [{ "id": 5, "name": "Winline. Call-центр" }],
+    "timefactors": [{ "id": 1, "name": "Сменный график" }],
+    "spacefactors": [{ "id": 1, "name": "Полная занятость" }]
+  },
+  {
+    "id": 504,
+    "name": "Супервайзер call-центра (Алматы)",
+    "url": "https://rabota.winline.ru/vacancy/supervaizer-call-centra-almaty",
+    "hot": false,
+    "last_record": true,
+    "departments": [{ "id": 5, "name": "Winline. Call-центр" }],
+    "timefactors": [{ "id": 2, "name": "Полный день" }],
+    "spacefactors": [{ "id": 1, "name": "Полная занятость" }]
+  }
+]

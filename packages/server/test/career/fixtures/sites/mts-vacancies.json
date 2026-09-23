@@ -1,0 +1,109 @@
+{
+  "data": [
+    {
+      "id": 706475146520559700,
+      "documentId": "legacy-706475146520559715",
+      "title": "Ведущий разработчик Java (Платформа ЮЛ)",
+      "slug": "706475146520559715",
+      "isActive": true,
+      "salaryFrom": null,
+      "salaryTo": null,
+      "description": null,
+      "mtsId": "706475146520559715",
+      "categories": [
+        {
+          "id": null,
+          "documentId": "category-Работа в IT",
+          "title": "Работа в IT"
+        }
+      ],
+      "currency": {
+        "id": 1,
+        "title": "RUB"
+      },
+      "region": {
+        "id": null,
+        "title": "Москва"
+      },
+      "organization": {
+        "id": null,
+        "title": "ПАО МТС-Банк"
+      }
+    },
+    {
+      "id": 699151891048693800,
+      "documentId": "legacy-699151891048693831",
+      "title": "Ведущий разработчик Web",
+      "slug": "699151891048693831",
+      "isActive": true,
+      "salaryFrom": null,
+      "salaryTo": null,
+      "description": null,
+      "mtsId": "699151891048693831",
+      "categories": [
+        {
+          "id": null,
+          "documentId": "category-Работа в IT",
+          "title": "Работа в IT"
+        }
+      ],
+      "currency": {
+        "id": 1,
+        "title": "RUB"
+      },
+      "region": {
+        "id": null,
+        "title": "Санкт-Петербург"
+      },
+      "organization": {
+        "id": null,
+        "title": "ПАО МТС"
+      }
+    },
+    {
+      "id": 708634372995022900,
+      "documentId": "legacy-708634372995022919",
+      "title": "Разработчик Python (ИИ-помощник)",
+      "slug": "708634372995022919",
+      "isActive": true,
+      "salaryFrom": 200000,
+      "salaryTo": 300000,
+      "description": null,
+      "mtsId": "708634372995022919",
+      "categories": [
+        {
+          "id": null,
+          "documentId": "category-Работа в IT",
+          "title": "Работа в IT"
+        }
+      ],
+      "currency": {
+        "id": 1,
+        "title": "RUB"
+      },
+      "region": null,
+      "organization": {
+        "id": null,
+        "title": "ПАО МТС"
+      }
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "page": 1,
+      "pageSize": 100,
+      "pageCount": 1,
+      "total": 3
+    }
+  },
+  "filters": {
+    "extra_filters": null,
+    "main_filter": {
+      "id": "searchString",
+      "label": "Поисковая строка",
+      "value": ""
+    },
+    "quick_filters": null
+  },
+  "similar_vacancies": []
+}

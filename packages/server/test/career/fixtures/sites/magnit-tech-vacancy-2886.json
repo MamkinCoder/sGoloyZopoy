@@ -1,0 +1,32 @@
+{
+  "success": true,
+  "results": {
+    "id": 2886,
+    "foreign_id": 7316,
+    "title": "Разработчик Fullstack Senior (Python, Vue.js)",
+    "description": "<p>Наша команда в поиске Fullstack-разработчика в продукт по автоматизации процесса качества товаров. Стек технологий: Postgres, Python, Vue, K8S.</p>",
+    "about_product": null,
+    "tasks": "<ul><li>Собирать требования от заказчика и формировать ТЗ</li><li>Разрабатывать приложения в трехзвенной архитектуре</li></ul>",
+    "skills": "<ul><li>Опыт проектирования и использования реляционных БД</li><li>Практический опыт разработки front-end части приложений (Vue)</li></ul>",
+    "extra_skills": null,
+    "offer": "<ul><li>Трудоустройство в&nbsp;аккредитованную IT‑компанию</li><li>ДМС со&nbsp;стоматологией</li></ul>",
+    "location": "Россия",
+    "is_referral": true,
+    "for_beginners": false,
+    "is_published": true,
+    "status": "active",
+    "direction": { "foreign_id": 23, "name": "Корпоративные IT-системы" },
+    "speciality": { "foreign_id": 15962, "name": "Fullstack" },
+    "work_formats": [
+      {
+        "foreign_id": 16108,
+        "name": "Москва и Краснодар (гибрид/офис), другие города - удаленно",
+        "pivot": { "vacancy_foreign_id": 7316, "work_format_foreign_id": 16108 }
+      }
+    ],
+    "technologies": [
+      { "foreign_id": 34, "name": "Python", "pivot": { "vacancy_id": 7316, "technology_id": 34 } },
+      { "foreign_id": 15995, "name": "Vue.js", "pivot": { "vacancy_id": 7316, "technology_id": 15995 } }
+    ]
+  }
+}

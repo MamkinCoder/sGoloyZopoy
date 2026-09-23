@@ -1,0 +1,40 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": "8888",
+      "title": "Ведущий специалист (роль - Руководитель проекта)",
+      "detail": "https://career.gazprom-neft.ru/vacancies/vedushchiy-spetsialist-rol-rukovoditel-proekta-11020/",
+      "city": "Санкт-Петербург",
+      "metro": false,
+      "worktype": "Постоянный трудовой договор",
+      "schedule": false,
+      "date": "21 сен 2026",
+      "code": "vedushchiy-spetsialist-rol-rukovoditel-proekta-11020",
+      "icon": false,
+      "is_hot": false,
+      "id_sap": "11020",
+      "description": false,
+      "hr": false
+    },
+    {
+      "id": "8426",
+      "title": "Разработчик Python",
+      "detail": "https://career.gazprom-neft.ru/vacancies/razrabotchik-python-10639/",
+      "city": "Москва",
+      "metro": false,
+      "worktype": "Постоянный трудовой договор",
+      "schedule": false,
+      "date": "18 сен 2026",
+      "code": "razrabotchik-python-10639",
+      "icon": false,
+      "is_hot": false,
+      "id_sap": "10639",
+      "description": false,
+      "hr": false
+    }
+  ],
+  "response": {
+    "count": 2
+  }
+}

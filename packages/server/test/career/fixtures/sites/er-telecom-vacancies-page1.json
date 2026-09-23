@@ -1,0 +1,106 @@
+{
+  "count": 63,
+  "next": "https://job.ertelecom.ru/api/vacancy/list/?page=2",
+  "previous": null,
+  "results": [
+    {
+      "id": 86411,
+      "name": "Специалист группы сопровождения договоров B2C",
+      "company": {
+        "id": 20,
+        "name": "АО \"ЭР-Телеком Холдинг\""
+      },
+      "city": [
+        {
+          "id": 287,
+          "name": "Пермь"
+        }
+      ],
+      "employment": [
+        {
+          "id": 1322,
+          "name": "Полный день"
+        }
+      ],
+      "experience": [
+        {
+          "id": 16,
+          "name": "Менее 1 года"
+        }
+      ],
+      "is_popular": false,
+      "short_content": "",
+      "preview": ""
+    },
+    {
+      "id": 86401,
+      "name": "Администратор баз данных / DBA Oracle",
+      "company": {
+        "id": 51,
+        "name": "ООО \"Парма-Телеком\" (ITPS)"
+      },
+      "city": [
+        {
+          "id": 343,
+          "name": "Вся Россия"
+        }
+      ],
+      "employment": [
+        {
+          "id": 1322,
+          "name": "Полный день"
+        }
+      ],
+      "experience": [
+        {
+          "id": 18,
+          "name": "3-6 лет"
+        }
+      ],
+      "is_popular": false,
+      "short_content": "",
+      "preview": ""
+    },
+    {
+      "id": 86371,
+      "name": "Fullstack разработчик (Node.js, React.js)",
+      "company": {
+        "id": 81,
+        "name": "ООО \"Эр-1\""
+      },
+      "city": [
+        {
+          "id": 296,
+          "name": "Москва"
+        },
+        {
+          "id": 295,
+          "name": "Новосибирск"
+        },
+        {
+          "id": 287,
+          "name": "Пермь"
+        },
+        {
+          "id": 196,
+          "name": "Санкт-Петербург"
+        }
+      ],
+      "employment": [
+        {
+          "id": 1322,
+          "name": "Полный день"
+        }
+      ],
+      "experience": [
+        {
+          "id": 18,
+          "name": "3-6 лет"
+        }
+      ],
+      "is_popular": false,
+      "short_content": "",
+      "preview": ""
+    }
+  ]
+}

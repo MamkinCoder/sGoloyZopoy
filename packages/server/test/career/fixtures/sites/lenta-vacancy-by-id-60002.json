@@ -1,0 +1,22 @@
+{
+  "vacancyId": 60002,
+  "title": "Аналитик данных",
+  "responsibilities": "<ol><li>Расчет метрик эффективности</li></ol>",
+  "requirements": "<p>Power BI, SQL</p>",
+  "conditions": "<ul><li>Удаленная работа</li></ul>",
+  "vacancyNumber": "61002",
+  "subdivisionId": null,
+  "subdivisionTitle": null,
+  "cityId": 99,
+  "cityTitle": "Санкт-Петербург",
+  "addressId": 1,
+  "addressTitle": "Санкт-Петербург",
+  "metro": [],
+  "salaryFrom": 90000,
+  "salaryTo": 110000,
+  "businessDirectionId": 4,
+  "businessDirectionTitle": "Офис",
+  "isHideOnCareer": false,
+  "imageLink": null,
+  "jobTemplateTypeId": null
+}

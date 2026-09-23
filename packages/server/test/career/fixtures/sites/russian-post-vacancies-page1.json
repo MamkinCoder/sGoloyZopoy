@@ -1,0 +1,29 @@
+{
+  "content": [
+    {
+      "addressLocation": "обл. Московская, г. Жуковский, ул. Баженова, д. 3",
+      "direction": "POST_OFFICE",
+      "id": 44876,
+      "isAvailableForApplicantsWithDisabilities": false,
+      "isAvailableForStudents": false,
+      "jobName": "Оператор связи в отделение Почты",
+      "salary": 50000,
+      "schedule": "FULL_DAY",
+      "shortDescription": "Работа в стабильной компании, удобный график работы, уровень дохода от 33000 руб.",
+      "vacancyType": "PUBLIC"
+    },
+    {
+      "addressLocation": "обл Оренбургская, г Оренбург, ул Кирова, д. 18",
+      "direction": "IT",
+      "id": 25956,
+      "isAvailableForApplicantsWithDisabilities": false,
+      "isAvailableForStudents": false,
+      "jobName": "Специалист в группу технической поддержки пользователей",
+      "salary": 24750,
+      "schedule": "FULL_DAY",
+      "shortDescription": "Группа технической поддержки пользователей отдела поддержки ИТ.",
+      "vacancyType": "PROFESSIONAL"
+    }
+  ],
+  "totalElements": 3
+}

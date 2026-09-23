@@ -1,0 +1,24 @@
+{
+  "total_count": 3,
+  "page": 2,
+  "next_page": null,
+  "page_size": 2,
+  "page_count": 2,
+  "items": [
+    {
+      "id": "9a218a72-c924-4f6a-9a7c-1d7f06160453",
+      "name": "Lead AI-Augmented Python developer",
+      "city": "Москва",
+      "work_format": "hybrid",
+      "data": {
+        "main_responsibilities": "* Разработка AI-агентов.",
+        "professional_skills": "* Опыт с LLM API.",
+        "working_conditions": "* Гибрид.",
+        "salary_min": null,
+        "salary_max": null
+      },
+      "category": { "id": 18877, "negotiation_type": "office" },
+      "tags": []
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "count": 63,
+  "next": null,
+  "previous": "https://job.ertelecom.ru/api/vacancy/list/?page=1",
+  "results": [
+    {
+      "id": 86361,
+      "name": "Старший инженер по обеспечению качества (QA)",
+      "company": {
+        "id": 201,
+        "name": "ООО \"ЭР-ИКС\""
+      },
+      "city": [
+        {
+          "id": 343,
+          "name": "Вся Россия"
+        }
+      ],
+      "employment": [
+        {
+          "id": 1322,
+          "name": "Полный день"
+        }
+      ],
+      "experience": [
+        {
+          "id": 18,
+          "name": "3-6 лет"
+        }
+      ],
+      "is_popular": false,
+      "short_content": "",
+      "preview": ""
+    }
+  ]
+}

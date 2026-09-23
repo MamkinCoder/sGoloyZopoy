@@ -1,0 +1,19 @@
+{
+  "totalCount": 1,
+  "count": 1,
+  "actionStatus": "Success",
+  "message": null,
+  "data": [
+    {
+      "id": 553,
+      "categoryId": 6,
+      "cityName": "Москва",
+      "cityId": 1,
+      "departmentId": 40,
+      "name": "Агент по регистрации и посадке пассажиров",
+      "descriptionBlocks": [
+        { "name": "VacancyDescription", "content": "<p>Регистрация и посадка пассажиров в аэропорту.</p>" }
+      ]
+    }
+  ]
+}

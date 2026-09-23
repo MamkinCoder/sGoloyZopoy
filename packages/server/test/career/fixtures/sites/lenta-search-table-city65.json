@@ -1,0 +1,49 @@
+{
+  "filters": {
+    "cities": [
+      {
+        "cityId": 65,
+        "title": "Москва",
+        "count": 1
+      },
+      {
+        "cityId": 99,
+        "title": "Санкт-Петербург",
+        "count": 2
+      },
+      {
+        "cityId": 1,
+        "title": "Алексин",
+        "count": 0
+      }
+    ]
+  },
+  "searchResult": {
+    "totalCount": 1,
+    "itemsPerPage": 1000,
+    "currentPage": 0,
+    "totalPagesCount": 1,
+    "items": [
+      {
+        "vacancyId": 60001,
+        "title": "Backend-разработчик",
+        "responsibilities": "<ul><li>Разработка backend-сервисов</li></ul>",
+        "requirements": "<p>Опыт с Python или Go от 2 лет</p>",
+        "conditions": "<ul><li>Гибридный формат</li></ul>",
+        "vacancyNumber": "61001",
+        "subdivisionId": null,
+        "subdivisionTitle": null,
+        "cityId": 65,
+        "cityTitle": "Москва",
+        "addressId": 1,
+        "addressTitle": "Москва",
+        "metro": [],
+        "salaryFrom": 150000,
+        "salaryTo": 220000,
+        "businessDirectionId": 4,
+        "businessDirectionTitle": "Офис",
+        "isHideOnCareer": false
+      }
+    ]
+  }
+}

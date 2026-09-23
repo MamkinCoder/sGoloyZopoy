@@ -1,0 +1,65 @@
+{
+  "item_count": 3,
+  "items": [
+    {
+      "city": {
+        "id": 3,
+        "name": "Москва"
+      },
+      "id": 1918,
+      "is_hot": false,
+      "is_remote_available": false,
+      "published_at": "2026-09-16T16:56:00.232891+03:00",
+      "tag": {
+        "description": "Инженеры дата-центра",
+        "id": 8,
+        "name": "ito"
+      },
+      "timetable_mode": {
+        "id": 2,
+        "name": "Фиксированный"
+      },
+      "title": "Младший системный инженер"
+    },
+    {
+      "city": {
+        "id": 1,
+        "name": "Санкт-Петербург"
+      },
+      "id": 1916,
+      "is_hot": false,
+      "is_remote_available": false,
+      "published_at": "2026-09-16T16:52:31.362651+03:00",
+      "tag": {
+        "description": "Техническая поддержка",
+        "id": 10,
+        "name": "support"
+      },
+      "timetable_mode": {
+        "id": 3,
+        "name": "Сменный"
+      },
+      "title": "Специалист продуктовой поддержки"
+    },
+    {
+      "city": {
+        "id": 1,
+        "name": "Санкт-Петербург"
+      },
+      "id": 1896,
+      "is_hot": false,
+      "is_remote_available": true,
+      "published_at": "2026-09-08T10:29:30.501892+03:00",
+      "tag": {
+        "description": "Backend-разработка",
+        "id": 1,
+        "name": "backend"
+      },
+      "timetable_mode": {
+        "id": 1,
+        "name": "Гибкий"
+      },
+      "title": "Fullstack-разработчик"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "data": {
+    "vacancy": {
+      "external_id": 131443955,
+      "name": "Golang-разработчик в команду VPN",
+      "city": "Санкт-Петербург",
+      "employment": "Полная",
+      "experience": "От 3 до 6 лет",
+      "alternate_url": "https://hh.ru/vacancy/131443955",
+      "description": "<p><strong>Наши задачи:</strong></p> <ul> <li><p>разработка и поддержка серверной части VPN на Go;</p></li> <li><p>оптимизация сетевого стека и производительности;</p></li> </ul> <p><strong>Наши ожидания:</strong></p> <ul> <li><p>опыт разработки на Go от 3 лет;</p></li> <li><p>понимание сетевых протоколов (TCP/IP, TLS);</p></li> </ul>",
+      "salary_from": null,
+      "salary_to": null
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "page": 1,
+  "pages": 2,
+  "total": 3,
+  "vacancies": [
+    {
+      "id": 4767,
+      "title": "Продуктовый аналитик",
+      "slug": "produktovyj-analitik-4767",
+      "tag": null,
+      "city": { "id": 1, "title": "Москва", "slug": "moskva" },
+      "sector": { "id": 1, "title": "Бизнес-направления", "slug": "biznes-napravlenia" },
+      "specialties": ["Аналитика"],
+      "publishedAt": 1790076729,
+      "organisation": { "id": 1, "title": "МегаФон" }
+    },
+    {
+      "id": 4766,
+      "title": "Application DevOps Engineer",
+      "slug": "application-devops-engineer-4766",
+      "tag": null,
+      "city": { "id": 1, "title": "Москва", "slug": "moskva" },
+      "sector": { "id": 3, "title": "ИТ-решения", "slug": "it-reshenia" },
+      "specialties": ["DevOps/SRE"],
+      "publishedAt": 1789721175,
+      "organisation": { "id": 1, "title": "МегаФон" }
+    },
+    {
+      "id": 4763,
+      "title": "Android-разработчик",
+      "slug": "android-razrabotchik-4763",
+      "tag": { "title": "Удаленка", "code": "remote" },
+      "city": { "id": 2, "title": "Санкт-Петербург", "slug": "spb" },
+      "sector": { "id": 3, "title": "ИТ-решения", "slug": "it-reshenia" },
+      "specialties": ["Мобильная разработка"],
+      "publishedAt": 1789560199,
+      "organisation": { "id": 1, "title": "МегаФон" }
+    }
+  ]
+}

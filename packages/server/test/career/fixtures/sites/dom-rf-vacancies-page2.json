@@ -1,0 +1,41 @@
+{
+  "data": [
+    {
+      "id": 627421,
+      "name": "Разработчик PHP (Цифровые сервисы Земли и Девелопмента)/ИТ",
+      "date": "10.09.2026",
+      "external_id": "1693911",
+      "url": "/career/vacancy/627421/",
+      "props": {
+        "intern": "N",
+        "it": "Y",
+        "biz": "N",
+        "city": "Москва",
+        "company": "ПАО ДОМ.РФ",
+        "department": "Цифровые сервисы Земли и Девелопмента"
+      }
+    },
+    {
+      "id": 621259,
+      "name": "Аналитик 1С",
+      "date": "20.08.2026",
+      "external_id": "1682395",
+      "url": "/career/vacancy/621259/",
+      "props": {
+        "intern": "N",
+        "it": "N",
+        "biz": "Y",
+        "city": "Москва",
+        "company": "ПАО ДОМ.РФ",
+        "department": "Управление расходами"
+      }
+    }
+  ],
+  "nav": {
+    "api": "/api/v2/content/career/vacancies/list/",
+    "page-size": 3,
+    "page-count": 2,
+    "page-number": 2,
+    "total": 5
+  }
+}

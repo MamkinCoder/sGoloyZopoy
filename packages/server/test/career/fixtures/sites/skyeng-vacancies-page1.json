@@ -1,0 +1,31 @@
+{
+  "results": [
+    {
+      "id": 713,
+      "title": "Руководитель группы продаж",
+      "slug": "rukovoditel-gruppi-prodaz",
+      "department_description": "<p>Skyeng — EdTech-компания, которая обучает людей всех возрастов.</p>",
+      "work_description": "<ul><li>Проводить встречи, обучать команду.</li><li>Строить дисциплину внутри команды.</li></ul>",
+      "requirements": "<ul><li>Опыт управления командой продаж от 2 лет.</li></ul>",
+      "benefits": "<ul><li>Доход от 145 000 до 420 000 руб./мес.</li><li>Удалённая работа.</li></ul>",
+      "huntflow_vacancy_id": null,
+      "tags": [{ "id": 53, "title": "Продажи", "slug": "prodazhi", "tag_type": { "id": 1, "title": "Направления" } }],
+      "position_category": { "id": 1, "title": "Line" },
+      "color": "#E4FBFF"
+    },
+    {
+      "id": 528,
+      "title": "Менеджер по удержанию и сохранению клиентов Skyeng",
+      "slug": "menedzher-po-uderzhaniyu-i-sohraneniyu-klientov-skyeng",
+      "department_description": "<p>Skyeng — EdTech-компания, которая обучает людей всех возрастов.</p>",
+      "work_description": "<ul><li>Работать с базой клиентов, предотвращать отток.</li></ul>",
+      "requirements": "<ul><li>Опыт в продажах или клиентском сервисе от 1 года.</li></ul>",
+      "benefits": "<ul><li>Официальное трудоустройство.</li></ul>",
+      "huntflow_vacancy_id": null,
+      "tags": [{ "id": 15, "title": "Клиентский сервис", "slug": null, "tag_type": { "id": 1, "title": "Направления" } }],
+      "position_category": { "id": 1, "title": "Line" },
+      "color": "#E4FBFF"
+    }
+  ],
+  "meta": { "total": 3, "page_size": 2, "current_page": 1, "last_page": 2 }
+}

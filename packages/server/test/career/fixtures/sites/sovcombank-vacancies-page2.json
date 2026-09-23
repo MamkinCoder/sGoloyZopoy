@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "id": 15071,
+      "title": "DevOps-инженер",
+      "salary_min": null,
+      "salary_max": null,
+      "tax": false,
+      "cities": [{ "id": 1, "name": "Москва", "region_name": null, "latitude": null, "longitude": null, "slug": null }],
+      "speciality": { "id": 18, "name": "Информационные технологии, интернет, телеком", "description": null, "slug": null },
+      "category": { "id": 18, "name": "Информационные технологии, интернет, телеком", "description": null, "slug": null },
+      "employment": [{ "id": 1, "name": "Полный рабочий день", "pivot": { "vacancy_id": 15071, "employment_id": 1 } }],
+      "company": { "id": 3, "name": "Совкомбанк Технологии", "description": null, "slug": null },
+      "experience": { "id": 3, "name": "3-5 лет" },
+      "url_redirect": null,
+      "slug": "devops-inzhener",
+      "vacancy_priority": null,
+      "created_at": "2026-09-18T08:19:46.000000Z",
+      "is_new": true
+    }
+  ],
+  "meta": {
+    "current_page": 2,
+    "from": 3,
+    "last_page": 2,
+    "links": [],
+    "path": "https://people.sovcombank.ru/api/v1/vacancies",
+    "per_page": 2,
+    "to": 3,
+    "total": 3,
+    "all_vacancies": 3
+  }
+}

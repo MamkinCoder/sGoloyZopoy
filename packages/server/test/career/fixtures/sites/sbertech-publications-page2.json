@@ -1,0 +1,30 @@
+{
+  "data": {
+    "vacancies": [
+      {
+        "requisitionId": "38ec6497-3406-4ffd-91ed-8eba3e83e224",
+        "internalId": 4571234,
+        "title": "Системный аналитик/Проектировщик (Platform V Synapse Event Mesh)",
+        "company": "АО \"СберТех\"",
+        "companyShortName": "AOSBT",
+        "publicationDate": "2026-09-21T09:00:00.000Z",
+        "introduction": "Развиваем Event Mesh платформы Platform V.",
+        "specialization": "Информационные технологии:Системный аналитик",
+        "specializationId": "658d77f9-0530-4859-ac56-14f703dabab9",
+        "duties": "*   сбор и анализ требований",
+        "requirements": "*   опыт работы системным аналитиком от 3 лет",
+        "conditions": "*   офис в Москве",
+        "acceptHandicappedFlag": null,
+        "city": "г Москва",
+        "region": "",
+        "salary_min": null,
+        "salary_max": null,
+        "workScheduleId": 1,
+        "experienceId": "7d2adf16-4635-4f0f-bf6e-f6089a702b5d",
+        "publicationId": "9650faaa-8c64-4898-b572-6b6291eb6da3"
+      }
+    ],
+    "total": 4
+  },
+  "success": true
+}

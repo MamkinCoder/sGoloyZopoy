@@ -1,0 +1,71 @@
+{
+  "data": {
+    "vacancies": [
+      {
+        "requisitionId": "56778c6b-6559-4a15-8fd0-d635c4c19207",
+        "internalId": 4566794,
+        "title": "Senior frontend-developer (DataTracker)",
+        "company": "АО \"СберТех\"",
+        "companyShortName": "AOSBT",
+        "publicationDate": "2026-09-23T10:22:25.000Z",
+        "introduction": "Мы - продуктовая команда, которая создает флагманское решение для макроэкономического анализа и прогнозирования.",
+        "specialization": "Информационные технологии:Программист, разработчик",
+        "specializationId": "39d29fd5-1a53-43ae-ab6f-1eda9ce5db58",
+        "duties": "*   Командная разработка пользовательских интерфейсов с помощью React\n*   Code review",
+        "requirements": "*   Опыт работы frontend-разработчиком 3+ лет\n*   TypeScript, React",
+        "conditions": "*   гибридный формат работы\n*   ежегодный пересмотр зарплаты",
+        "acceptHandicappedFlag": null,
+        "city": "г Москва",
+        "region": "",
+        "salary_min": null,
+        "salary_max": null,
+        "workScheduleId": 1,
+        "experienceId": "7d2adf16-4635-4f0f-bf6e-f6089a702b5d",
+        "publicationId": "9650faaa-8c64-4898-b572-6b6291eb6da1"
+      },
+      {
+        "requisitionId": "49ade614-56a4-495e-8428-7642d7cadf7c",
+        "internalId": 4568319,
+        "title": "Backend Developer",
+        "company": "ПАО Сбербанк",
+        "companyShortName": "PAOSberbank",
+        "publicationDate": "2026-09-22T15:14:28.000Z",
+        "introduction": "Не SberTech, должна быть отфильтрована.",
+        "specialization": "Информационные технологии:Дата-сайентист",
+        "specializationId": "563b89ac-8453-43d0-a7ef-af91f6481ced",
+        "duties": "backend",
+        "requirements": "python",
+        "conditions": "офис",
+        "city": "г Казань",
+        "region": "республика Татарстан",
+        "salary_min": null,
+        "salary_max": null,
+        "workScheduleId": 1
+      },
+      {
+        "requisitionId": "e21c2a80-dc59-490d-8dd2-d8ae551f1603",
+        "internalId": 4570025,
+        "title": "Лидер направления автоматизации и агентизации тестирования",
+        "company": "АО \"СберТех\"",
+        "companyShortName": "AOSBT",
+        "publicationDate": "2026-09-22T10:00:00.000Z",
+        "introduction": "Развиваем автоматизацию тестирования Platform V.",
+        "specialization": "Информационные технологии:Тестировщик",
+        "specializationId": "9afd3453-85ef-489f-a996-66ad1e848ab8",
+        "duties": "*   развитие фреймворков автотестирования",
+        "requirements": "*   опыт руководства QA-командой",
+        "conditions": "*   гибридный формат работы",
+        "acceptHandicappedFlag": null,
+        "city": "г Санкт-Петербург",
+        "region": "",
+        "salary_min": 300000,
+        "salary_max": 450000,
+        "workScheduleId": 4,
+        "experienceId": "7d2adf16-4635-4f0f-bf6e-f6089a702b5d",
+        "publicationId": "9650faaa-8c64-4898-b572-6b6291eb6da2"
+      }
+    ],
+    "total": 4
+  },
+  "success": true
+}

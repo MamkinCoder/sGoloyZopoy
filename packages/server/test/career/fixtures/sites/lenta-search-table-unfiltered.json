@@ -1,0 +1,32 @@
+{
+  "filters": {
+    "vacancyGroups": [],
+    "businessDirections": [],
+    "addresses": [],
+    "cities": [
+      {
+        "cityId": 65,
+        "title": "Москва",
+        "count": 1
+      },
+      {
+        "cityId": 99,
+        "title": "Санкт-Петербург",
+        "count": 2
+      },
+      {
+        "cityId": 1,
+        "title": "Алексин",
+        "count": 0
+      }
+    ]
+  },
+  "sort": {},
+  "searchResult": {
+    "totalCount": 0,
+    "itemsPerPage": 1000,
+    "currentPage": 0,
+    "totalPagesCount": 0,
+    "items": []
+  }
+}

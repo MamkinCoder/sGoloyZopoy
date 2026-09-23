@@ -1,0 +1,128 @@
+{
+  "success": true,
+  "data": [
+    {
+      "speciality": "Engineering",
+      "slug": "speciality-engineering",
+      "items": [
+        {
+          "id": 8068,
+          "parent": null,
+          "brand": "Engineering",
+          "position": "Аналитик данных",
+          "speciality": "Engineering",
+          "slug": "speciality-engineering",
+          "subspeciality": "Data",
+          "speciality_order": 6,
+          "subspeciality_order": 165,
+          "vacancy_location": "Москва",
+          "work_format": [
+            "Удалёнка"
+          ]
+        },
+        {
+          "id": 15019,
+          "parent": null,
+          "brand": "Engineering",
+          "position": "Аналитик данных (Маркетинг)",
+          "speciality": "Engineering",
+          "slug": "speciality-engineering",
+          "subspeciality": "Data",
+          "speciality_order": 6,
+          "subspeciality_order": 165,
+          "vacancy_location": "Москва, Санкт-Петербург, Нижний Новгород, Сыктывкар",
+          "work_format": [
+            "Удалёнка"
+          ]
+        },
+        {
+          "id": 15257,
+          "parent": null,
+          "brand": "Engineering",
+          "position": "Инженер данных  ",
+          "speciality": "Engineering",
+          "slug": "speciality-engineering",
+          "subspeciality": "Data",
+          "speciality_order": 6,
+          "subspeciality_order": 165,
+          "vacancy_location": "",
+          "work_format": [
+            "Удалёнка"
+          ]
+        },
+        {
+          "id": 15043,
+          "parent": null,
+          "brand": "Engineering",
+          "position": "iOS Разработчик",
+          "speciality": "Engineering",
+          "slug": "speciality-engineering",
+          "subspeciality": "Mobile ",
+          "speciality_order": 6,
+          "subspeciality_order": 265,
+          "vacancy_location": "Москва, Санкт-Петербург, Сыктывкар, Нижний Новгород",
+          "work_format": [
+            "Удалёнка"
+          ]
+        },
+        {
+          "id": 15131,
+          "parent": null,
+          "brand": "Engineering",
+          "position": "Продакт-оунер (Drinkit)",
+          "speciality": "Engineering",
+          "slug": "speciality-engineering",
+          "subspeciality": "Product/Project management",
+          "speciality_order": 6,
+          "subspeciality_order": 268,
+          "vacancy_location": "",
+          "work_format": [
+            "Гибрид",
+            "Удалёнка"
+          ]
+        },
+        {
+          "id": 14979,
+          "parent": null,
+          "brand": "Engineering",
+          "position": "Фуллстек QA-инженер",
+          "speciality": "Engineering",
+          "slug": "speciality-engineering",
+          "subspeciality": "QA",
+          "speciality_order": 6,
+          "subspeciality_order": 273,
+          "vacancy_location": "",
+          "work_format": []
+        }
+      ],
+      "subspeciality": [
+        "Data",
+        "Mobile ",
+        "Product/Project management",
+        "QA"
+      ]
+    },
+    {
+      "speciality": "Finance",
+      "slug": "speciality-finance",
+      "items": [
+        {
+          "id": 14787,
+          "parent": null,
+          "brand": "Dodo Pizza",
+          "position": "Бухгалтер по расчетам с покупателями и заказчиками",
+          "speciality": "Finance",
+          "slug": "speciality-finance",
+          "subspeciality": null,
+          "speciality_order": 13,
+          "subspeciality_order": null,
+          "vacancy_location": "",
+          "work_format": [
+            "Удалёнка"
+          ]
+        }
+      ],
+      "subspeciality": []
+    }
+  ]
+}

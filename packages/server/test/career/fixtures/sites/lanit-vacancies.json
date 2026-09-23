@@ -1,0 +1,21 @@
+{
+  "d": {
+    "results": [
+      {
+        "Id": 3713,
+        "Title": "Системный аналитик",
+        "VacancyExt_HuntflowCityName": "Москва"
+      },
+      {
+        "Id": 3758,
+        "Title": "AI инженер",
+        "VacancyExt_HuntflowCityName": "Россия"
+      },
+      {
+        "Id": 3775,
+        "Title": "Стажировка ML-разработчика (LLM / AI Agents)",
+        "VacancyExt_HuntflowCityName": "Россия"
+      }
+    ]
+  }
+}

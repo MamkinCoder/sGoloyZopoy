@@ -1,0 +1,22 @@
+{
+  "resultCode": "OK",
+  "payload": {
+    "vacancyId": "7ff59d6a-4032-49a7-9b45-45628da7bfa6",
+    "seoSlug": "starshij-ml-inzhener",
+    "category": "tcareer_it",
+    "title": "Старший ML-инженер",
+    "tags": [{ "text": "Senior" }, { "text": "Удаленный" }],
+    "salary": { "amount": null },
+    "description": [
+      { "key": "shortDescription", "content": "Создавайте и запускайте AI-решения на базе LLM Platform" },
+      { "key": "Описание", "content": "<p>Мы развиваем LLM Platform.</p>" },
+      {
+        "key": "Требования",
+        "content": [
+          { "description": "Опыт работы ML-разработчиком от 4 лет", "title": null },
+          { "description": "Уверенно пишете код на Python", "title": null }
+        ]
+      }
+    ]
+  }
+}

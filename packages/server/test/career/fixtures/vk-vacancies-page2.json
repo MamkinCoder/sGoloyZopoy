@@ -1,0 +1,20 @@
+{
+  "count": 3,
+  "next": null,
+  "previous": "http://team.vk.company/career/api/v2/vacancies/?limit=50&offset=0",
+  "results": [
+    {
+      "id": 45850,
+      "prof_area": { "id": 10, "name": "Разработка" },
+      "group": { "id": 291, "name": "VKontakte", "project_logo": "https://corp.vkcdn.ru/media/images/y.png" },
+      "title": "Go-разработчик",
+      "town": { "id": 7, "name": "Санкт-Петербург" },
+      "work_format": "Удалённый",
+      "tags": [{ "id": 2, "name": "postgresql" }],
+      "remote": true,
+      "external_program": false,
+      "external_bonus": null,
+      "specialty": { "id": 282, "name": "Backend" }
+    }
+  ]
+}

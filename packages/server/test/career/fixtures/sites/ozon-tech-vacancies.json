@@ -1,0 +1,115 @@
+{
+  "items": [
+    {
+      "hhId": 135781631,
+      "title": "C#-разработчик",
+      "city": "Москва",
+      "department": "Ozon Tech",
+      "group": "",
+      "description": "",
+      "hidden": false,
+      "manager": null,
+      "date": "",
+      "repliesCount": 0,
+      "recomendationsCount": 0,
+      "specialization": "",
+      "huntflow": null,
+      "rotationAccess": false,
+      "matchedTags": [],
+      "externalLinkId": 0,
+      "unarchiveDate": "",
+      "externalLink": "",
+      "schedule": "",
+      "employment": "Полная",
+      "experience": "От 1 года до 3 лет",
+      "workFormat": [
+        "Удалённо"
+      ],
+      "professionalRoles": [
+        {
+          "ID": "96",
+          "title": "Программист, разработчик"
+        }
+      ],
+      "internalUuid": "fabb96d9-3093-4699-841c-dc11a8cdea53",
+      "vacancyType": "external_vacancy"
+    },
+    {
+      "hhId": 137238259,
+      "title": "C#-разработчик, Ozon fresh",
+      "city": "Москва",
+      "department": "Ozon Tech",
+      "group": "",
+      "description": "",
+      "hidden": false,
+      "manager": null,
+      "date": "",
+      "repliesCount": 0,
+      "recomendationsCount": 0,
+      "specialization": "",
+      "huntflow": null,
+      "rotationAccess": false,
+      "matchedTags": [],
+      "externalLinkId": 0,
+      "unarchiveDate": "",
+      "externalLink": "",
+      "schedule": "",
+      "employment": "Полная",
+      "experience": "От 3 до 6 лет",
+      "workFormat": [
+        "На месте работодателя",
+        "Удалённо",
+        "Гибрид"
+      ],
+      "professionalRoles": [
+        {
+          "ID": "96",
+          "title": "Программист, разработчик"
+        }
+      ],
+      "internalUuid": "f6b98aac-ddf7-4f5f-b00b-2a76d2fbdc1a",
+      "vacancyType": "external_vacancy"
+    },
+    {
+      "hhId": 136642353,
+      "title": "C#-Разработчик, Разработка батчинга",
+      "city": "",
+      "department": "Ozon Tech",
+      "group": "",
+      "description": "",
+      "hidden": false,
+      "manager": null,
+      "date": "",
+      "repliesCount": 0,
+      "recomendationsCount": 0,
+      "specialization": "",
+      "huntflow": null,
+      "rotationAccess": false,
+      "matchedTags": [],
+      "externalLinkId": 0,
+      "unarchiveDate": "",
+      "externalLink": "",
+      "schedule": "",
+      "employment": "Полная",
+      "experience": "От 3 до 6 лет",
+      "workFormat": [
+        "Удалённо"
+      ],
+      "professionalRoles": [
+        {
+          "ID": "96",
+          "title": "Программист, разработчик"
+        }
+      ],
+      "internalUuid": "82b71a73-5dab-47b5-8408-8ccd4eb4588a",
+      "vacancyType": "external_vacancy"
+    }
+  ],
+  "meta": {
+    "limit": 50,
+    "page": 1,
+    "perPage": 50,
+    "totalItems": 3,
+    "totalPages": 1
+  }
+}

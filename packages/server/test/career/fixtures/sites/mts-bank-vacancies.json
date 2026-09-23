@@ -1,0 +1,228 @@
+{
+  "data": [
+    {
+      "id": 5236,
+      "attributes": {
+        "name": " Младший бизнес аналитик (Simple One)",
+        "externalId": "1017686",
+        "externalCode": "0590ec35-7739-4bda-9bd4-ecafeb9ec2b4",
+        "introduction": "**МТС Банк** - команда, которая развивает цифровые финансовые сервисы и делает их доступными для всех.\n\nМы работаем с со...",
+        "duties": "*   Собирать и формализовывать потребности подразделений компании в автоматизации сервисов.\n*   Анализировать и проектир...",
+        "requirements": "*   Опыт внедрения или развития ESM-платформ: ServiceNow, Naumen, ELMA, SimpleOne, Ivanti, ManageEngine, Atlassian Jira ...",
+        "conditions": "У нас ваши идеи не потеряются: предлагайте и обсуждайте, ищите новые решения и экспериментируйте. Мы всегда поддержим ва...",
+        "acceptHandicapped": null,
+        "externalPublicationDate": "2026-09-21T11:30:31.000Z",
+        "slug": "moskva/mladshiy-biznes-analitik-simple-one--1017686",
+        "salaryFrom": null,
+        "salaryTo": null,
+        "orderPriority": null,
+        "deletedAt": null,
+        "createdAt": "2026-09-21T14:32:17.534Z",
+        "updatedAt": "2026-09-22T17:13:21.761Z",
+        "publishedAt": "2026-09-22T17:13:21.739Z",
+        "shortInfo": null,
+        "doNotUpdate": null,
+        "company": {
+          "data": {
+            "id": 7,
+            "attributes": {
+              "name": "ПАО \"МТС-Банк\"",
+              "shortName": "mtsbank",
+              "externalId": "1",
+              "orderPriority": null,
+              "deletedAt": null,
+              "createdAt": "2023-09-04T15:36:28.700Z",
+              "updatedAt": "2023-09-04T15:36:28.700Z"
+            }
+          }
+        },
+        "location": {
+          "data": {
+            "id": 138,
+            "attributes": {
+              "name": "г Москва",
+              "details": "",
+              "externalId": "0c5b2444-70a0-4932-980c-b4dc0d3f02b5",
+              "latitude": 55.75396,
+              "longitude": 37.620393,
+              "orderPriority": null,
+              "deletedAt": null,
+              "createdAt": "2023-11-21T17:14:25.296Z",
+              "updatedAt": "2023-11-21T17:14:25.296Z",
+              "shortName": "Москва",
+              "fullName": "г Москва"
+            }
+          }
+        },
+        "specialization": {
+          "data": {
+            "id": 404,
+            "attributes": {
+              "name": "Информационные технологии:Бизнес-аналитик",
+              "externalId": "25f6bae4-8e42-4e02-8522-1eb3fa51a709",
+              "orderPriority": 61,
+              "deletedAt": null,
+              "createdAt": "2024-08-16T08:15:29.540Z",
+              "updatedAt": "2024-08-16T08:15:29.540Z"
+            }
+          }
+        },
+        "grade": {
+          "data": null
+        }
+      }
+    },
+    {
+      "id": 5202,
+      "attributes": {
+        "name": " Эксперт направления сопровождения пользователей",
+        "externalId": "1016523",
+        "externalCode": "ef39f06b-5532-467e-9267-cddccc197032",
+        "introduction": "МТС Банк — команда, которая развивает цифровые финансовые сервисы и делает их доступными для всех.\n\n  \n\nМы работаем с со...",
+        "duties": "**Чем предстоит заниматься:**\n\n  \n\nформировать процесс работы с продуктовыми командами\n\nоказывать техническую поддержку ...",
+        "requirements": "*    опыт работы в службах HelpDesk/ServiceDesk\n*   опыт с Jira, Confluence, ITSM, Микросервисами\n*   знание SQL, а так ...",
+        "conditions": null,
+        "acceptHandicapped": null,
+        "externalPublicationDate": "2026-08-27T04:26:53.000Z",
+        "slug": "moskva/ekspert-napravleniya-soprovozhdeniya-polzovateley--1016523",
+        "salaryFrom": null,
+        "salaryTo": null,
+        "orderPriority": null,
+        "deletedAt": null,
+        "createdAt": "2026-08-27T07:30:52.763Z",
+        "updatedAt": "2026-09-22T17:13:18.058Z",
+        "publishedAt": "2026-09-22T17:13:18.041Z",
+        "shortInfo": null,
+        "doNotUpdate": null,
+        "company": {
+          "data": {
+            "id": 7,
+            "attributes": {
+              "name": "ПАО \"МТС-Банк\"",
+              "shortName": "mtsbank",
+              "externalId": "1",
+              "orderPriority": null,
+              "deletedAt": null,
+              "createdAt": "2023-09-04T15:36:28.700Z",
+              "updatedAt": "2023-09-04T15:36:28.700Z"
+            }
+          }
+        },
+        "location": {
+          "data": {
+            "id": 138,
+            "attributes": {
+              "name": "г Москва",
+              "details": "",
+              "externalId": "0c5b2444-70a0-4932-980c-b4dc0d3f02b5",
+              "latitude": 55.75396,
+              "longitude": 37.620393,
+              "orderPriority": null,
+              "deletedAt": null,
+              "createdAt": "2023-11-21T17:14:25.296Z",
+              "updatedAt": "2023-11-21T17:14:25.296Z",
+              "shortName": "Москва",
+              "fullName": "г Москва"
+            }
+          }
+        },
+        "specialization": {
+          "data": {
+            "id": 319,
+            "attributes": {
+              "name": "IT: Поддержка, DevOps и администрирование",
+              "externalId": "21b7434a-43e7-4841-920d-29433b91e19d",
+              "orderPriority": 32,
+              "deletedAt": null,
+              "createdAt": "2023-09-04T15:36:30.413Z",
+              "updatedAt": "2023-09-04T15:36:30.413Z"
+            }
+          }
+        },
+        "grade": {
+          "data": null
+        }
+      }
+    },
+    {
+      "id": 4627,
+      "attributes": {
+        "name": "Системный аналитик",
+        "externalId": "1009142",
+        "externalCode": "ce13f3f2-d114-46a9-b7f0-5ef916bb7cce",
+        "introduction": "**МТС Финтех** – одно из самых технологичных направлений экосистемы МТС. Мы развиваем финансовые сервисы нового поколени...",
+        "duties": "*   собирать и анализировать требования\n*   постановка задач разработчикам (написание технических заданий и другой проек...",
+        "requirements": "*   умение разбираться в диаграммах последовательности и уметь их составлять\n*   знание UML\n*   понимание принципов рабо...",
+        "conditions": "У нас ваши идеи не потеряются: предлагайте и обсуждайте, ищите новые решения и экспериментируйте. Мы всегда поддержим ва...",
+        "acceptHandicapped": null,
+        "externalPublicationDate": "2025-05-28T07:05:37.000Z",
+        "slug": "moskva/sistemniy-analitik--1009142",
+        "salaryFrom": null,
+        "salaryTo": null,
+        "orderPriority": null,
+        "deletedAt": null,
+        "createdAt": "2025-03-13T14:22:23.569Z",
+        "updatedAt": "2026-09-22T17:13:17.631Z",
+        "publishedAt": "2026-09-22T17:13:17.606Z",
+        "shortInfo": null,
+        "doNotUpdate": null,
+        "company": {
+          "data": {
+            "id": 7,
+            "attributes": {
+              "name": "ПАО \"МТС-Банк\"",
+              "shortName": "mtsbank",
+              "externalId": "1",
+              "orderPriority": null,
+              "deletedAt": null,
+              "createdAt": "2023-09-04T15:36:28.700Z",
+              "updatedAt": "2023-09-04T15:36:28.700Z"
+            }
+          }
+        },
+        "location": {
+          "data": {
+            "id": 138,
+            "attributes": {
+              "name": "г Москва",
+              "details": "",
+              "externalId": "0c5b2444-70a0-4932-980c-b4dc0d3f02b5",
+              "latitude": 55.75396,
+              "longitude": 37.620393,
+              "orderPriority": null,
+              "deletedAt": null,
+              "createdAt": "2023-11-21T17:14:25.296Z",
+              "updatedAt": "2023-11-21T17:14:25.296Z",
+              "shortName": "Москва",
+              "fullName": "г Москва"
+            }
+          }
+        },
+        "specialization": {
+          "data": {
+            "id": 296,
+            "attributes": {
+              "name": "IT: Системная аналитика и архитектура",
+              "externalId": "9b07fbb7-3259-4eb5-839c-ea14b08ad51a",
+              "orderPriority": 9,
+              "deletedAt": null,
+              "createdAt": "2023-09-04T15:36:29.313Z",
+              "updatedAt": "2023-09-04T15:36:29.313Z"
+            }
+          }
+        },
+        "grade": {
+          "data": null
+        }
+      }
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "page": 1,
+      "pageSize": 100,
+      "pageCount": 1,
+      "total": 3
+    }
+  }
+}

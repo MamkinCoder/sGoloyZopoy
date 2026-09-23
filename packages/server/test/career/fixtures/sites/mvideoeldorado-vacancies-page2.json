@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "external_id": "5e5a98306a012900083076a9",
+      "title": "Кассир-консультант",
+      "work_location": "Москва, Киевское ш., 23-й км., 1, ТРЦ Саларис (2 этаж)",
+      "address": "105187, г. Москва, п. Московский, Киевское ш. 23-й км, 1",
+      "direction": "Магазин",
+      "salary_to": 120000,
+      "currency": "₽",
+      "active": true,
+      "city_name": "Москва"
+    }
+  ],
+  "pagination": { "page": 2, "page_size": 10, "total_pages": 2, "total_count": 3 }
+}

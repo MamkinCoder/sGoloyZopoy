@@ -1,0 +1,72 @@
+{
+  "totalPages": 1,
+  "totalCount": 3,
+  "vacancies": [
+    {
+      "id": 14547,
+      "name": "Руководитель направления",
+      "address": "ул. Свободы, д. 36",
+      "salaryFrom": 101250,
+      "salaryTo": 101250,
+      "salaryCurrency": null,
+      "directions": [
+        {
+          "id": 4,
+          "name": "Технический блок"
+        }
+      ],
+      "recruitmentType": "profRecruitment",
+      "city": {
+        "id": 40,
+        "name": "г. Рязань"
+      },
+      "whatWeToDo": "<ul><li><p>Организовывать эксплуатацию электроустановок.</p></li></ul>",
+      "whatWeOffer": "<ul><li><p>Работа в крупнейшем в России провайдере цифровых услуг.</p></li></ul>",
+      "whatWeExpect": "<ul><li><p>Высшее образование.</p></li></ul>"
+    },
+    {
+      "id": 14525,
+      "name": "Старший девопс-инженер",
+      "address": null,
+      "salaryFrom": null,
+      "salaryTo": null,
+      "salaryCurrency": null,
+      "directions": [
+        {
+          "id": 2,
+          "name": "Разработка"
+        }
+      ],
+      "recruitmentType": "profRecruitment",
+      "city": {
+        "id": 5,
+        "name": "г. Москва"
+      },
+      "whatWeToDo": "<ul><li><p>Настройка прикладного программного обеспечения по инструкциям.</p></li><li><p>Реагирование на события систем мониторинга.</p></li></ul>",
+      "whatWeOffer": "<ul><li><p>Официальное трудоустройство с первого рабочего дня.</p></li><li><p>Гибридный формат работы.</p></li></ul>",
+      "whatWeExpect": "<ul><li><p>Продвинутое знание Linux.</p></li><li><p>Основы Python.</p></li></ul>"
+    },
+    {
+      "id": 12273,
+      "name": "Ведущий специалист по ГО и ЧС",
+      "address": "ул. Пушкинская, д. 278",
+      "salaryFrom": null,
+      "salaryTo": null,
+      "salaryCurrency": null,
+      "directions": [
+        {
+          "id": 14,
+          "name": "Другое"
+        }
+      ],
+      "recruitmentType": "profRecruitment",
+      "city": {
+        "id": 69,
+        "name": "г. Ижевск"
+      },
+      "whatWeToDo": "<p>Ведение и корректировка плановых документов по ГО и ЧС.</p>",
+      "whatWeOffer": "<p>Официальное оформление и широкий соцпакет.</p>",
+      "whatWeExpect": "<p>Высшее образование.</p>"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "d": {
+    "Id": 3758,
+    "Title": "AI инженер",
+    "VacancyExt_JobResponsibilities": "<ul><li>Внедрение agent-assisted и SDD-практик в продуктовых командах;</li><li>Анализ кода и reverse engineering для спецификаций;</li><li>Создание микроинструментов и управление контекстом агентов;</li></ul>",
+    "VacancyExt_Requirements": "<ul><li>От 2‑х лет опыта системным/бизнес-аналитиком или разработчиком;</li><li>Опыт хотя бы с одним AI-ассистентом или код-агентом (Cursor, Claude Code, Codex);</li><li>Уверенная работа с Git;</li></ul>",
+    "VacancyExt_SocialPackageNew": "<ul><li>Гибридный или удаленный формат работы в комфортабельном офисе (Москва);</li><li>ДМС со стоматологией;</li></ul>",
+    "VacancyExt_HuntflowCityName": "Россия"
+  }
+}

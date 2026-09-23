@@ -1,0 +1,11 @@
+{
+  "totalCount": 3,
+  "count": 3,
+  "actionStatus": "Success",
+  "message": null,
+  "data": [
+    { "id": 1, "name": "Flight crew", "translations": { "RU": "Лётный состав", "EN": "Flight crew" }, "displayIndex": 1 },
+    { "id": 6, "name": "Personal Ground Handling", "translations": { "RU": "Персонал наземного обслуживания", "EN": "Personal Ground Handling" }, "displayIndex": 5 },
+    { "id": 8, "name": "Other vacancies", "translations": { "RU": "Другие вакансии", "EN": "Other vacancies" }, "displayIndex": 8 }
+  ]
+}

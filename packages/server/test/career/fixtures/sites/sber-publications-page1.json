@@ -1,0 +1,52 @@
+{
+  "data": {
+    "vacancies": [
+      {
+        "requisitionId": "49ade614-56a4-495e-8428-7642d7cadf7b",
+        "internalId": 4568319,
+        "title": "Backend Developer",
+        "company": "ПАО Сбербанк",
+        "companyShortName": "PAOSberbank",
+        "publicationDate": "2026-09-22T15:14:28.000Z",
+        "introduction": "Мы формируем ядро команды, которая создает с нуля экосистему интеллектуальных агентов для автоматизации бизнес-процессов. Нам нужен универсальный специалист, способный вести фичи от проектирования баз",
+        "specialization": "Информационные технологии:Дата-сайентист",
+        "specializationId": "563b89ac-8453-43d0-a7ef-af91f6481ced",
+        "duties": "• Разработка backend для AI-агентов\n\n• Интеграция с API существующих АС\n\n• Реализация RAG-пайплайнов\n\n• Оптимизация производительности\n\n• Code review",
+        "requirements": "• 3+ года в backend-разработке\n\n• Python (FastAPI, Django) / Java / Go\n\n• Опыт работы с LLM-фреймворками (LangChain, LlamaIndex)\n\n• PostgreSQL, Redis, MongoDB\n\n• Микросервисы, event-driven архитектура",
+        "conditions": "  \n\n*   гибридный формат работы\n*   ежегодный пересмотр зарплаты\n*   корпоративный спортзал и зоны отдыха\n*   более 400 образовательных программ СберУниверситета для профессионального и карьерного раз",
+        "acceptHandicappedFlag": null,
+        "city": "г Казань",
+        "region": "республика Татарстан",
+        "salary_min": null,
+        "salary_max": null,
+        "workScheduleId": 1,
+        "experienceId": "7d2adf16-4635-4f0f-bf6e-f6089a702b5d",
+        "publicationId": "59ccd74b-e17f-4f0a-b1f6-362f3c0fb6af"
+      },
+      {
+        "requisitionId": "856048e1-baee-40e3-9e55-28346fc71a1e",
+        "internalId": 4571336,
+        "title": "AQA Java (пруденциальный резерв)",
+        "company": "ПАО Сбербанк",
+        "companyShortName": "PAOSberbank",
+        "publicationDate": "2026-09-22T12:59:41.000Z",
+        "introduction": "Вы знали, что для того, чтобы выдать клиенту Сбера какой-либо продукт (ипотека, потреб, карты), мы должны определить сумму, которую Банк зарезервирует у себя, чтобы управлять риском дефолта заемщика и",
+        "specialization": "Информационные технологии:Тестировщик",
+        "specializationId": "9afd3453-85ef-489f-a996-66ad1e848ab8",
+        "duties": "*   обнаружение, документирование и отслеживание дефектов\n*   взаимодействие с разработчиками, аналитиками\n*   работа с автотестами - запуск, разбор падений, актуализация\n*   участие в проработке зада",
+        "requirements": "*   опыт работы в данной роли от 3-х лет\n*   знание методов и методик тестирования\n*   опыт автоматизации (Java, Selenium, Cucumber, Allure): разработка новых и актуализация существующих автоматизиров",
+        "conditions": "*   комфортный современный офис рядом с м. Кутузовская\n*   гибридный формат работы\n*   ежегодный пересмотр зарплаты,\n*   корпоративный спортзал и зоны отдыха\n*   более 400 образовательных программ Сбе",
+        "acceptHandicappedFlag": null,
+        "city": "г Москва",
+        "region": "",
+        "salary_min": null,
+        "salary_max": null,
+        "workScheduleId": 1,
+        "experienceId": "7d2adf16-4635-4f0f-bf6e-f6089a702b5d",
+        "publicationId": "f1bf30ca-3b74-46b1-961b-f28507ab6e2e"
+      }
+    ],
+    "total": 3
+  },
+  "success": true
+}

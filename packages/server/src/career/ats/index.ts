@@ -7,10 +7,15 @@ import { lever } from "./lever.js";
 import { smartrecruiters } from "./smartrecruiters.js";
 import { teamtailor } from "./teamtailor.js";
 import type { ATSClientImpl } from "./types.js";
+import { avito } from "./avito.js";
+import { siteClients } from "./sites/index.js";
+import { tbank } from "./tbank.js";
+import { vk } from "./vk.js";
+import { wb } from "./wb.js";
 import { workable } from "./workable.js";
 
 // Order matters: specific hosted boards first, host-only hh last, generic HTML parsers in between.
-export const atsClientImpls: ATSClientImpl[] = [greenhouse, lever, ashby, workable, smartrecruiters, teamtailor, huntflow, potok, hhHosted];
+export const atsClientImpls: ATSClientImpl[] = [greenhouse, lever, ashby, workable, smartrecruiters, teamtailor, wb, vk, avito, tbank, ...siteClients, huntflow, potok, hhHosted];
 
 export const atsClients: ATSClient[] = atsClientImpls;
 

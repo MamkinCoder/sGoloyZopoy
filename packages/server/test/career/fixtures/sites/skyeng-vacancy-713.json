@@ -1,0 +1,13 @@
+{
+  "id": 713,
+  "title": "Руководитель группы продаж",
+  "slug": "rukovoditel-gruppi-prodaz",
+  "department_description": "<p>Skyeng — EdTech-компания, которая обучает людей всех возрастов.</p>",
+  "work_description": "<ul><li>Проводить встречи, обучать команду.</li><li>Строить дисциплину внутри команды.</li></ul>",
+  "requirements": "<ul><li>Опыт управления командой продаж от 2 лет.</li></ul>",
+  "benefits": "<ul><li>Доход от 145 000 до 420 000 руб./мес.</li><li>Удалённая работа.</li></ul>",
+  "huntflow_vacancy_id": null,
+  "tags": [{ "id": 53, "title": "Продажи", "slug": "prodazhi", "tag_type": { "id": 1, "title": "Направления" } }],
+  "position_category": { "id": 1, "title": "Line" },
+  "color": "#E4FBFF"
+}

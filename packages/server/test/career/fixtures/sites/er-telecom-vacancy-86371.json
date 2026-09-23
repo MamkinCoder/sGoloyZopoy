@@ -1,0 +1,39 @@
+{
+  "id": 86371,
+  "name": "Fullstack разработчик (Node.js, React.js)",
+  "company": {
+    "id": 81,
+    "name": "ООО \"Эр-1\""
+  },
+  "city": [
+    {
+      "id": 296,
+      "name": "Москва"
+    },
+    {
+      "id": 295,
+      "name": "Новосибирск"
+    },
+    {
+      "id": 287,
+      "name": "Пермь"
+    },
+    {
+      "id": 196,
+      "name": "Санкт-Петербург"
+    }
+  ],
+  "employment": [
+    {
+      "id": 1322,
+      "name": "Полный день"
+    }
+  ],
+  "experience": [
+    {
+      "id": 18,
+      "name": "3-6 лет"
+    }
+  ],
+  "content": "<p><strong>Чем предстоит заниматься:</strong></p>\r\n\r\n<ul>\r\n\t<li>Проектировать отказоустойчивые масштабируемые микросервисы на Node.js (NestJS / Fastify / Express), участвовать в создании систем с нуля и развитии текущих решений.</li>\r\n\t<li>Проектировать архитектуру клиентских приложений, разрабатывать дизайн-системы и UI-библиотеки, строить SSR/SSG-решения (Next.js, Remix, Vite) и оптимизировать LCP/TTFB.</li>\r\n\t<li>Проектировать схемы PostgreSQL, оптимизировать SQL, настраивать интеграции через Kafka, кэширование на Redis, работать с MongoDB/ElasticSearch.</li>\r\n\t<li>Разрабатывать SDK, shared-компоненты, hooks и CLI-утилиты (Commander.js / oclif / yargs), вести npm/private registry и changelog.</li>\r\n\t<li>Проводить performance-аудит (Lighthouse, Node.js Profiler, flame graphs), внедрять observability (OpenTelemetry, Jaeger, Prometheus), проектировать под нагрузку (SLA 99,9 %+), canary-релизы и rollback.</li>\r\n\t<li>Применять OWASP, защищать REST/GraphQL-эндпоинты, rate-limiting, CSRF, OAuth2/JWT/mTLS.</li>\r\n\t<li>Внедрять feature-flags, event tracking, A/B-тесты, интеграции с Amplitude / GA / Yandex Metrika / Mixpanel.</li>\r\n\t<li>Проводить Code review, быть наставником middle/upper-middle, принимать участие в roadmap и архитектурных комитетах, взаимодействовать с DevOps, безопасностью, продакт-менеджерами и архитекторами.</li>\r\n</ul>\r\n\r\n<p><strong>Мы предлагаем:</strong>​​​​</p>"
+}

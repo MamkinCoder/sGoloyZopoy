@@ -1,0 +1,16 @@
+{
+  "status": 200,
+  "data": {
+    "id": 39490,
+    "name": "Senior QA Automation engineer в WB Chat",
+    "description": "Мы ищем Senior QA Automation инженера (Golang).",
+    "direction_name": "Тестирование",
+    "office_location_city_title": "",
+    "experience_type_title": "От 5 лет",
+    "employment_types_list": [{ "id": 2, "title": "Удаленно" }],
+    "salary_from": null,
+    "requirements_arr": ["Опыт в QA Automation от 3 лет.", "Опыт написания автотестов на Golang."],
+    "duties_arr": ["Обеспечивать качество продукта на всех этапах разработки."],
+    "conditions_arr": ["ДМС", "Гибкий график"]
+  }
+}

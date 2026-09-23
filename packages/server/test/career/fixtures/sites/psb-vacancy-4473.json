@@ -1,0 +1,23 @@
+{
+  "locationName": "Москва",
+  "experienceName": "От 3 до 6 лет",
+  "vacancyBenefits": {
+    "description": "Преимущества работы в банке",
+    "benefits": [
+      { "imageUrl": "/images/Products.png", "imageDescription": "Продукты банка на льготных условиях" }
+    ]
+  },
+  "id": "4473",
+  "title": "Frontend-разработчик",
+  "req": "Опыт работы frontend-разработчиком от 3-х лет\r\n\r\nУверенное знание JavaScript, HTML, CSS\r\n\r\nОпыт разработки с использованием популярных frontend-фреймворков",
+  "duty": "Разработка на Angular SPA Web-приложения ДБО\r\n\r\nРазработка компонентов UI-Kit согласно дизайн-системе\r\n\r\nПокрытие unit-тестами кода",
+  "cond": "Официальное оформление в соответствии с ТК РФ\r\n\r\nКонкурентный уровень дохода: оклад + ежемесячная премия",
+  "locationId": "rus.77.000.000",
+  "type": "It",
+  "experience": "3",
+  "salary": "0",
+  "hot": false,
+  "update_date": "2026-09-22T13:35:56.80503+00:00",
+  "workTypeName": "полная занятость",
+  "profGroupName": "Информационные технологии, интернет, телеком"
+}

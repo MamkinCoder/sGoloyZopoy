@@ -1,0 +1,27 @@
+{
+  "data": [
+    {
+      "external_id": "5e4fc6d6fb49570008a0819f",
+      "title": "Продавец",
+      "work_location": "Зеленоград, Ржавки, 2-й мкр., 20, Zеленопарк (1 этаж)",
+      "address": "Россия, Московская обл, г Солнечногорск, пгт Ржавки, д 2мкр стр 20",
+      "direction": "Магазин",
+      "salary_to": 120000,
+      "currency": "₽",
+      "active": true,
+      "city_name": "МО, Солнечногорский р-н"
+    },
+    {
+      "external_id": "5f8aa234c24a7e3e69c3cb51",
+      "title": "Специалист по ремонту техники",
+      "work_location": "Балаково, ул. Трнавская, 24",
+      "address": "Россия, Саратовская обл, г Балаково, ул Трнавская, д 24",
+      "direction": "Склад и Логистика",
+      "salary_to": 60000,
+      "currency": "₽",
+      "active": true,
+      "city_name": "Балаково"
+    }
+  ],
+  "pagination": { "page": 1, "page_size": 10, "total_pages": 2, "total_count": 3 }
+}

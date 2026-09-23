@@ -1,0 +1,16 @@
+{
+  "id": "76dc9436-816f-4583-98a3-c04ac13b32e7",
+  "name": "Senior Go developer",
+  "city": "Москва",
+  "work_format": "office",
+  "data": {
+    "main_responsibilities": "* Разработка бэкенд-сервисов на Go;\n* Проектирование API.",
+    "professional_skills": "* Опыт коммерческой разработки на Go от 4 лет;\n* Знание PostgreSQL.",
+    "software_skills": "* Docker и Kubernetes будет плюсом.",
+    "working_conditions": "* Удобный офис рядом с метро;\n* ДМС.",
+    "salary_min": null,
+    "salary_max": null
+  },
+  "category": { "id": 18877, "negotiation_type": "office" },
+  "tags": []
+}

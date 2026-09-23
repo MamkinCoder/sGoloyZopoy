@@ -1,0 +1,19 @@
+{
+  "totalCount": 1,
+  "count": 1,
+  "actionStatus": "Success",
+  "message": null,
+  "data": [
+    {
+      "id": 440,
+      "categoryId": 1,
+      "cityName": "Москва",
+      "cityId": 1,
+      "departmentId": 33,
+      "name": "Заполнение анкеты для рассмотрения в резерв на лётные должности",
+      "descriptionBlocks": [
+        { "name": "VacancyDescription", "content": "<p>Уважаемый кандидат! При появлении вакансий мы рассматриваем анкеты кандидатов.</p>" }
+      ]
+    }
+  ]
+}

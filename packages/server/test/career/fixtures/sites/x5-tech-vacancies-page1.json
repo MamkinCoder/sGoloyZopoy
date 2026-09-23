@@ -1,0 +1,39 @@
+{
+  "total_count": 3,
+  "page": 1,
+  "next_page": 2,
+  "page_size": 2,
+  "page_count": 2,
+  "items": [
+    {
+      "id": "5c8fa403-e84d-4b57-85c1-91dc88633224",
+      "name": "Разработчик базы данных Tarantool",
+      "city": "Москва",
+      "work_format": "remote",
+      "data": {
+        "main_responsibilities": "* Администрирование кластеров Tarantool;\n* Написание кода на Rust.",
+        "professional_skills": "* Глубокое знание Tarantool;\n* Опыт работы с Rust.",
+        "working_conditions": "* Официальное оформление;\n* ДМС.",
+        "salary_min": null,
+        "salary_max": null
+      },
+      "category": { "id": 18877, "negotiation_type": "office" },
+      "tags": []
+    },
+    {
+      "id": "76dc9436-816f-4583-98a3-c04ac13b32e7",
+      "name": "Senior Go developer",
+      "city": "Москва",
+      "work_format": "office",
+      "data": {
+        "main_responsibilities": "* Разработка бэкенд-сервисов на Go.",
+        "professional_skills": "* Опыт коммерческой разработки на Go от 4 лет.",
+        "working_conditions": "* Удобный офис.",
+        "salary_min": null,
+        "salary_max": null
+      },
+      "category": { "id": 18877, "negotiation_type": "office" },
+      "tags": []
+    }
+  ]
+}

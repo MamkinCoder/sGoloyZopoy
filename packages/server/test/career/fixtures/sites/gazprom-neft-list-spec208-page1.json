@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": "8452",
+      "title": "Руководитель по цифровизации производственных систем",
+      "detail": "https://career.gazprom-neft.ru/vacancies/rukovoditel-po-tsifrovizatsii-proizvodstvennykh-sistem-10685/",
+      "city": "Санкт-Петербург",
+      "metro": false,
+      "worktype": "Постоянный трудовой договор",
+      "schedule": false,
+      "date": "12 сен 2026",
+      "code": "rukovoditel-po-tsifrovizatsii-proizvodstvennykh-sistem-10685",
+      "icon": false,
+      "is_hot": false,
+      "id_sap": "10685",
+      "description": false,
+      "hr": false
+    }
+  ],
+  "response": {
+    "count": 1
+  }
+}

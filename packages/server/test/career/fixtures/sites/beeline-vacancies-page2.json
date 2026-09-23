@@ -1,0 +1,20 @@
+{
+  "count": 3,
+  "next": null,
+  "previous": "https://job.beeline.ru/api/v1/vacancies/?limit=2&offset=0",
+  "results": [
+    {
+      "id": "3ec4e2cc-f6e6-452f-9843-e886c87e200e",
+      "name": "Backend-разработчик Python",
+      "grade": "От 2 до 5 лет",
+      "gross_salary_from": "220000",
+      "gross_salary_to": "300000",
+      "location_address": "г. Москва, ул. Вешняковская, д. 18",
+      "supervisor": false,
+      "internship_program": null,
+      "role": "Разработчик",
+      "work_format": ["Гибридный"],
+      "city": [{ "name": "Москва", "display_region": "" }]
+    }
+  ]
+}

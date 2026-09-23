@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "id": 1693094,
+      "position_id": 11097,
+      "salary_from": 68000,
+      "salary_to": 70000,
+      "schedule": "flexible",
+      "status": "published",
+      "published_at": "2026-09-23T00:36:04.208Z",
+      "position_title": "Инструктор по лечебной физкультуре",
+      "locality_name": "Хабаровск",
+      "direction_title": null
+    }
+  ],
+  "meta": { "count": 3, "page": 2, "pages": 2 }
+}

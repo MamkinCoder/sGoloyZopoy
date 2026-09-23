@@ -1,0 +1,51 @@
+{
+  "data": [
+    {
+      "id": 15063,
+      "title": "Python-разработчик",
+      "salary_min": null,
+      "salary_max": null,
+      "tax": false,
+      "cities": [{ "id": 719, "name": "Новосибирск", "region_name": null, "latitude": null, "longitude": null, "slug": null }],
+      "speciality": { "id": 18, "name": "Информационные технологии, интернет, телеком", "description": null, "slug": null },
+      "category": { "id": 18, "name": "Информационные технологии, интернет, телеком", "description": null, "slug": null },
+      "employment": [{ "id": 1, "name": "Полный рабочий день", "pivot": { "vacancy_id": 15063, "employment_id": 1 } }],
+      "company": { "id": 3, "name": "Совкомбанк Технологии", "description": null, "slug": null },
+      "experience": { "id": 3, "name": "3-5 лет" },
+      "url_redirect": null,
+      "slug": "python-razrabotcik",
+      "vacancy_priority": null,
+      "created_at": "2026-09-17T08:19:46.000000Z",
+      "is_new": true
+    },
+    {
+      "id": 15106,
+      "title": "Кредитный менеджер",
+      "salary_min": 70000,
+      "salary_max": 100000,
+      "tax": false,
+      "cities": [{ "id": 224, "name": "Москва", "region_name": null, "latitude": null, "longitude": null, "slug": null }],
+      "speciality": { "id": 33, "name": "Продажи", "description": null, "slug": null },
+      "category": { "id": 33, "name": "Продажи", "description": null, "slug": null },
+      "employment": [{ "id": 1, "name": "Полный рабочий день", "pivot": { "vacancy_id": 15106, "employment_id": 1 } }],
+      "company": { "id": 1, "name": "Совкомбанк", "description": null, "slug": null },
+      "experience": { "id": 1, "name": "Без опыта" },
+      "url_redirect": null,
+      "slug": "kreditnyi-menedzher-12",
+      "vacancy_priority": null,
+      "created_at": "2026-09-16T09:00:00.000000Z",
+      "is_new": false
+    }
+  ],
+  "meta": {
+    "current_page": 1,
+    "from": 1,
+    "last_page": 2,
+    "links": [],
+    "path": "https://people.sovcombank.ru/api/v1/vacancies",
+    "per_page": 2,
+    "to": 2,
+    "total": 3,
+    "all_vacancies": 3
+  }
+}

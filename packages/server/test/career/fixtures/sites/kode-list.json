@@ -1,0 +1,39 @@
+{
+  "data": {
+    "vacancies": [
+      {
+        "id": "131",
+        "title": "AI-разработчик",
+        "excerpt": "Приглашаем к сотрудничеству AI-разработчика.",
+        "slug": "ai-razrabotchik",
+        "hot": false,
+        "department": { "name": "Другое" },
+        "regions": [{ "name": "Калининград" }, { "name": "Удаленная работа" }],
+        "conditions": [{ "name": "Полная занятость" }, { "name": "Удаленная работа" }],
+        "levels": [{ "name": "Middle" }, { "name": "Senior" }]
+      },
+      {
+        "id": "64",
+        "title": "Бухгалтер",
+        "excerpt": "Приглашаем к сотрудничеству бухгалтера.",
+        "slug": "buhgalter-1",
+        "hot": false,
+        "department": { "name": "Администрация" },
+        "regions": [{ "name": "Калининград" }],
+        "conditions": [{ "name": "Полная занятость" }],
+        "levels": [{ "name": "Middle" }]
+      },
+      {
+        "id": "124",
+        "title": "Аккаунт-менеджер",
+        "excerpt": "KODE в поиске аккаунта.",
+        "slug": "akkaunt-menedzher-1",
+        "hot": false,
+        "department": null,
+        "regions": [],
+        "conditions": [],
+        "levels": []
+      }
+    ]
+  }
+}

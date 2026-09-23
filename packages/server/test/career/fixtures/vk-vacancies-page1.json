@@ -1,0 +1,33 @@
+{
+  "count": 3,
+  "next": "http://team.vk.company/career/api/v2/vacancies/?limit=50&offset=50",
+  "previous": null,
+  "results": [
+    {
+      "id": 54608,
+      "prof_area": { "id": 10, "name": "Разработка" },
+      "group": { "id": 289, "name": "VK Коммерция", "project_logo": "https://corp.vkcdn.ru/media/images/x.png" },
+      "title": "Go-разработчик в команду контентных сервисов",
+      "town": { "id": 1, "name": "Москва" },
+      "work_format": "Гибридный",
+      "tags": [{ "id": 1, "name": "go" }],
+      "remote": false,
+      "external_program": false,
+      "external_bonus": null,
+      "specialty": { "id": 282, "name": "Backend" }
+    },
+    {
+      "id": 52666,
+      "prof_area": { "id": 41, "name": "Внутренние сервисы" },
+      "group": { "id": 290, "name": "Дзен", "project_logo": "https://corp.vkcdn.ru/media/images/dzen3.png" },
+      "title": "Бизнес-ассистент",
+      "town": { "id": 1, "name": "Москва" },
+      "work_format": "Офисный",
+      "tags": [],
+      "remote": false,
+      "external_program": false,
+      "external_bonus": null,
+      "specialty": { "id": 289, "name": "Административный персонал" }
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "id": "3ec4e2cc-f6e6-452f-9843-e886c87e200e",
+  "name": "Backend-разработчик Python",
+  "grade": "От 2 до 5 лет",
+  "gross_salary_from": "220000",
+  "gross_salary_to": "300000",
+  "location_address": "г. Москва, ул. Вешняковская, д. 18",
+  "supervisor": false,
+  "internship_program": null,
+  "direction": "ИТ-решения и продукты",
+  "format": ["Гибридный"],
+  "description": "<h3>Мы предлагаем:</h3>\n<ul>\n<li>Гибкий график</li>\n<li>Гибридный формат работы</li>\n</ul>\n<h3>Что нужно делать:</h3>\n<ul>\n<li>Разрабатывать backend-сервисы на Python</li>\n<li>Писать тесты и поддерживать CI/CD</li>\n</ul>\n<p><strong>Ждём кандидатов с опытом Django или FastAPI.</strong></p>",
+  "external_system_name": "SKILLAZ",
+  "external_system_vacancy_id": "68629ef2b1566ec338a97927::abc123",
+  "job_type_id": "1",
+  "is_active": true,
+  "city": [{ "name": "Москва", "display_region": "" }],
+  "employment_type": null,
+  "work_schedule": null,
+  "phone": ""
+}
