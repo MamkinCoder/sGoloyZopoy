@@ -77,6 +77,7 @@ export const ProfileSchema = z.object({
   exclude_words: strList,
   company_blacklist: strList,
   extra: z.record(z.string(), z.string()).default({}),
+  known_companies: strList,
 });
 
 const limit = z.number().int().min(0).optional();

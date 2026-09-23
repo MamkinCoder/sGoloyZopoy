@@ -41,3 +41,15 @@ export function RunStatusBadge({ status }: { status: RunStatus }) {
 export function ThreadStateBadge({ state }: { state: ThreadState }) {
   return <Badge cls={THREAD_CLASS[state] ?? NEUTRAL}>{THREAD_STATE_LABEL[state] ?? state}</Badge>;
 }
+
+/** decide's 0-100 fit: green ≥75, amber ≥50, red below; the reason is the tooltip. Nothing for old rows. */
+export function FitBadge({ score, reason }: { score: number | null; reason: string }) {
+  if (score === null) return null;
+  return <Badge cls={FAMILY_CLASS[score >= 75 ? "sent" : score >= 50 ? "skip" : "failed"]} title={reason || undefined}>{`fit ${score}`}</Badge>;
+}
+
+/** Someone the seeker knows at the company (profile.known_companies): ask them for a referral. */
+export function KnownBadge({ contact }: { contact: string }) {
+  if (!contact) return null;
+  return <Badge cls={FAMILY_CLASS.human} title={`${contact} - можно попросить рекомендацию`}>знакомый</Badge>;
+}

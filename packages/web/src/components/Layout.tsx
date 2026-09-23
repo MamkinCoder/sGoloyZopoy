@@ -16,6 +16,38 @@ const NAV: { to: string; label: string; end?: boolean }[] = [
   { to: "settings", label: "Настройки" },
 ];
 
+type Theme = "auto" | "light" | "dark";
+const THEME_LABEL: Record<Theme, string> = { auto: "Авто", light: "Светлая", dark: "Тёмная" };
+
+/** auto → light → dark; pinned value lives in localStorage (index.html applies it before first paint). */
+function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      const v = localStorage.getItem("sgz_theme");
+      return v === "light" || v === "dark" ? v : "auto";
+    } catch {
+      return "auto";
+    }
+  });
+  const next = () => {
+    const n: Theme = theme === "auto" ? "light" : theme === "light" ? "dark" : "auto";
+    setTheme(n);
+    if (n === "auto") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = n;
+    try {
+      if (n === "auto") localStorage.removeItem("sgz_theme");
+      else localStorage.setItem("sgz_theme", n);
+    } catch {
+      /* private mode: the theme just won't persist */
+    }
+  };
+  return (
+    <button type="button" className="btn btn-sm" onClick={next} title="Тема: авто / светлая / тёмная" aria-label={`Тема: ${THEME_LABEL[theme]}`}>
+      ◐<span className="hidden sm:inline">{THEME_LABEL[theme]}</span>
+    </button>
+  );
+}
+
 export function Layout() {
   const { slug = "" } = useParams();
   const { data: users, isLoading } = useUsers();
@@ -55,6 +87,7 @@ export function Layout() {
             </nav>
             <div className="ml-auto flex items-center gap-2">
               <HealthChip slug={slug} />
+              <ThemeToggle />
               <button type="button" className="btn btn-sm btn-primary" onClick={() => setRunOpen(true)}>
                 ▶ Запустить
               </button>

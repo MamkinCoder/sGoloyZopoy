@@ -42,7 +42,10 @@ stores the application as `QUEUED`; a human sends or skips it here. hh.ru stays 
 `QueueItem`: `id, created_at, vacancy:{id, title, company, url, area, work_format, salary_from, salary_to, currency},
 site:{name, slug}|null, pdf_url|null, cover_letter, reason` (Claude's decide reason), `detail` (last send/inspect
 note), `form:{full_name, email, phone, cv_file_name, cover_letter}` (what the bot fills; the CV is uploaded as
-`Фамилия_Имя_CV.pdf`), `questionnaire:[{question, answer}]` (after inspect).
+`Фамилия_Имя_CV.pdf`), `questionnaire:[{question, answer}]` (after inspect), `fit_score` (decide's 0-100
+match, `null` on rows decided before it existed), `fit_reason` (short overlap, «Go+K8s, вилка ок»),
+`known_contact` (who the seeker knows at the company from `profile.known_companies`, matched by
+`companyKey`; `""` if none).
 
 `send` updates that same row to `SENT` / `FAILED_*`. `daily_limit_career` counts applications queued per day
 (`QUEUED` + `SENT` + `SKIP_MANUAL`); a queued or skipped vacancy is never queued again.
@@ -54,7 +57,8 @@ note), `form:{full_name, email, phone, cv_file_name, cover_letter}` (what the bo
 Lists vacancies whose newest application row is `SKIP_FILTER`, `SKIP_LLM_REJECT`, `SKIP_DEDUP`, `SKIP_LIMIT`,
 `SKIP_COMPANY_LIMIT` or `SKIP_COMPANY_PERSONA` (dry-run, already-applied, archived, test-required and queued
 rows are excluded). `FilteredItem`: `id, created_at, status, reason` (filter detail or LLM reason),
-`vacancy:{id, title, company, url, source}, site:{name, slug}|null`.
+`vacancy:{id, title, company, url, source}, site:{name, slug}|null, fit_score|null, fit_reason, known_contact`
+(same meaning as in `QueueItem`; the panel can sort by fit).
 
 `force` ignores filters, limits and the LLM reject. hh vacancy: an `hh` run fetches it if needed, asks decide
 only for the resume + letter (apply forced true) and **sends** through the normal apply path. Career vacancy:
@@ -216,7 +220,11 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       user: today's sent / queued / skipped / errors, chat replies / invitations / rejections, the review
       queue with items older than 5 days, chats in `needs_human`. Last sent day: setting `digest_last_day`.
     - Bot commands, answered only in `TG_CHAT_ID` or a user's `tgChatId`: `/status` (runner state +
-      the digest), `/queue` (queued items, oldest first); anything else starting with `/` gets the help line.
+      the digest), `/queue` (queued items, oldest first), `/know Компания - Имя` (adds a line to
+      `profile.known_companies` of the user owning that chat, or of the only active user; the same company
+      is replaced); anything else starting with `/` gets the help line.
+    - Queue cards carry a vitals line (salary · format · `fit N (reason)`) and, when `known_companies`
+      matches the company, «Знакомый: <имя> - можно попросить рекомендацию». The bot never contacts them.
   - Reliability: `run_max_min` = watchdog limit per run in minutes, `"0"` (default) = built-in caps
     (20 for `chats`/`touch`, 30 for `rotate` and `send:|inspect:|retailor:|force:`, 150 otherwise). On
     timeout the run is aborted, the browser closed and a Telegram alert sent; the run ends with

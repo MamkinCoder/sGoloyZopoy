@@ -1,5 +1,5 @@
 // Telegram message bodies (HTML). Russian, terse, no links in the report except the panel + vacancies.
-import type { Run, User } from "@sgz/shared";
+import type { Decision, Run, User, Vacancy } from "@sgz/shared";
 import { shortStamp } from "../scheduler/tz.js";
 
 export const escapeHtml = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -96,3 +96,28 @@ export function chunkMessage(text: string, max = 4096): string[] {
   if (cur) out.push(cur);
   return out;
 }
+
+const money = (n: number): string => n.toLocaleString("ru-RU").replace(/\s/g, " ");
+
+const WORK_FORMATS: [RegExp, string][] = [
+  [/remote|удал/i, "удалёнка"],
+  [/hybrid|гибрид/i, "гибрид"],
+  [/office|on-?site|офис/i, "офис"],
+];
+
+/** decide's fit, rounded and trimmed; null score for rows decided before the field existed. */
+export function fitOf(d?: Pick<Decision, "fit_score" | "fit_reason"> | null): { fit_score: number | null; fit_reason: string } {
+  const n = d?.fit_score;
+  return { fit_score: typeof n === "number" && Number.isFinite(n) ? Math.round(n) : null, fit_reason: (d?.fit_reason ?? "").trim().slice(0, 120) };
+}
+
+/** Card vitals as plain text (caller escapes): «от 250 000 RUR · удалёнка · fit 82 (Go+K8s)». */
+export function vitalsLine(v: Pick<Vacancy, "salaryFrom" | "salaryTo" | "currency"> & { workFormat?: string }, d?: Pick<Decision, "fit_score" | "fit_reason"> | null): string {
+  const salary = v.salaryFrom || v.salaryTo ? [v.salaryFrom ? `от ${money(v.salaryFrom)}` : "", v.salaryTo ? `до ${money(v.salaryTo)}` : "", v.currency].filter(Boolean).join(" ") : "";
+  const format = WORK_FORMATS.find(([re]) => re.test(v.workFormat ?? ""))?.[1] ?? "";
+  const { fit_score, fit_reason } = fitOf(d);
+  const fit = fit_score === null ? "" : `fit ${fit_score}${fit_reason ? ` (${fit_reason})` : ""}`;
+  return [salary, format, fit].filter(Boolean).join(" · ");
+}
+
+export const knownLine = (contact: string): string => (contact ? `Знакомый: ${contact} - можно попросить рекомендацию` : "");

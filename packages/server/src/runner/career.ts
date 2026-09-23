@@ -11,6 +11,7 @@ import { classify, titleScore, companyLimitSettings, createRunCompanyTracker, de
 import { newApp } from "./hh.js";
 import { dayInTz } from "../scheduler/tz.js";
 import { formatQueueCard, queueButtons } from "./queue-cards.js";
+import { knownContact } from "../config/profile.js";
 import type { UserRun } from "./user.js";
 
 /** Title keywords for sites without their own `profile.filters`: dev roles only, so a 3000-job board
@@ -342,7 +343,7 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
     const queueUrl = ctx.cfg.panelUrl ? `${ctx.cfg.panelUrl}/u/${user.slug}/queue#app-${queued.id}` : "";
     const site = ctx.store.listCareerSites(user.id).find((x) => x.slug === vacancy.source);
     await ctx.deps.notifier
-      ?.ask?.(formatQueueCard(vacancy, decision?.reason ?? "", coverLetter, queueUrl), queueButtons(queued.id, !site || !manualApplyOnly(site.ats)))
+      ?.ask?.(formatQueueCard(vacancy, decision?.reason ?? "", coverLetter, queueUrl, decision, knownContact(profile, vacancy.company)), queueButtons(queued.id, !site || !manualApplyOnly(site.ats)))
       .catch((e: unknown) => ctx.log.warn("apply", `telegram card failed: ${errMessage(e)}`));
   }
   return { status, direction: picked.direction, id: queued.id };

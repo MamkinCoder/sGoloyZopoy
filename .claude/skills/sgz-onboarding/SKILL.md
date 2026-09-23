@@ -41,6 +41,7 @@ as "not used" or left to a human, so completeness matters more than polish.
 | `exclude_words` | list of strings | `[]` | vacancy titles with these are skipped |
 | `company_blacklist` | list of strings | `[]` | never apply there |
 | `extra` | map string -> string | `{}` | free facts for questionnaires/chat |
+| `known_companies` | list of strings | `[]` | «Компания - Имя» people they know there; cards remind to ask for a referral; never sent to the LLM |
 
 ## Interview flow
 
@@ -93,6 +94,8 @@ Before step 1 say in one line: "Займёт 15-20 минут. Лучше дер
 - Поисковые фразы (`hh_queries`), e.g. "Go разработчик", "Node.js разработчик". Propose from directions, confirm.
 - Регион (`hh_area`, `""` = вся выдача); стоп-слова в названиях (`exclude_words`, e.g. Senior, Lead, 1С, PHP);
   компании, куда не откликаться (`company_blacklist`).
+- Знакомые в компаниях (`known_companies`, строки «Компания - Имя»): только для напоминания попросить
+  рекомендацию, бот никому не пишет. Можно пропустить и добавлять потом командой `/know` в Telegram.
 
 **8. hh.ru account, resumes, consent / аккаунт и согласия**
 Explain each point and get an explicit "да" for 8.3:
@@ -130,7 +133,7 @@ cd packages/server && F=../../data/users/<slug>/profile.yaml node --input-type=m
 import { readFileSync } from "node:fs"; import { parse } from "yaml";
 const p = parse(readFileSync(process.env.F, "utf8")) ?? {};
 const S = "full_name email phone telegram city citizenship relocation experience summary hh_area currency".split(" ");
-const L = "work_formats languages directions verified_skills never_claim_skills hh_queries exclude_words company_blacklist".split(" ");
+const L = "work_formats languages directions verified_skills never_claim_skills hh_queries exclude_words company_blacklist known_companies".split(" ");
 const N = ["salary_from", "salary_to"]; const known = [...S, ...L, ...N, "extra"]; const err = [];
 for (const k of Object.keys(p)) if (!known.includes(k)) err.push("unknown key: " + k);
 for (const k of S) if (p[k] != null && typeof p[k] !== "string") err.push(k + " must be a string");

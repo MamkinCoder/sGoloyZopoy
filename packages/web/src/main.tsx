@@ -8,3 +8,9 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </StrictMode>,
 );
+
+// Installable panel (home-screen icon). The hashed entry file name versions the asset cache.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  const v = new URL(import.meta.url).pathname.split("/").pop() ?? "";
+  navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(v)}`).catch(() => undefined);
+}
