@@ -53,6 +53,15 @@ describe("telegram queue cards", () => {
     expect(started).toEqual([{ userSlug: user.slug, source: "career", stage: `send:${b}`, dryRun: false, limit: 0, trigger: "manual" }]);
   });
 
+  it("an old card's «Отправить» for a hand-only job board answers with the link and starts nothing", async () => {
+    const { store, user, queue, started, runner } = setup();
+    store.upsertCareerSite({ userId: user.id, slug: "acme", name: "Habr Career", baseUrl: "https://career.habr.com", ats: "site:habr-career", profile: {}, enabled: true, lastRunAt: null } as never);
+    const a = queue("1");
+    expect(await handleQueueTap(store, runner, { send: true, id: a })).toMatch(/только вручную: https:\/\/acme\.ru\/1/);
+    expect(started).toEqual([]);
+    expect(store.getApplication(a)!.application.status).toBe(Status.QUEUED);
+  });
+
   it("parks a send while the runner is busy and starts it later", async () => {
     const { store, queue, started, runner, setBusy } = setup();
     const a = queue("1");

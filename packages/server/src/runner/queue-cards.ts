@@ -3,6 +3,7 @@
 // is submitted without it.
 import { RunBusyError, Status, type Decision, type RunService, type Store, type Vacancy } from "@sgz/shared";
 import { escapeHtml, vitalsLine } from "../notify/format.js";
+import { manualApplyOnly } from "../career/agent.js";
 
 const PENDING = "queue_send_pending";
 
@@ -59,6 +60,9 @@ export async function handleQueueTap(store: Store, runner: Pick<RunService, "sta
     store.updateApplicationStatus(cb.id, Status.SKIP_MANUAL, "skipped in telegram");
     return "⏭ пропущено";
   }
+  // Cards sent before a site was known to be hand-only still carry «Отправить»: answer with the link instead.
+  const site = store.listCareerSites(row.application.userId).find((s) => s.slug === row.vacancy.source);
+  if (site && manualApplyOnly(site.ats)) return `✋ этот сайт только вручную: ${row.vacancy.url}`;
   const park = () => {
     store.setSetting(PENDING, [...new Set([...readPending(store), cb.id])].join(","));
     return "⏳ бот занят, отправлю, как освободится";
