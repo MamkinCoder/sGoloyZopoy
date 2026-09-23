@@ -11,7 +11,8 @@ import { parseSkillCallback, resolveSkill } from "../runner/skills.js";
 import { handleQueueTap, parseQueueCallback, startPendingSend } from "../runner/queue-cards.js";
 import { buildDigest, digestDue, queueList } from "../notify/digest.js";
 import { careerRotation } from "../runner/career.js";
-import { remindInterviews } from "../runner/interview.js";
+import { askOutcomes, OUTCOME_LABEL, parseOutcomeCallback, remindInterviews } from "../runner/interview.js";
+import { formatBand } from "../db/salary.js";
 import { nextJob } from "../scheduler/autopilot.js";
 import { checkHeartbeat } from "../scheduler/health.js";
 import { errMessage } from "../runner/util.js";
@@ -71,6 +72,7 @@ export async function serve(): Promise<void> {
   let lastHealth = Date.now();
   const tick = async () => {
     void remindInterviews(app.store, app.notifier, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: interview reminders: ${errMessage(e)}`));
+    void askOutcomes(app.store, app.notifier).catch((e: unknown) => console.error(`sgz serve: interview outcomes: ${errMessage(e)}`));
     if (Date.now() - lastHealth >= 30 * 60_000) {
       lastHealth = Date.now();
       void checkHeartbeat(app.store, app.notifier, app.startedAt, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: heartbeat: ${errMessage(e)}`));
@@ -98,15 +100,25 @@ export async function serve(): Promise<void> {
   // Telegram buttons: queue cards (send / skip) and «есть / нет» answers for unknown skills (update the
   // profile, then answer the waiting chats). /status and /queue answer from the configured chats.
   const digestAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
-  const onCommand = async (cmd: string) => {
+  const onCommand = async (cmd: string, args: string) => {
     if (cmd === "/status") return `${app.runner.active() ? `Идёт прогон #${app.runner.active()!.id}` : "Бот свободен"}\n\n${digestAll()}`;
     if (cmd === "/queue") return app.store.listUsers(true).map((u) => queueList(app.store, u, app.cfg.panelUrl)).join("\n\n");
-    return "Команды: /status - итоги дня, /queue - очередь на проверку";
+    if (cmd === "/salary") {
+      if (!args) return "Напиши слово из названия вакансии: /salary go";
+      const band = app.store.salaryBand({ titleLike: args });
+      return band ? `Вилки в вакансиях «${args}» за 90 дней: ${formatBand(band)}` : `Мало вакансий «${args}» с зарплатой за 90 дней`;
+    }
+    return "Команды: /status - итоги дня, /queue - очередь на проверку, /salary <слово> - рынок зарплат";
   };
   const stopCallbacks = app.cfg.tgBotToken
     ? startTelegramCallbacks(app.cfg.tgBotToken, async (data) => {
         const q = parseQueueCallback(data);
         if (q) return handleQueueTap(app.store, app.runner, q);
+        const io = parseOutcomeCallback(data);
+        if (io) {
+          app.store.setInterviewOutcome(io.threadId, io.outcome);
+          return `Записал: ${OUTCOME_LABEL[io.outcome]}`;
+        }
         const cb = parseSkillCallback(data);
         if (!cb) return "неизвестная кнопка";
         const skill = resolveSkill(app.store, cb.userId, cb.key, cb.has);

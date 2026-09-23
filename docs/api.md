@@ -76,6 +76,7 @@ application row replaces the filtered one as the vacancy's newest, so it drops o
 | GET | /users/:slug/chats | | `[{id, hh_negotiation_id, vacancy:{id,title,company,url}|null, employer, state, last_seen_at, unanswered:int}]` |
 | GET | /chats/:id/messages | | `[ChatMessage]` |
 | PUT | /users/:slug/chats/:id/interview | `{interview_at: ISO string|null}` | `ChatThread` |
+| PUT | /users/:slug/chats/:id/outcome | `{outcome: next|rejected|silence|offer|null}` | `ChatThread` |
 
 ## Runs
 | GET | /runs?user=slug&limit=50 | | `[Run]` |
@@ -150,13 +151,16 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   response_rate (responded/sent or null), invitations, rejections, employer_messages, bot_replies,
   needs_human_open, resumes_total, resumes_generated, llm_calls, llm_failed, llm_prompt_chars,
   llm_result_chars, llm_avg_ms, runs}`, `daily:[{day, sent, skipped, failed, msgs_in, bot_out, llm_calls}]`
-  (UTC days, gap-filled up to today), `funnel:[{key:found|decided|approved|sent|viewed|invited, n}]`,
+  (UTC days, gap-filled up to today), `funnel:[{key:found|decided|approved|sent|viewed|invited|passed|offer, n}]`
+  (`passed` = threads whose interview outcome is next or offer, `offer` = offer),
   top-N `{key, n}` lists `skip_reasons, companies, sources, resumes, directions, reject_reasons,
   work_formats, areas, llm_tasks` (breakdowns other than skip/reject/llm are over SENT applications;
   `companies, sources, resumes, directions` rows also carry `hh` (of `n`, sent through hh), `resp`
-  (hh thread viewed / invited / rejected, same as the funnel) and `inv` (invited): rates are `resp/hh`,
+  (hh thread viewed / invited / rejected, same as the funnel) `inv` (invited) and `pass` (interview outcome next/offer): rates are `resp/hh`,
   `inv/hh`, career-site sends have no threads so `hh = 0` means no data),
-  and `recent:[{at, kind:sent|employer|bot, title, detail}]` (last 20). Thread counts use
+  `recent:[{at, kind:sent|employer|bot, title, detail}]` (last 20) and `salary` (`{n, p25, p50, p75}` in RUB
+  or null): percentiles of the fork midpoint (or the single bound) over RUR/RUB vacancies this user has an
+  application row for, seen in the last 90 days, points under 10k dropped; null below 15 postings. Thread counts use
   `last_seen_at` in range; `needs_human_open` and resume counts are current totals; LLM calls are tied to
   the user through `runs.user_id`.
 - `GET /users/:slug/applications`: extra query `q` (title/company substring); `status` is a comma-separated
@@ -174,7 +178,14 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   and also sent to Telegram).
 - `PUT /users/:slug/chats/:id/interview`: any `Date`-parseable string, stored as UTC ISO; `null` clears it; 400 on
   an unparseable date, 404 when the thread is not this user's. A changed time re-arms the reminder: `sgz serve`
-  checks every minute and sends one Telegram ping ~2h before the interview.
+  checks every minute and sends one Telegram ping ~2h before the interview. A changed time also re-arms
+  the outcome question below.
+- `PUT /users/:slug/chats/:id/outcome`: `null` clears; 400 on another value, 404 when the thread is not this
+  user's. `sgz serve` also asks once per interview time, 20h-3d after it, «Как прошло собеседование в
+  <employer>?» in Telegram with buttons прошёл дальше / отказ / тишина / оффер (callback `io:<thread>:<outcome>`),
+  skipped for threads already rejected or with an outcome. The interview brief sent to Telegram ends with a
+  market line (salary band over postings this user's CV direction was matched to, same rules as
+  `analytics.salary`) when there is enough data; the band is for the seeker only and never reaches employers.
 - `POST /runs` answers **202** `{run_id}` (docs table says `{run_id}`; status is 202, not 200).
   `user` must exist or be `"all"` (404 otherwise); `source` ∉ hh|career|all|pool → 400.
 - `GET /runs?user=all` is the same as omitting `user`. `limit` is capped at 500.
@@ -216,7 +227,8 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       user: today's sent / queued / skipped / errors, chat replies / invitations / rejections, the review
       queue with items older than 5 days, chats in `needs_human`. Last sent day: setting `digest_last_day`.
     - Bot commands, answered only in `TG_CHAT_ID` or a user's `tgChatId`: `/status` (runner state +
-      the digest), `/queue` (queued items, oldest first); anything else starting with `/` gets the help line.
+      the digest), `/queue` (queued items, oldest first), `/salary <слово>` (salary band over all vacancies whose
+      title contains the word, same rules as `analytics.salary`); anything else starting with `/` gets the help line.
   - Reliability: `run_max_min` = watchdog limit per run in minutes, `"0"` (default) = built-in caps
     (20 for `chats`/`touch`, 30 for `rotate` and `send:|inspect:|retailor:|force:`, 150 otherwise). On
     timeout the run is aborted, the browser closed and a Telegram alert sent; the run ends with

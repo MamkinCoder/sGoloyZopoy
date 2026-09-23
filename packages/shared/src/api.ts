@@ -3,6 +3,7 @@
 import type {
   Application,
   CareerSite,
+  SalaryBand,
   ChatMessage,
   ChatThread,
   Decision,
@@ -39,6 +40,8 @@ export interface AnalyticsCount {
   hh?: number;
   resp?: number;
   inv?: number;
+  /** Interviews the seeker marked as passed (next stage or offer). */
+  pass?: number;
 }
 
 export interface AnalyticsDay {
@@ -93,6 +96,8 @@ export interface AnalyticsDTO {
   areas: AnalyticsCount[];
   llm_tasks: AnalyticsCount[];
   recent: AnalyticsEvent[];
+  /** RUB band over vacancies decided for this user in the last 90 days; null when too few. */
+  salary: SalaryBand | null;
 }
 
 export interface ApplicationDTO {

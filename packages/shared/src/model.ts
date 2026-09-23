@@ -202,6 +202,20 @@ export interface ChatThread {
   interviewAt?: string | null;
   /** Prep brief generated on an invitation; upsertChatThread ignores it, see Store.setChatPrep. */
   prep?: InterviewPrep | null;
+  /** Post-interview outcome tapped in Telegram or set in the panel; see Store.setInterviewOutcome. */
+  interviewOutcome?: InterviewOutcome | null;
+}
+
+/** After an interview: moved on to the next stage, rejected, no news, offer. */
+export const INTERVIEW_OUTCOMES = ["next", "rejected", "silence", "offer"] as const;
+export type InterviewOutcome = (typeof INTERVIEW_OUTCOMES)[number];
+
+/** RUB salary band over scraped vacancies (midpoint of the fork per posting). For the seeker only. */
+export interface SalaryBand {
+  n: number;
+  p25: number;
+  p50: number;
+  p75: number;
 }
 
 /** Interview prep brief for the seeker (Telegram + panel), grounded in the profile and the vacancy. */

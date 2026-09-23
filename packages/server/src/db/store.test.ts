@@ -75,7 +75,7 @@ describe("migrations", () => {
         .prepare("SELECT name FROM schema_migrations ORDER BY name")
         .all()
         .map((r) => r.name);
-      expect(names).toEqual(["001_init.sql", "002_hh_resumes_created_at.sql", "003_company_limiter.sql", "004c_chat_interview.sql"]);
+      expect(names).toEqual(["001_init.sql", "002_hh_resumes_created_at.sql", "003_company_limiter.sql", "004c_chat_interview.sql", "005d_interview_outcome.sql"]);
       expect(a.db.prepare("PRAGMA journal_mode").get()?.journal_mode).toBe("wal");
       a.upsertUser(userFixture("x"));
       a.close();
@@ -504,6 +504,7 @@ describe("stats / settings / llm / career / backup", () => {
     store.insertLLMCall({ runId: run.id, task: "decide_hh", model: "m", promptChars: 50, resultChars: 0, durationMs: 400, ok: false, error: "x", attempt: 2 });
     store.insertLLMCall({ runId: null, task: "decide_hh", model: "m", promptChars: 1, resultChars: 1, durationMs: 1, ok: true, error: "", attempt: 1 });
     const t1 = store.upsertChatThread({ userId: u.id, hhNegotiationId: "n1", isBot: false, vacancyId: v1.id, employer: "Acme", state: "invited", lastSeenAt: "" });
+    store.setInterviewOutcome(t1.id, "next");
     store.upsertChatThread({ userId: u.id, hhNegotiationId: "n2", isBot: false, vacancyId: v2.id, employer: "Acme", state: "viewed", lastSeenAt: "" });
     store.upsertChatThread({ userId: u.id, hhNegotiationId: "n3", isBot: false, vacancyId: null, employer: "C", state: "needs_human", lastSeenAt: "" });
     store.insertChatMessages(t1.id, [
@@ -519,13 +520,14 @@ describe("stats / settings / llm / career / backup", () => {
       llm_calls: 2, llm_failed: 1, llm_prompt_chars: 150, llm_result_chars: 10, llm_avg_ms: 300, runs: 1,
     });
     expect(a.daily).toEqual([{ day: today, sent: 2, skipped: 1, failed: 1, msgs_in: 1, bot_out: 1, llm_calls: 2 }]);
-    expect(a.funnel.map((f) => [f.key, f.n])).toEqual([["found", 9], ["decided", 3], ["approved", 2], ["sent", 2], ["viewed", 2], ["invited", 1]]);
+    expect(a.funnel.map((f) => [f.key, f.n])).toEqual([["found", 9], ["decided", 3], ["approved", 2], ["sent", 2], ["viewed", 2], ["invited", 1], ["passed", 1], ["offer", 0]]);
+    expect(a.salary).toBeNull(); // 2 postings < min-N
     expect(a.skip_reasons).toEqual([{ key: "SKIP_LLM_REJECT", n: 1 }]);
     expect(a.reject_reasons).toEqual([{ key: "уровень / опыт", n: 1 }]);
-    expect(a.companies).toEqual([{ key: "Acme", n: 2, hh: 2, resp: 2, inv: 1 }]);
-    expect(a.sources).toEqual([{ key: "hh", n: 2, hh: 2, resp: 2, inv: 1 }]);
-    expect(a.resumes).toEqual([{ key: "Go dev", n: 2, hh: 2, resp: 2, inv: 1 }]);
-    expect(a.directions).toEqual([{ key: "go", n: 2, hh: 2, resp: 2, inv: 1 }]);
+    expect(a.companies).toEqual([{ key: "Acme", n: 2, hh: 2, resp: 2, inv: 1, pass: 1 }]);
+    expect(a.sources).toEqual([{ key: "hh", n: 2, hh: 2, resp: 2, inv: 1, pass: 1 }]);
+    expect(a.resumes).toEqual([{ key: "Go dev", n: 2, hh: 2, resp: 2, inv: 1, pass: 1 }]);
+    expect(a.directions).toEqual([{ key: "go", n: 2, hh: 2, resp: 2, inv: 1, pass: 1 }]);
     expect(a.work_formats).toEqual([{ key: "office", n: 1 }, { key: "remote", n: 1 }]);
     expect(a.llm_tasks).toEqual([{ key: "decide_hh", n: 2 }]);
     expect(a.recent.map((e) => e.kind).sort()).toEqual(["bot", "employer", "sent", "sent"]);
@@ -564,8 +566,8 @@ describe("stats / settings / llm / career / backup", () => {
     store.insertApplication(appFixture(u.id, cv.id, { direction: "go" }));
     store.upsertChatThread({ userId: u.id, hhNegotiationId: "n1", isBot: false, vacancyId: hv.id, employer: "X", state: "rejected", lastSeenAt: "" });
     const a = store.userAnalytics(u.id, null);
-    expect(a.directions).toEqual([{ key: "go", n: 2, hh: 1, resp: 1, inv: 0 }]);
-    expect(a.sources).toContainEqual({ key: "career · acme", n: 1, hh: 0, resp: 0, inv: 0 });
+    expect(a.directions).toEqual([{ key: "go", n: 2, hh: 1, resp: 1, inv: 0, pass: 0 }]);
+    expect(a.sources).toContainEqual({ key: "career · acme", n: 1, hh: 0, resp: 0, inv: 0, pass: 0 });
   });
 
   it("careerSiteYield: distinct vacancies per career source, queued = QUEUED/SENT, hh and old rows excluded", () => {

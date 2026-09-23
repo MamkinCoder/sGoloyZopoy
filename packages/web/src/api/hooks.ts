@@ -5,6 +5,7 @@ import type {
   CareerSiteDTO,
   ChatMessageDTO,
   ChatThreadDTO,
+  InterviewOutcome,
   DedupRowDTO,
   FilteredItemDTO,
   HealthDTO,
@@ -190,6 +191,15 @@ export function useSetInterview(slug: string) {
   return useMutation({
     mutationFn: ({ id, at }: { id: number; at: string | null }) =>
       api<ChatThreadDTO>(`/users/${slug}/chats/${id}/interview`, { method: "PUT", body: { interview_at: at } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.chats(slug) }),
+  });
+}
+
+export function useSetOutcome(slug: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, outcome }: { id: number; outcome: InterviewOutcome | null }) =>
+      api<ChatThreadDTO>(`/users/${slug}/chats/${id}/outcome`, { method: "PUT", body: { outcome } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.chats(slug) }),
   });
 }

@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatThread, InterviewPrep, Store } from "@sgz/shared";
+import type { ChatMessage, ChatThread, InterviewOutcome, InterviewPrep, Store } from "@sgz/shared";
 import { bool, jsonObjOrNull, num, numOrNull, placeholders, str, strOrNull, toJson, type Row, type Sql, nowISO } from "./sql.js";
 
 const mapThread = (r: Row): ChatThread => ({
@@ -12,6 +12,7 @@ const mapThread = (r: Row): ChatThread => ({
   lastSeenAt: str(r.last_seen_at),
   interviewAt: strOrNull(r.interview_at),
   prep: jsonObjOrNull<InterviewPrep>(r.prep_json),
+  interviewOutcome: strOrNull(r.interview_outcome) as InterviewOutcome | null,
 });
 
 const mapMessage = (r: Row): ChatMessage => ({
@@ -36,6 +37,8 @@ type ChatsRepo = Pick<
   | "setChatInterview"
   | "setChatPrep"
   | "claimInterviewReminders"
+  | "claimOutcomeAsks"
+  | "setInterviewOutcome"
 >;
 
 export function chatsRepo(s: Sql): ChatsRepo {
@@ -135,9 +138,12 @@ export function chatsRepo(s: Sql): ChatsRepo {
       s.run(`UPDATE chat_messages SET answered = 1 WHERE id IN (${placeholders(messageIds.length)})`, ...messageIds);
     },
     setChatInterview(threadId, atISO) {
-      // Same time again (the LLM re-reads the whole chat) keeps the sent flag; a new time re-arms the reminder.
+      // Same time again (the LLM re-reads the whole chat) keeps the sent flags; a new time (next round)
+      // re-arms the reminder and the «как прошло?» question.
       s.run(
-        "UPDATE chat_threads SET interview_reminded = CASE WHEN interview_at IS ? THEN interview_reminded ELSE 0 END, interview_at = ? WHERE id = ?",
+        `UPDATE chat_threads SET interview_reminded = CASE WHEN interview_at IS ? THEN interview_reminded ELSE 0 END,
+           outcome_asked = CASE WHEN interview_at IS ? THEN outcome_asked ELSE 0 END, interview_at = ? WHERE id = ?`,
+        atISO,
         atISO,
         atISO,
         threadId,
@@ -156,6 +162,21 @@ export function chatsRepo(s: Sql): ChatsRepo {
         for (const r of rows) s.run("UPDATE chat_threads SET interview_reminded = 1 WHERE id = ?", r.id);
         return rows.map(mapThread);
       });
+    },
+    claimOutcomeAsks(fromISO, toISO) {
+      return s.transaction(() => {
+        const rows = s.all(
+          `SELECT * FROM chat_threads WHERE outcome_asked = 0 AND interview_outcome IS NULL AND state <> 'rejected'
+             AND interview_at >= ? AND interview_at <= ? ORDER BY interview_at`,
+          fromISO,
+          toISO,
+        );
+        for (const r of rows) s.run("UPDATE chat_threads SET outcome_asked = 1 WHERE id = ?", r.id);
+        return rows.map(mapThread);
+      });
+    },
+    setInterviewOutcome(threadId, outcome) {
+      s.run("UPDATE chat_threads SET interview_outcome = ?, outcome_asked = 1 WHERE id = ?", outcome, threadId);
     },
   };
 }

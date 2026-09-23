@@ -35,6 +35,8 @@ const FUNNEL_LABEL: Record<string, string> = {
   sent: "Отправлено",
   viewed: "Ответ / просмотр",
   invited: "Приглашения",
+  passed: "Прошёл собеседование",
+  offer: "Оффер",
 };
 const EVENT_LABEL: Record<AnalyticsEvent["kind"], string> = { sent: "Отклик", employer: "Работодатель", bot: "Бот" };
 const EVENT_CLASS: Record<AnalyticsEvent["kind"], string> = {
@@ -64,6 +66,7 @@ function Bars({ rows, label = (k) => k, byRate = false }: { rows: AnalyticsCount
           r.hh === undefined ? undefined : r.hh ? (
             <>
               ответы {pct((r.resp ?? 0) / r.hh)} · приглашения {pct((r.inv ?? 0) / r.hh)}
+              {!!r.pass && ` · прошёл собеседование ${r.pass}`}
               {r.hh < r.n && ` · из ${r.hh} через hh`}
             </>
           ) : (
@@ -140,6 +143,12 @@ export function DashboardPage() {
       </div>
 
       {a ? <Kpis k={a.kpi} /> : an.isError ? <Empty>Не удалось загрузить аналитику</Empty> : <Spinner />}
+      {a?.salary && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <StatTile label="Вилки: медиана" value={`${compact(a.salary.p50)} ₽`} sub={<>вакансии за 90 дней, n={a.salary.n}</>} />
+          <StatTile label="Вилки: 25-75%" value={`${compact(a.salary.p25)}-${compact(a.salary.p75)}`} sub="середина вилки, ₽" />
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Отклики по дням">{a ? daily.length ? <ColumnChart rows={daily} series={APP_SERIES} /> : <Empty /> : <Spinner />}</Section>

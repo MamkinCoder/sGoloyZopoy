@@ -1,6 +1,7 @@
 // Chat extras around interviews: prep brief on an invitation, interview reminders, one polite follow-up
 // after employer silence. All hh-internal; the follow-up is a fixed text (no LLM, no links).
-import { RunAbortError, type BrowserSession, type ChatMessage, type ChatThread, type HHClient, type InterviewPrep, type Notifier, type Store, type Vacancy } from "@sgz/shared";
+import { INTERVIEW_OUTCOMES, RunAbortError, type BrowserSession, type ChatMessage, type ChatThread, type HHClient, type InterviewOutcome, type InterviewPrep, type Notifier, type Store, type Vacancy } from "@sgz/shared";
+import { formatBand } from "../db/salary.js";
 import { mapNegotiationState } from "../hh/state.js";
 import { HH_ORIGIN } from "../hh/urls.js";
 import { shortStamp } from "../scheduler/tz.js";
@@ -79,7 +80,8 @@ export async function sendInterviewPrep(ctx: RunContext, u: UserRun, threadId: n
     const prep = await ctx.llm.interviewPrep(ctx.store.getProfile(u.user.id) ?? u.profile, vacancy, invitation);
     u.stats.llmCall();
     ctx.store.setChatPrep(threadId, prep);
-    await ctx.deps.notifier.alert(`📝 Подготовка: ${employer} (${vacancy.title})`, formatPrep(prep));
+    const market = marketLine(ctx.store, u.user.id, vacancy);
+    await ctx.deps.notifier.alert(`📝 Подготовка: ${employer} (${vacancy.title})`, market ? `${formatPrep(prep).slice(0, 3350)}\n\n${market}` : formatPrep(prep));
   } catch (e) {
     ctx.log.warn("chats", `${employer}: interview prep failed: ${errMessage(e)}`, { thread_id: threadId });
   }
@@ -109,4 +111,33 @@ export async function remindInterviews(store: Store, notifier: Notifier, tz: str
       .alert(`⏰ Через ${min} мин собеседование: ${t.employer}`, `${shortStamp(at, tz)}${v ? ` · ${v.title}` : ""}\n${HH_ORIGIN}/applicant/negotiations/item?id=${t.hhNegotiationId}`)
       .catch(() => undefined);
   }
+}
+
+/** Salary band for the seeker's own negotiation, over postings this user's CV direction was matched to.
+ * "" when the direction is unknown or there are too few postings. Never goes to the employer. */
+export function marketLine(store: Pick<Store, "lastApplication" | "salaryBand">, userId: number, vacancy: Pick<Vacancy, "id">): string {
+  const a = store.lastApplication(userId, vacancy.id);
+  const direction = a?.direction || a?.llmDecision?.direction || "";
+  const band = direction ? store.salaryBand({ userId, direction }) : null;
+  return band ? `💰 Рынок (${direction}, вилки в вакансиях за 90 дней): ${formatBand(band)}` : "";
+}
+
+export const OUTCOME_LABEL: Record<InterviewOutcome, string> = { next: "прошёл дальше", rejected: "отказ", silence: "тишина", offer: "оффер" };
+/** Ask from 20 h after the interview (results rarely come same-day) until 3 days after. */
+const ASK_AFTER_MS = 20 * 3600_000;
+const ASK_UNTIL_MS = 3 * 86_400_000;
+
+/** One «как прошло?» Telegram question per interview time, with one button per outcome. */
+export async function askOutcomes(store: Store, notifier: Notifier, now = new Date()): Promise<void> {
+  if (!notifier.ask) return; // no buttons (Telegram off): keep the threads unasked
+  const due = store.claimOutcomeAsks(new Date(now.getTime() - ASK_UNTIL_MS).toISOString(), new Date(now.getTime() - ASK_AFTER_MS).toISOString());
+  for (const t of due)
+    await notifier
+      .ask(`Как прошло собеседование в ${t.employer}?`, INTERVIEW_OUTCOMES.map((o) => ({ text: OUTCOME_LABEL[o], data: `io:${t.id}:${o}` })))
+      .catch(() => undefined);
+}
+
+export function parseOutcomeCallback(data: string): { threadId: number; outcome: InterviewOutcome } | null {
+  const m = /^io:(\d+):(\w+)$/.exec(data);
+  return m && (INTERVIEW_OUTCOMES as readonly string[]).includes(m[2]!) ? { threadId: Number(m[1]), outcome: m[2] as InterviewOutcome } : null;
 }

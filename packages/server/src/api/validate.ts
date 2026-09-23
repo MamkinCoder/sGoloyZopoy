@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import { z } from "zod";
-import { Status } from "@sgz/shared";
+import { INTERVIEW_OUTCOMES, Status } from "@sgz/shared";
 import { badRequest } from "./errors.js";
 
 export async function parseBody<T extends z.ZodType>(c: Context, schema: T): Promise<z.output<T>> {
@@ -209,3 +209,5 @@ export const InterviewSchema = z.object({
     .transform((v) => new Date(v).toISOString())
     .nullable(),
 });
+
+export const OutcomeSchema = z.object({ outcome: z.enum(INTERVIEW_OUTCOMES).nullable() });

@@ -1,7 +1,7 @@
-import type { ChatThreadDTO, InterviewPrep } from "@sgz/shared";
+import type { ChatThreadDTO, InterviewOutcome, InterviewPrep } from "@sgz/shared";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useChatMessages, useChats, useSetInterview } from "../api/hooks";
+import { useChatMessages, useChats, useSetInterview, useSetOutcome } from "../api/hooks";
 import { ThreadStateBadge } from "../components/StatusBadge";
 import { Empty, Spinner } from "../components/Ui";
 import { fmtDateTime, fmtRel } from "../lib/format";
@@ -141,9 +141,12 @@ function toLocalInput(iso: string | null | undefined): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
 
+const OUTCOME_LABEL: Record<InterviewOutcome, string> = { next: "Прошёл дальше", rejected: "Отказ", silence: "Тишина", offer: "Оффер" };
+
 /** Interview time: captured by the bot from the chat, or set by hand for a time agreed elsewhere. */
 function InterviewBar({ thread, slug }: { thread: ChatThreadDTO; slug: string }) {
   const save = useSetInterview(slug);
+  const outcome = useSetOutcome(slug);
   const [value, setValue] = useState(toLocalInput(thread.interviewAt));
   useEffect(() => setValue(toLocalInput(thread.interviewAt)), [thread.interviewAt]);
   const put = (at: string | null) =>
@@ -164,6 +167,22 @@ function InterviewBar({ thread, slug }: { thread: ChatThreadDTO; slug: string })
         <button type="button" className="btn btn-sm" disabled={save.isPending} onClick={() => put(null)}>
           Убрать
         </button>
+      )}
+      {thread.interviewAt && (
+        <select
+          className="input w-auto"
+          aria-label="Итог собеседования"
+          value={thread.interviewOutcome ?? ""}
+          disabled={outcome.isPending}
+          onChange={(e) => outcome.mutate({ id: thread.id, outcome: (e.target.value || null) as InterviewOutcome | null }, { onSuccess: () => toast.ok("Итог сохранён") })}
+        >
+          <option value="">Итог: не указан</option>
+          {(Object.keys(OUTCOME_LABEL) as InterviewOutcome[]).map((o) => (
+            <option key={o} value={o}>
+              {OUTCOME_LABEL[o]}
+            </option>
+          ))}
+        </select>
       )}
     </div>
   );
