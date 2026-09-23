@@ -141,8 +141,7 @@ const SiteProfileSchema = z
     discover_hints: z.string().optional(),
     notes: z.string().optional(),
     last_verified_at: z.string().optional(),
-  })
-  .default({});
+  });
 
 /** Body of POST/PUT career-sites: docs name the fields adapter/base_url/config; model names ats/baseUrl/profile. */
 export const CareerSiteSchema = z.object({
@@ -177,7 +176,7 @@ export const SETTING_KEYS = [
   "queue_tg_cards",
 ] as const;
 const numish = z.union([z.number().int().min(0), z.string().regex(/^\d+$/)]).transform(String);
-const boolish = z.union([z.literal("0"), z.literal("1")]);
+const boolish = z.union([z.literal("0"), z.literal("1"), z.literal(0), z.literal(1)]).transform(String);
 export const SettingsSchema = z
   .object({
     schedule_at: z.union([z.literal(""), z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM")]),

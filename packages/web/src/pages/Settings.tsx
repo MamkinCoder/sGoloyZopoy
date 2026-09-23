@@ -55,8 +55,14 @@ function ProfileEditor({ slug }: { slug: string }) {
   const q = useProfile(slug);
   const save = useSaveProfile(slug);
   const [p, setP] = useState<ProfileDTO | null>(null);
+  // Extra facts are edited as rows so an empty/duplicate key doesn't drop the row; p.extra gets only named rows.
+  const [extraRows, setExtraRows] = useState<[string, string][]>([]);
+  const reset = (d: ProfileDTO) => {
+    setP(d);
+    setExtraRows(Object.entries(d.extra));
+  };
   useEffect(() => {
-    if (q.data) setP(q.data);
+    if (q.data) reset(q.data);
   }, [q.data]);
   if (!p) return <Spinner />;
 
@@ -76,8 +82,10 @@ function ProfileEditor({ slug }: { slug: string }) {
       <ChipInput value={p[k] as string[]} onChange={(v) => set(k, v as never)} variant={variant} />
     </Field>
   );
-  const extraRows = Object.entries(p.extra);
-  const setExtra = (rows: [string, string][]) => set("extra", Object.fromEntries(rows.filter(([k]) => k.trim())));
+  const setExtra = (rows: [string, string][]) => {
+    setExtraRows(rows);
+    set("extra", Object.fromEntries(rows.filter(([k]) => k.trim())));
+  };
 
   const dirty = JSON.stringify(p) !== JSON.stringify(q.data);
 
@@ -155,14 +163,14 @@ function ProfileEditor({ slug }: { slug: string }) {
                   setExtra(rows);
                 }}
               />
-              <button type="button" className="btn" onClick={() => setExtra(extraRows.filter((_, j) => j !== i) as [string, string][])}>
+              <button type="button" className="btn" onClick={() => setExtra(extraRows.filter((_, j) => j !== i))}>
                 ×
               </button>
             </div>
           ))}
         </div>
       </Section>
-      <SaveBar dirty={dirty} pending={save.isPending} onReset={() => q.data && setP(q.data)} onSave={() => save.mutate(p, { onSuccess: () => toast.ok("Профиль сохранён") })} />
+      <SaveBar dirty={dirty} pending={save.isPending} onReset={() => q.data && reset(q.data)} onSave={() => save.mutate(p, { onSuccess: () => toast.ok("Профиль сохранён") })} />
     </div>
   );
 }
@@ -265,6 +273,7 @@ function CareerSites({ slug }: { slug: string }) {
               key={s.id}
               site={s}
               open={open === s.id}
+              busy={m.run.isPending || m.onboard.isPending}
               onToggle={() => setOpen((o) => (o === s.id ? null : s.id))}
               onEdit={() => setEditing({ id: s.id, body: { name: s.name, baseUrl: s.baseUrl, ats: s.ats, profile: s.profile, enabled: s.enabled } })}
               onDelete={() => window.confirm(`Удалить «${s.name}»?`) && m.remove.mutate(s.id, { onSuccess: () => toast.ok("Удалено") })}
@@ -320,6 +329,7 @@ function CareerSites({ slug }: { slug: string }) {
 function SiteRow({
   site,
   open,
+  busy,
   onToggle,
   onEdit,
   onDelete,
@@ -330,6 +340,7 @@ function SiteRow({
 }: {
   site: CareerSiteDTO;
   open: boolean;
+  busy: boolean;
   onToggle: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -375,10 +386,10 @@ function SiteRow({
           )}
         </span>
         <Toggle checked={site.enabled} onChange={onToggleEnabled} label="вкл" />
-        <button type="button" className="btn btn-sm" onClick={onRun} disabled={!site.enabled}>
+        <button type="button" className="btn btn-sm" onClick={onRun} disabled={!site.enabled || busy}>
           Запустить
         </button>
-        <button type="button" className="btn btn-sm" onClick={onOnboard}>
+        <button type="button" className="btn btn-sm" onClick={onOnboard} disabled={busy}>
           Онбординг
         </button>
         <button type="button" className="btn btn-sm" onClick={onEdit}>
@@ -466,7 +477,7 @@ function ScheduleEditor() {
           )}
         </div>
       </Section>
-      <Section title="Остальные ключи" right={<span className="faint text-[12px]">как есть, JSON-значения</span>}>
+      <Section title="Остальные ключи" right={<span className="faint text-[12px]">как есть, строки</span>}>
         {other.length === 0 && <div className="faint text-[12px]">нет</div>}
         <div className="grid gap-2">
           {other.map((k) => (
@@ -475,14 +486,7 @@ function ScheduleEditor() {
               <input
                 className="input"
                 value={typeof s[k] === "string" ? (s[k] as string) : JSON.stringify(s[k])}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  try {
-                    set(k, JSON.parse(raw));
-                  } catch {
-                    set(k, raw);
-                  }
-                }}
+                onChange={(e) => set(k, e.target.value)}
               />
             </div>
           ))}

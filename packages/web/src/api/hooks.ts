@@ -282,16 +282,18 @@ export function useCareerSiteMutations(slug: string) {
     onSuccess: invalidate,
   });
   // Queue a `career` run that onboards one configured site.
+  const runStarted = () => {
+    qc.invalidateQueries({ queryKey: ["runs"] });
+    qc.invalidateQueries({ queryKey: keys.activeRun });
+  };
   const onboard = useMutation({
     mutationFn: (id: number) => api<{ run_id: number }>(`/users/${slug}/career-sites/${id}/onboard`, { method: "POST" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["runs"] });
-      qc.invalidateQueries({ queryKey: keys.activeRun });
-    },
+    onSuccess: runStarted,
   });
   // Queue a `career` run over this one site: gather → decide → tailored CV → review queue.
   const run = useMutation({
     mutationFn: (id: number) => api<{ run_id: number }>(`/users/${slug}/career-sites/${id}/run`, { method: "POST" }),
+    onSuccess: runStarted,
   });
   return { create, update, remove, onboard, run };
 }
