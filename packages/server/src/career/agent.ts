@@ -127,7 +127,7 @@ export function createCareerAgent(llm: LLMClient, opts: CareerAgentOptions = {})
       if (!s) throw new Error(`site ${site.slug}: browser session required to discover a custom site`);
       items = await discoverCustom(s, site);
     }
-    const named = items.map((d) => ({ ...d, company: site.name || d.company }));
+    const named = client?.aggregator ? items : items.map((d) => ({ ...d, company: site.name || d.company }));
     return filterByKeywords(named, keywords).slice(0, DISCOVER_CAP);
   }
 
@@ -162,7 +162,7 @@ export function createCareerAgent(llm: LLMClient, opts: CareerAgentOptions = {})
     const client = site.ats !== "custom" ? clientFor(site.ats) : undefined;
     if (client) {
       const v = await client.fetchJob(tokenOf(site), d);
-      return makeVacancy({ ...v, source: site.slug, company: site.name || v.company });
+      return makeVacancy({ ...v, source: site.slug, company: (client.aggregator ? v.company || d.company : site.name) || v.company });
     }
     if (!s) throw new Error(`site ${site.slug}: browser session required to fetch a custom vacancy`);
     await s.goto(d.url);

@@ -115,4 +115,11 @@ describe("habr-career ats client", () => {
     expect(v.descriptionText).toContain("Уверенные знания синтаксиса языка Go");
     expect(v.descriptionText).not.toContain("<");
   });
+
+  it("accepts jobLocation as a single object (some pages)", async () => {
+    const html = fixture("habr-career-vacancy-1000168365.html").replace(/"jobLocation":\s*\[([\s\S]*?)\]/, '"jobLocation": $1');
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(html, { status: 200, headers: { "content-type": "text/html" } })));
+    const v = await habr.fetchJob("https://career.habr.com", { externalId: "site:habr-career:1", url: "https://career.habr.com/vacancies/1", title: "Go", company: "X" });
+    expect(v.area).toBe("Казань");
+  });
 });

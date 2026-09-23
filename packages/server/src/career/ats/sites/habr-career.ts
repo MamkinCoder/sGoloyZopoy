@@ -43,7 +43,7 @@ interface JobPosting {
   description?: string;
   datePosted?: string;
   hiringOrganization?: { name?: string };
-  jobLocation?: { address?: string }[];
+  jobLocation?: { address?: string }[] | { address?: string };
   jobLocationType?: string;
   baseSalary?: { currency?: string; value?: { minValue?: number; maxValue?: number } };
 }
@@ -116,7 +116,8 @@ async function fetchJob(_token: string, d: Discovered): Promise<ReturnType<typeo
     title: j.title?.trim() || d.title,
     company: j.hiringOrganization?.name?.trim() || d.company,
     descriptionText: j.description ? stripHtml(j.description) : "",
-    area: (j.jobLocation ?? []).map((l) => l.address ?? "").filter(Boolean).join(", ") || d.location || "",
+    // jobLocation is an array on most pages but a single object on some.
+    area: [j.jobLocation ?? []].flat().map((l) => l.address ?? "").filter(Boolean).join(", ") || d.location || "",
     workFormat: j.jobLocationType === "TELECOMMUTE" ? "Удалённо" : "",
     salaryFrom: j.baseSalary?.value?.minValue ?? 0,
     salaryTo: j.baseSalary?.value?.maxValue ?? 0,
@@ -128,6 +129,7 @@ async function fetchJob(_token: string, d: Discovered): Promise<ReturnType<typeo
 export const client: ATSClientImpl = {
   kind: KIND,
   verified: true,
+  aggregator: true,
   notes:
     "IT job board, not a company site. Lists via the frontend JSON /api/frontend/vacancies?q=&sort=date " +
     `for fixed queries (${QUERIES.join(", ")}), max ${MAX_PAGES} pages x 25 per query, deduped by id, ` +

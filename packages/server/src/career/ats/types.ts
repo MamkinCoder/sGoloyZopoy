@@ -8,6 +8,8 @@ export interface ATSClientImpl extends ATSClient {
   verified: boolean;
   /** Free-text caveats surfaced in reports / SiteProfile.notes. */
   notes: string;
+  /** A job board listing many employers (Habr Career): keep each vacancy's own company instead of the site name. */
+  aggregator?: boolean;
 }
 
 export const atsId = (kind: ATSKind, id: string | number): string => `${kind}:${id}`;
