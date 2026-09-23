@@ -10,15 +10,10 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://job.psbank.ru";
 const LIST_API = `${ORIGIN}/api/v1/content/vacancies`;
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:psb" is itself two
-// colon-segments, so we peel our own known prefix instead (same issue as sites/rostelecom.ts).
-const KIND_PREFIX = "site:psb:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 export interface PSBVacancy {
   id: string;
@@ -72,7 +67,7 @@ function descriptionOf(v: PSBVacancy): string {
 }
 
 async function fetchJob(_token: string, d: Discovered) {
-  const id = localId(d.externalId);
+  const id = rawId(d.externalId);
   const cached = d.raw as PSBVacancy | undefined;
   const v = cached?.locationName !== undefined ? cached : await getJson<PSBVacancy>(`${LIST_API}/${id}`);
   const salary = Number(v.salary);

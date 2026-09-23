@@ -9,16 +9,11 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://career.maximumacademy.ru";
 const API = `${ORIGIN}/api/v1`;
 const COMPANY = "Maximum Education";
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:maximum-education" is
-// itself two colon-segments, so peel our own known prefix instead (same as sites/beeline.ts).
-const KIND_PREFIX = "site:maximum-education:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 export interface MaxEduVacancy {
   id: number;
@@ -84,7 +79,7 @@ function descriptionOf(v: MaxEduVacancy): string {
 }
 
 async function fetchJob(_token: string, d: Discovered): Promise<ReturnType<typeof makeVacancy>> {
-  const res = await getJson<ApiEnvelope<MaxEduVacancy>>(`${API}/vacancies/${localId(d.externalId)}`);
+  const res = await getJson<ApiEnvelope<MaxEduVacancy>>(`${API}/vacancies/${rawId(d.externalId)}`);
   const v = res.data;
   const { salaryFrom, salaryTo, currency } = parseSalary(v.salary);
   return makeVacancy({

@@ -7,16 +7,11 @@
 import type { Discovered } from "@sgz/shared";
 import { getText, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://netology.ru";
 const COMPANY = "Netology";
 const LIST_URL = `${ORIGIN}/job`;
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:netology" is itself two
-// colon-segments, so we peel our own known prefix instead (same issue as sites/megafon.ts).
-const KIND_PREFIX = "site:netology:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 interface NetologySection {
   title?: string;
@@ -94,7 +89,7 @@ function descriptionOf(v: NetologyVacancy): string {
 }
 
 async function fetchJob(origin: string, d: Discovered) {
-  const html = await getText(vacancyUrl(origin, localId(d.externalId)));
+  const html = await getText(vacancyUrl(origin, rawId(d.externalId)));
   const state = parseJobsState(html);
   const v = state?.jobContent;
   const cached = d.raw as NetologyVacancy | undefined;

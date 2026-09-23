@@ -8,7 +8,7 @@
 import type { Discovered } from "@sgz/shared";
 import { decodeEntities, getJson, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://magnit.tech";
 const LIST_API = `${ORIGIN}/api/v1/vacancy`;
@@ -75,7 +75,7 @@ function descriptionOf(v: MagnitVacancy): string {
 const workFormatOf = (v: MagnitVacancy): string => v.work_formats?.map((f) => f.name).join(", ") ?? "";
 
 async function fetchJob(_token: string, d: Discovered) {
-  const res = await getJson<{ results: MagnitVacancy }>(`${LIST_API}/${rawIdOf(d.externalId)}`);
+  const res = await getJson<{ results: MagnitVacancy }>(`${LIST_API}/${rawId(d.externalId)}`);
   const v = res.results;
   return makeVacancy({
     source: "site:magnit-tech",
@@ -88,9 +88,6 @@ async function fetchJob(_token: string, d: Discovered) {
     workFormat: workFormatOf(v),
   });
 }
-
-// "site:magnit-tech:2886" -> "2886"
-const rawIdOf = (externalId: string): string => externalId.slice(externalId.lastIndexOf(":") + 1);
 
 export const client: ATSClientImpl = {
   kind: "site:magnit-tech",

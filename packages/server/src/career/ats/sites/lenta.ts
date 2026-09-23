@@ -11,13 +11,9 @@
 // Vacancy pages are client-rendered at /jobapply/{id} (the apply form route; there is no separate
 // read-only detail route in the SPA, so it doubles as the canonical vacancy URL).
 import type { Discovered } from "@sgz/shared";
-import { getJson, stripHtml } from "../../http.js";
+import { getJson, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:lenta" is itself two
-// segments, so it would leave "lenta:60002" instead of "60002" - take everything after the last colon.
-const rawIdOf = (externalId: string): string => externalId.slice(externalId.lastIndexOf(":") + 1);
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const SITE_ORIGIN = "https://career.lenta.com";
 const API = "https://lenta-career-api.k8s.axes.pro/api";
@@ -51,11 +47,7 @@ interface SearchTableResponse {
 }
 
 function detect(baseUrl: string): { token: string } | null {
-  try {
-    return new URL(baseUrl).hostname.toLowerCase() === "career.lenta.com" ? { token: SITE_ORIGIN } : null;
-  } catch {
-    return null;
-  }
+  return hostOf(baseUrl) === "career.lenta.com" ? { token: SITE_ORIGIN } : null;
 }
 
 const vacancyUrl = (id: number | string): string => `${SITE_ORIGIN}/jobapply/${id}`;
@@ -95,7 +87,7 @@ function descriptionOf(v: LentaVacancy): string {
 // by id as a fallback (e.g. Discovered.raw missing).
 async function fetchJob(_token: string, d: Discovered) {
   const cached = d.raw as LentaVacancy | undefined;
-  const v = cached ?? (await getJson<LentaVacancy>(`${API}/v1/search/vacancy-by-id/${rawIdOf(d.externalId)}`));
+  const v = cached ?? (await getJson<LentaVacancy>(`${API}/v1/search/vacancy-by-id/${rawId(d.externalId)}`));
   return makeVacancy({
     source: "site:lenta",
     externalId: d.externalId,

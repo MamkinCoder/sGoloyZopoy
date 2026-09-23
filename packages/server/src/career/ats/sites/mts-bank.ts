@@ -15,7 +15,7 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://job.mtsbank.ru";
 const API = `${ORIGIN}/api/career/vacancies`;
@@ -62,11 +62,6 @@ function detect(baseUrl: string, html: string): { token: string } | null {
 
 const vacancyUrl = (externalId: string): string => `${ORIGIN}/vacancies/${externalId}`;
 
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:mts-bank" is itself
-// two colon-segments, so we peel our own known prefix instead.
-const KIND_PREFIX = "site:mts-bank:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
-
 const locationOf = (v: MTSVacancyAttrs): string => v.location?.data?.attributes.shortName ?? v.location?.data?.attributes.name ?? "";
 
 const toDiscovered = (v: MTSVacancy): Discovered => ({
@@ -106,10 +101,10 @@ const descriptionOf = (a: MTSVacancyAttrs): string =>
 
 async function fetchJob(_token: string, d: Discovered) {
   const cached = (d.raw as MTSVacancy | undefined)?.attributes;
-  const id = cached?.externalId === localId(d.externalId) ? (d.raw as MTSVacancy).id : undefined;
+  const id = cached?.externalId === rawId(d.externalId) ? (d.raw as MTSVacancy).id : undefined;
   const attrs = id
     ? (await getJson<MTSDetailResponse>(`${API}/${id}?populate=*`)).data.attributes
-    : cached ?? (await lookupByExternalId(localId(d.externalId)));
+    : cached ?? (await lookupByExternalId(rawId(d.externalId)));
   return makeVacancy({
     source: "site:mts-bank",
     externalId: d.externalId,

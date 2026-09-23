@@ -10,17 +10,12 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://team.rzd.ru";
 const LIST_API = `${ORIGIN}/api/v1/career/vacancies`;
 const PAGE_SIZE = 100;
 const COMPANY = "РЖД";
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:rzd" is itself two
-// colon-segments, so peel our own known prefix instead (same issue as sites/rostelecom.ts).
-const KIND_PREFIX = "site:rzd:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 const WORK_FORMATS: Record<string, string> = {
   fully: "Полный день",
@@ -101,7 +96,7 @@ function descriptionOf(v: RZDVacancy): string {
 }
 
 async function fetchJob(_token: string, d: Discovered) {
-  const v = await getJson<RZDVacancy>(`${LIST_API}/${localId(d.externalId)}`);
+  const v = await getJson<RZDVacancy>(`${LIST_API}/${rawId(d.externalId)}`);
   return makeVacancy({
     source: "site:rzd",
     externalId: d.externalId,

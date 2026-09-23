@@ -13,17 +13,12 @@
 import type { Discovered } from "@sgz/shared";
 import { decodeEntities, getText, hostOf, httpFetch, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const KIND = "site:simbirsoft";
 const ORIGIN = "https://www.simbirsoft.com";
 const LIST_API = `${ORIGIN}/ajax/vacancy/`;
 const COMPANY = "SimbirSoft";
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:simbirsoft" is itself two
-// colon-segments, so we peel our own known prefix instead (same fix as sites/beeline.ts).
-const KIND_PREFIX = `${KIND}:`;
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 const CARD_RE = /<a class="l-item" href="(\/vacancies\/[^"]+\/)">[\s\S]*?<div class="l-item-name">\s*([\s\S]*?)<\/div>/g;
 const SHOW_MORE_RE = /data-click="showMore" data-value="(\d+)"/;
@@ -90,7 +85,7 @@ function parseSalary(text: string): { from: number; to: number; currency: string
 }
 
 async function fetchJob(_token: string, d: Discovered) {
-  const slug = localId(d.externalId);
+  const slug = rawId(d.externalId);
   const url = `${ORIGIN}/vacancies/${slug}/`;
   const html = await getText(url);
 

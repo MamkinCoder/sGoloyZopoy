@@ -15,7 +15,7 @@
 import type { Discovered } from "@sgz/shared";
 import { decodeEntities, getText, hostOf, originOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://career.postgrespro.ru";
 const COMPANY = "Postgres Professional";
@@ -58,12 +58,8 @@ function descriptionOf(html: string): string {
   return stripHtml(decodeEntities(body));
 }
 
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:postgres-professional" is
-// itself two segments (and hyphenated), so pull the id after the last colon instead.
-const rawIdOf = (externalId: string): string => externalId.slice(externalId.lastIndexOf(":") + 1);
-
 async function fetchJob(_token: string, d: Discovered) {
-  const id = rawIdOf(d.externalId);
+  const id = rawId(d.externalId);
   const url = `${ORIGIN}/vacancies/${id}`;
   const html = await getText(url);
   const titleMatch = /<title>([\s\S]*?)<\/title>/i.exec(html)?.[1];
