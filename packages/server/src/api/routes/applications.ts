@@ -161,6 +161,14 @@ export function applicationRoutes(deps: ApiDeps): Hono {
     return c.json({ ok: true });
   });
 
+  // The human applied on the site by hand (Habr Career needs their login, some sites block bots).
+  r.post("/applications/:id/mark-sent", (c) => {
+    const id = idParam(c);
+    queuedOr400(id);
+    store.updateApplicationStatus(id, Status.SENT, "отправлено вручную");
+    return c.json({ ok: true });
+  });
+
   // «Всё равно откликнуться»: hh applies right away, career sites go through tailoring into the queue.
   r.post("/applications/:id/force", async (c) => {
     const id = idParam(c);

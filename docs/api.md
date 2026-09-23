@@ -36,6 +36,7 @@ stores the application as `QUEUED`; a human sends or skips it here. hh.ru stays 
 | POST | /applications/:id/send | | `{run_id}` 202 — career run, stage `send:<id>`; 409 if a run is active; 400 unless `QUEUED` |
 | POST | /applications/:id/inspect | | `{run_id}` 202 — stage `inspect:<id>`: fills the form without submitting, stores the extra questions + bot answers, stays `QUEUED` (`reason_detail` "form checked: …") |
 | POST | /applications/:id/retailor | | `{run_id}` 202 — stage `retailor:<id>`: a fresh tailored CV + cover letter for a `QUEUED` item; the new row is `QUEUED`, the old one becomes `SKIP_DEDUP` ("пересобрано") only after the rebuild succeeded |
+| POST | /applications/:id/mark-sent | | `{ok}` — the human applied on the site by hand: `QUEUED` → `SENT` ("отправлено вручную"); 400 if not queued |
 | POST | /applications/:id/skip | | `{ok}` — status `SKIP_MANUAL`; 400 unless `QUEUED` |
 
 `QueueItem`: `id, created_at, vacancy:{id, title, company, url, area, work_format, salary_from, salary_to, currency},

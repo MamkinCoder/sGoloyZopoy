@@ -55,6 +55,14 @@ describe("review queue", () => {
     expect((await h.json("PUT", `/api/applications/${q.id}/cover-letter`, { text: "x" })).status).toBe(400);
   });
 
+  it("mark-sent records a manual application, only while queued", async () => {
+    const h = await harness();
+    const q = seed(h).mk("acme", "QUEUED");
+    expect((await h.json("POST", `/api/applications/${q.id}/mark-sent`)).status).toBe(200);
+    expect(h.store.getApplication(q.id)!.application).toMatchObject({ status: "SENT", reasonDetail: "отправлено вручную" });
+    expect((await h.json("POST", `/api/applications/${q.id}/mark-sent`)).status).toBe(400);
+  });
+
   it("send / inspect start a career run for that application; 409 when busy", async () => {
     const h = await harness();
     const { mk } = seed(h);

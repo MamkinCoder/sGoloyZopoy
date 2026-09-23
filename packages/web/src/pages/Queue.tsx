@@ -35,6 +35,7 @@ function QueueCard({ item, slug }: { item: QueueItemDTO; slug: string }) {
     }
   };
   const skip = () => act.mutate({ id: item.id, action: "skip" }, { onError: runStartError });
+  const markSent = () => act.mutate({ id: item.id, action: "mark-sent" }, { onSuccess: () => toast.ok("Отмечено как отправленное"), onError: runStartError });
 
   const form: [string, string][] = [
     ["Имя", item.form.full_name],
@@ -132,6 +133,9 @@ function QueueCard({ item, slug }: { item: QueueItemDTO; slug: string }) {
         </button>
         <button type="button" className="btn" disabled={act.isPending} onClick={() => start("retailor")}>
           Пересобрать CV
+        </button>
+        <button type="button" className="btn" disabled={act.isPending} onClick={markSent} title="Откликнулся сам на сайте по ссылке">
+          Отправил вручную
         </button>
         <button type="button" className="btn btn-danger" disabled={act.isPending} onClick={skip}>
           Пропустить

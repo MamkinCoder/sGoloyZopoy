@@ -151,7 +151,7 @@ export const useFiltered = (slug: string, source: string) =>
 export function useApplicationAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (arg: { id: number; action: "send" | "inspect" | "retailor" | "skip" | "force" | "cover-letter"; text?: string }) =>
+    mutationFn: (arg: { id: number; action: "send" | "inspect" | "retailor" | "skip" | "mark-sent" | "force" | "cover-letter"; text?: string }) =>
       arg.action === "cover-letter"
         ? api<{ run_id?: number; ok?: boolean }>(`/applications/${arg.id}/cover-letter`, { method: "PUT", body: { text: arg.text } })
         : api<{ run_id?: number; ok?: boolean }>(`/applications/${arg.id}/${arg.action}`, { method: "POST", silent: true }),
