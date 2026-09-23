@@ -5,6 +5,7 @@ import { badRequest } from "../errors.js";
 import { parseBody, ProfileSchema, UserPatchSchema } from "../validate.js";
 import { userOr404 } from "./common.js";
 import { readLessons, writeLessons } from "../../runner/learn.js";
+import { weeklyRetro } from "../../notify/retro.js";
 
 const EMPTY_PROFILE: ProfileDTO = ProfileSchema.parse({});
 
@@ -92,6 +93,7 @@ export function userRoutes({ store }: ApiDeps): Hono {
     writeLessons(store, u.id, v);
     return c.json(v);
   });
+  r.get("/users/:slug/retro", (c) => c.json(weeklyRetro(store, userOr404(store, c.req.param("slug")), new Date())));
 
   return r;
 }

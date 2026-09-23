@@ -22,6 +22,7 @@ import type {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isRunActive } from "../lib/status";
 import { api, qs } from "./client";
+import type { RetroDTO } from "@sgz/shared";
 
 export type StatsRange = "today" | "7d" | "30d" | "all";
 type SettingsMap = Record<string, unknown>;
@@ -325,3 +326,6 @@ export function useResetLessons(slug: string) {
     onSuccess: (data) => qc.setQueryData(["lessons", slug], data),
   });
 }
+/** Weekly retro (null = fewer than 10 sends this week). */
+export const useRetro = (slug: string) =>
+  useQuery({ queryKey: ["retro", slug], queryFn: () => api<RetroDTO | null>(`/users/${slug}/retro`), refetchInterval: 300_000 });

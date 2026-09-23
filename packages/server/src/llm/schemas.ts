@@ -109,3 +109,6 @@ export function unwrapArray(v: unknown): unknown {
 
 /** learn_letters: style lessons from invited vs. not invited letters. */
 export const LessonsSchema = z.object({ lessons: z.array(z.string()).default([]) });
+/** Mock interview in Telegram (runner/mock.ts): feedback on one answer, then the closing summary. */
+export const MockFeedbackSchema = z.object({ feedback: z.string().min(1), follow_up: z.string().nullable().catch(null).default(null) });
+export const MockSummarySchema = z.object({ tighten: z.array(z.string()).default([]) });

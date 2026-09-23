@@ -57,4 +57,12 @@ describe("users & profile", () => {
     expect((await h.get("/api/users/yaroslav/analytics?range=1y")).status).toBe(400);
     expect((await h.get("/api/users/nobody/analytics")).status).toBe(404);
   });
+
+  it("retro is null for a week with too few sends", async () => {
+    const h = await harness();
+    const res = await h.get("/api/users/yaroslav/retro");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toBeNull();
+    expect((await h.get("/api/users/nobody/retro")).status).toBe(404);
+  });
 });

@@ -19,6 +19,8 @@ import { nextJob } from "../scheduler/autopilot.js";
 import { checkHeartbeat } from "../scheduler/health.js";
 import { errMessage } from "../runner/util.js";
 import type { RunRequest } from "@sgz/shared";
+import { buildRetro, MIN_SENT, retroDue } from "../notify/retro.js";
+import { mockAnswer, startMock, stopMock } from "../runner/mock.js";
 
 export async function serve(): Promise<void> {
   const app = await createAppContext({ withScheduler: true });
@@ -114,19 +116,23 @@ export async function serve(): Promise<void> {
   // Telegram buttons: queue cards (send / skip) and «есть / нет» answers for unknown skills (update the
   // profile, then answer the waiting chats). /status and /queue answer from the configured chats.
   const digestAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
-  const onCommand = async (cmd: string, text = "", chatId = "") => {
-    const args = text.replace(/^\S+\s*/, "").trim();
+  const retroAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildRetro(app.store, u, app.cfg.tz, new Date()) ?? `Мало данных: за неделю меньше ${MIN_SENT} откликов`}`).join("\n\n");
+  const onCommand = async (cmd: string, args = "", chatId = "") => {
     if (cmd === "/status") return `${app.runner.active() ? `Идёт прогон #${app.runner.active()!.id}` : "Бот свободен"}\n\n${digestAll()}`;
     if (cmd === "/queue") return app.store.listUsers(true).map((u) => queueList(app.store, u, app.cfg.panelUrl)).join("\n\n");
     if (cmd === "/company") return companyReport(app.store, args);
-    if (cmd === "/know") return addKnownCompany(app.store, chatId, text);
+    if (cmd === "/know") return addKnownCompany(app.store, chatId, args);
     if (cmd === "/salary") {
       if (!args) return "Напиши слово из названия вакансии: /salary go";
       const band = app.store.salaryBand({ titleLike: args });
       return band ? `Вилки в вакансиях «${args}» за 90 дней: ${formatBand(band)}` : `Мало вакансий «${args}» с зарплатой за 90 дней`;
     }
-    return "Команды: /status - итоги дня, /queue - очередь на проверку, /company <название> - история откликов в компанию, /know Компания - Имя: запомнить знакомого в компании, /salary <слово> - рынок зарплат";
+    if (cmd === "/week") return retroAll();
+    if (cmd === "/mock") return startMock(app.store, chatId, args, new Date());
+    if (cmd === "/stop") return stopMock(app.store, chatId, new Date());
+    return "Команды: /status - итоги дня, /queue - очередь, /week - итоги недели, /company <название> - история откликов, /salary <слово> - рынок зарплат, /know Компания - Имя - знакомый в компании, /mock [компания] - тренировка собеседования, /stop - закончить тренировку";
   };
+  const onText = (chatId: string, text: string) => mockAnswer(app.store, app.llm, chatId, text, new Date());
   const stopCallbacks = app.cfg.tgBotToken
     ? startTelegramCallbacks(app.cfg.tgBotToken, async (data) => {
         const q = parseQueueCallback(data);
@@ -142,7 +148,7 @@ export async function serve(): Promise<void> {
         if (!skill) return "уже учтено";
         startChatPoll();
         return cb.has ? `✅ ${skill} добавлен в навыки, отвечаю работодателю` : `❌ ${skill} отмечен как «нет», отвечаю работодателю`;
-      }, { fetch: telegramFetch(), commands: { chatIds: [app.cfg.tgChatId, ...app.store.listUsers().map((u) => u.tgChatId)].filter(Boolean), onCommand } })
+      }, { fetch: telegramFetch(), commands: { chatIds: [app.cfg.tgChatId, ...app.store.listUsers().map((u) => u.tgChatId)].filter(Boolean), onCommand, onText } })
     : null;
   const chatPoll = app.cfg.runnerEnabled ? setInterval(() => void tick(), 60_000) : null;
   // Evening digest: once a day at settings.digest_at ("" = off), independent of the runner.
@@ -155,6 +161,18 @@ export async function serve(): Promise<void> {
           void app.notifier.alert(`Итоги дня · ${u.name}`, buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)).catch((e: unknown) => console.error(`sgz serve: digest: ${errMessage(e)}`));
       }, 60_000)
     : null;
+  // Weekly retro: settings.retro_day ("sun" default, "" = off) at retro_at; a too-small week sends nothing.
+  const retroTimer = app.cfg.tgBotToken
+    ? setInterval(() => {
+        const day = retroDue(app.store.getSetting("retro_day") ?? "sun", app.store.getSetting("retro_at") ?? "19:00", app.store.getSetting("retro_last_day") ?? "", new Date(), app.cfg.tz);
+        if (!day) return;
+        app.store.setSetting("retro_last_day", day);
+        for (const u of app.store.listUsers(true)) {
+          const text = buildRetro(app.store, u, app.cfg.tz, new Date());
+          if (text) void app.notifier.alert(`Итоги недели · ${u.name}`, text).catch((e: unknown) => console.error(`sgz serve: retro: ${errMessage(e)}`));
+        }
+      }, 60_000)
+    : null;
 
   let closing = false;
   const shutdown = (sig: string) => {
@@ -162,6 +180,7 @@ export async function serve(): Promise<void> {
     closing = true;
     if (chatPoll) clearInterval(chatPoll);
     if (digestTimer) clearInterval(digestTimer);
+    if (retroTimer) clearInterval(retroTimer);
     stopCallbacks?.();
     console.error(`sgz serve: ${sig}, shutting down`);
     server.close();

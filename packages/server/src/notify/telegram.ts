@@ -74,8 +74,10 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
 /** Slash commands (/status, /queue …) accepted only from these chats; the reply is sent as plain text. */
 export interface TelegramCommands {
   chatIds: string[];
-  /** `text`: the whole message («/company Ozon»), `chatId`: where it came from. */
-  onCommand: (command: string, text: string, chatId: string) => Promise<string>;
+  /** `args`: the rest of the message after the command; `chatId`: where it came from. */
+  onCommand: (command: string, args?: string, chatId?: string) => Promise<string>;
+  /** Plain (non-command) messages from those chats; null = no reply. Not awaited by the poll loop. */
+  onText?: (chatId: string, text: string) => Promise<string | null>;
 }
 
 /**
@@ -105,10 +107,17 @@ export function startTelegramCallbacks(token: string, onTap: (data: string) => P
           offset = u.update_id + 1;
           const m = u.message;
           // Strangers can message the bot too: only the configured chats get answers.
+          const reply = async (text: string | null) => {
+            for (const part of text ? chunkMessage(text) : []) await api("sendMessage", { chat_id: m!.chat.id, text: part, disable_web_page_preview: true }).catch(() => undefined);
+          };
           if (cmds && m?.text?.startsWith("/") && cmds.chatIds.includes(String(m.chat.id))) {
-            const word = m.text.split(/\s/)[0]!;
-            const reply = await cmds.onCommand(word.split("@")[0]!.toLowerCase(), m.text, String(m.chat.id)).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`);
-            for (const part of chunkMessage(reply)) await api("sendMessage", { chat_id: m.chat.id, text: part, disable_web_page_preview: true }).catch(() => undefined);
+            const args = m.text.replace(/^\S+\s*/, "");
+            await reply(await cmds.onCommand(m.text.split(/[\s@]/)[0]!.toLowerCase(), args, String(m.chat.id)).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`));
+            continue;
+          }
+          // A slow reply (an LLM call) must not hold up button taps: answered in the background.
+          if (cmds?.onText && m?.text && cmds.chatIds.includes(String(m.chat.id))) {
+            void cmds.onText(String(m.chat.id), m.text).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`).then(reply);
             continue;
           }
           const q = u.callback_query;

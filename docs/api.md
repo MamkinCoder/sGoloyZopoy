@@ -19,6 +19,7 @@ every other route requires it (401 otherwise). Times are RFC3339 UTC. `slug` is 
 | GET | /users/:slug/analytics?range=today\|7d\|30d\|all | | `AnalyticsDTO` (see below) |
 | GET | /users/:slug/lessons | | `{lessons: string[], at}` letter lessons learned from outcomes (`at` = last refresh attempt, `""` = never) |
 | DELETE | /users/:slug/lessons | | `{lessons: [], at: now}` clears them; the next rebuild waits a week from `at` |
+| GET | /users/:slug/retro | | `RetroDTO` or `null` (weekly retro, see below) |
 
 ## Applications
 | GET | /users/:slug/applications?status=&source=&since=&until=&page=&page_size= | | `{items:[{application, vacancy, resume_title}], total}` |
@@ -152,6 +153,12 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   `extra` `{}`. Wrong types → 400 `{error:"field: message; ..."}`.
 - `GET /users/:slug/stats`: `range` defaults to `all`; other values → 400. `chat_replies` counts only
   messages the bot sent (`direction='out'` and no `hh_message_id`); history imported from hh is excluded.
+- `GET /users/:slug/retro`: the last 7 days vs the 7 before (`RetroDTO` in `packages/shared/src/api.ts`),
+  built from `userAnalytics` (week before = 14-day sums minus this week), no LLM. `null` when this week
+  has fewer than 10 sends; `prev` is `null` when the week before had fewer than 10. `best` = direction
+  with the highest invite (then response) rate over 14 days with at least 5 hh sends; `mismatch` = direction
+  with 8+ hh sends and zero responses over 14 days; `stale_queue` = QUEUED items older than 3 days;
+  `interviews` = threads with `interview_at` from 7 days ago to 7 days ahead.
 - `GET /users/:slug/analytics`: same `range` rules. One payload for the dashboard (`AnalyticsDTO` in
   `packages/shared/src/api.ts`): `since`, `kpi:{sent, skipped, failed, negotiations, responded,
   response_rate (responded/sent or null), invitations, rejections, employer_messages, bot_replies,
@@ -238,10 +245,15 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
     - `digest_at`: `"HH:MM"` (default `"20:00"`, `""` = off) in `tz`: once a day, «Итоги дня» per active
       user: today's sent / queued / skipped / errors, chat replies / invitations / rejections, the review
       queue with items older than 5 days, chats in `needs_human`. Last sent day: setting `digest_last_day`.
-    - Bot commands, answered only in `TG_CHAT_ID` or a user's `tgChatId`: `/status` (runner state +
-      the digest), `/queue` (queued items, oldest first), `/know Компания - Имя` (adds a line to `profile.known_companies` of the user owning that chat, or of the only active user; the same company is replaced), `/company <name>` (per active user: sends,
-      replies / invites, rejections, median time to the first employer message for that company key);
-      anything else starting with `/` gets the help line.
+    - Bot commands, answered only in `TG_CHAT_ID` or a user's `tgChatId`:
+      - `/status`: runner state + the digest. `/queue`: queued items, oldest first. `/week`: the weekly retro now.
+      - `/company <name>`: per active user, sends, replies / invites, rejections, median time to the first
+        employer message for that company key.
+      - `/salary <слово>`: salary band over vacancies whose title contains the word (same rules as `analytics.salary`).
+      - `/know Компания - Имя`: adds a line to `profile.known_companies` of the user owning that chat (or the
+        only active user); the same company is replaced. Queue cards then remind about the referral.
+      - `/mock [employer]`, `/stop`: text mock interview (below).
+      - Anything else starting with `/` gets the help line.
   - Outcome learning (`runner/learn.ts`, advisory only, never a reason to reject):
     - decide (hh and career) gets `company_history` for batch employers with 3+ SENT applications,
       `resume_stats` for pool resumes with 10+ SENT hh applications in 30 days (tie-breaker within one
@@ -253,8 +265,16 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       decide letter and `cover_letter_career` see them. Read / reset in Settings → Профиль → «Уроки писем».
     - Queue cards carry a vitals line (salary · format · `fit N (reason)`) and, when `known_companies`
       matches the company, «Знакомый: <имя> - можно попросить рекомендацию». The bot never contacts them.
-      the digest), `/queue` (queued items, oldest first), `/salary <слово>` (salary band over all vacancies whose
-      title contains the word, same rules as `analytics.salary`); anything else starting with `/` gets the help line.
+    - `retro_day` (`"sun"` default, `"mon"`…`"sat"`, `""` = off) + `retro_at` (`"19:00"`): once a week,
+      «Итоги недели» per active user (the `GET /users/:slug/retro` numbers as text); a user with fewer than 10
+      sends that week gets nothing. Last sent day: setting `retro_last_day`. `/week` answers it on demand.
+    - `/mock [employer]`: text mock interview from the most recent thread with a prep brief (`prep_json`,
+      optionally matching the employer; a user's own `tgChatId` sees only their threads). Up to 5 prep
+      questions; each plain message is an answer, graded by one LLM call (`prompts/mock_feedback.md`, tier
+      `write`) that may add one follow-up (max 2 per session); after the last one a summary call
+      (`prompts/mock_summary.md`) lists 3 things to tighten. `/stop` ends it. State: setting
+      `mock:<chatId>` (JSON, `""` = none), expires after 2 h of silence. Prompts use only the profile's real
+      experience; nothing goes to employers.
   - Reliability: `run_max_min` = watchdog limit per run in minutes, `"0"` (default) = built-in caps
     (20 for `chats`/`touch`, 30 for `rotate` and `send:|inspect:|retailor:|force:`, 150 otherwise). On
     timeout the run is aborted, the browser closed and a Telegram alert sent; the run ends with
