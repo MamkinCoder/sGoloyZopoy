@@ -7,7 +7,7 @@ import { DataTable, type Column } from "../components/DataTable";
 import { StatTile } from "../components/StatTile";
 import { RunStatusBadge, StatusBadge } from "../components/StatusBadge";
 import { BarList, Empty, Section, Spinner } from "../components/Ui";
-import { fmtDateTime, fmtDuration, fmtInt, fmtRel } from "../lib/format";
+import { fmtDateTime, fmtDuration, fmtInt, fmtMb, fmtRel } from "../lib/format";
 import { SOURCE_LABEL, TRIGGER_LABEL } from "../lib/status";
 
 const RANGES: { key: StatsRange; label: string }[] = [
@@ -285,8 +285,8 @@ export function DashboardPage() {
             </dd>
             <dt className="muted">Память</dt>
             <dd>
-              {health.data ? `${Math.round(health.data.mem_rss_mb)} МБ RSS` : "—"}
-              {health.data?.mem_available_mb != null && <span className="faint"> · свободно {Math.round(health.data.mem_available_mb)} МБ</span>}
+              {health.data ? `${fmtMb(health.data.mem_rss_mb)} RSS` : "—"}
+              {health.data?.mem_available_mb != null && <span className="faint"> · свободно {fmtMb(health.data.mem_available_mb)}</span>}
             </dd>
           </dl>
           {lastRun && lastRun.stats.top_vacancies.length > 0 && (

@@ -6,10 +6,9 @@ interface Props {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  wide?: boolean;
 }
 
-export function Dialog({ open, title, onClose, children, footer, wide }: Props) {
+export function Dialog({ open, title, onClose, children, footer }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -24,7 +23,7 @@ export function Dialog({ open, title, onClose, children, footer, wide }: Props) 
         aria-modal="true"
         aria-label={title}
         onMouseDown={(e) => e.stopPropagation()}
-        className={`card w-full ${wide ? "sm:max-w-3xl" : "sm:max-w-md"} max-h-[92vh] flex flex-col rounded-b-none sm:rounded-b-lg shadow-xl`}
+        className="card w-full sm:max-w-md max-h-[92vh] flex flex-col rounded-b-none sm:rounded-b-lg shadow-xl"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
           <h2 className="font-semibold text-[15px]">{title}</h2>

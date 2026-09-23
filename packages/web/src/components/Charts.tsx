@@ -9,7 +9,7 @@ export interface Series {
   color: string; // CSS color, e.g. var(--s1)
 }
 
-export interface ColumnRow {
+interface ColumnRow {
   label: string; // YYYY-MM-DD
   values: Record<string, number>;
 }
@@ -49,7 +49,7 @@ function bar(x: number, y: number, w: number, h: number, round: boolean): string
 
 const dm = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`;
 
-export function Legend({ series }: { series: Series[] }) {
+function Legend({ series }: { series: Series[] }) {
   return (
     <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px] muted mb-2">
       {series.map((s) => (

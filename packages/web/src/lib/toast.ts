@@ -1,4 +1,4 @@
-export type ToastKind = "info" | "ok" | "error";
+type ToastKind = "info" | "ok" | "error";
 export interface ToastItem {
   id: number;
   kind: ToastKind;
@@ -14,11 +14,11 @@ function emit() {
   for (const l of listeners) l(items);
 }
 
-export function pushToast(kind: ToastKind, text: string, ttlMs = kind === "error" ? 6000 : 3500) {
+function pushToast(kind: ToastKind, text: string) {
   const id = seq++;
   items = [...items, { id, kind, text }];
   emit();
-  window.setTimeout(() => dismissToast(id), ttlMs);
+  window.setTimeout(() => dismissToast(id), kind === "error" ? 6000 : 3500);
 }
 
 export function dismissToast(id: number) {

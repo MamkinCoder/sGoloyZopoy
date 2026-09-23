@@ -8,8 +8,6 @@ interface Props {
   open?: number;
 }
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
-
 function Primitive({ v }: { v: unknown }) {
   if (v === null) return <span className="faint">null</span>;
   if (typeof v === "string") return <span className="text-[var(--ok)] break-all">"{v}"</span>;
@@ -20,7 +18,7 @@ function Primitive({ v }: { v: unknown }) {
 
 export function JsonView({ value, name, depth = 0, open = 1 }: Props) {
   const [expanded, setExpanded] = useState(depth < open);
-  const composite = isObj(value) || Array.isArray(value);
+  const composite = typeof value === "object" && value !== null;
   const entries = composite ? Object.entries(value as object) : [];
   const label = name !== undefined ? <span className="muted">{name}: </span> : null;
 

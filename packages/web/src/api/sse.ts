@@ -1,13 +1,9 @@
 import type { RunEventDTO } from "@sgz/shared";
 
-export interface RunStreamHandlers {
+interface RunStreamHandlers {
   onEvent: (e: RunEventDTO) => void;
   onDone: () => void;
   onStatus?: (s: "connecting" | "open" | "reconnecting") => void;
-}
-
-export interface RunStream {
-  close: () => void;
 }
 
 /**
@@ -15,7 +11,7 @@ export interface RunStream {
  * (the server sets `id:` per event); on a hard close we reopen with `?after=<lastId>` and
  * drop anything already seen, so the caller never gets duplicates.
  */
-export function streamRunEvents(runId: number, after: number, h: RunStreamHandlers): RunStream {
+export function streamRunEvents(runId: number, after: number, h: RunStreamHandlers): { close: () => void } {
   let lastId = after;
   let es: EventSource | null = null;
   let closed = false;

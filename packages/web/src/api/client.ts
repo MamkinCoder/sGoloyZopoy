@@ -56,7 +56,6 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
     }
     throw new ApiError(res.status, message);
   }
-  if (res.status === 204) return undefined as T;
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
 }

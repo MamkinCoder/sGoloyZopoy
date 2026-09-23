@@ -3,11 +3,10 @@ import { useState, type KeyboardEvent } from "react";
 interface Props {
   value: string[];
   onChange: (v: string[]) => void;
-  placeholder?: string;
   variant?: "default" | "danger";
 }
 
-export function ChipInput({ value, onChange, placeholder, variant = "default" }: Props) {
+export function ChipInput({ value, onChange, variant = "default" }: Props) {
   const [draft, setDraft] = useState("");
 
   const commit = () => {
@@ -44,7 +43,7 @@ export function ChipInput({ value, onChange, placeholder, variant = "default" }:
       <input
         className="flex-1 min-w-[120px] bg-transparent outline-none text-[13px]"
         value={draft}
-        placeholder={value.length ? "" : placeholder ?? "Enter — добавить"}
+        placeholder={value.length ? "" : "Enter — добавить"}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={onKey}
         onBlur={commit}

@@ -1,16 +1,14 @@
 import type { ReactNode } from "react";
 
-export function Spinner({ label = "Загрузка…" }: { label?: string }) {
-  return <div className="faint text-[13px] py-6 text-center">{label}</div>;
-}
-
 export function Empty({ children = "Пусто" }: { children?: ReactNode }) {
   return <div className="faint text-[13px] py-6 text-center">{children}</div>;
 }
 
-export function Section({ title, right, children, className = "" }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string }) {
+export const Spinner = () => <Empty>Загрузка…</Empty>;
+
+export function Section({ title, right, children }: { title?: ReactNode; right?: ReactNode; children: ReactNode }) {
   return (
-    <section className={`card ${className}`}>
+    <section className="card">
       {(title || right) && (
         <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[var(--border)]">
           <h3 className="text-[13px] font-semibold">{title}</h3>

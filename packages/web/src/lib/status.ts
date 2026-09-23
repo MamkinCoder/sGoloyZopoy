@@ -37,7 +37,7 @@ export const STATUS_LABEL: Record<Status, string> = {
 
 // Keep this list local so the browser does not load the shared runtime barrel.
 // That barrel also exports server-only modules (including node:crypto).
-export const ALL_STATUSES: Status[] = [
+const ALL_STATUSES: Status[] = [
   "SENT",
   "QUEUED",
   "SKIP_ALREADY_APPLIED",
