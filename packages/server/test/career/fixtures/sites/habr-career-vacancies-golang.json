@@ -1,0 +1,94 @@
+{
+ "list": [
+  {
+   "id": 1000168517,
+   "href": "/vacancies/1000168517",
+   "title": "Golang разработчик",
+   "remoteWork": true,
+   "publishedDate": {
+    "date": "2026-09-23T19:34:34+03:00",
+    "title": "23 сентября"
+   },
+   "company": {
+    "title": "BGStaff",
+    "href": "/companies/bgstaff"
+   },
+   "salary": {
+    "from": null,
+    "to": null,
+    "currency": null,
+    "formatted": ""
+   },
+   "locations": null,
+   "qualification": "Middle"
+  },
+  {
+   "id": 1000164434,
+   "href": "/vacancies/1000164434",
+   "title": "Разработчик бэкенда в Яндекс Образование",
+   "remoteWork": false,
+   "publishedDate": {
+    "date": "2026-09-23T14:27:16+03:00",
+    "title": "23 сентября"
+   },
+   "company": {
+    "title": "Яндекс",
+    "href": "/companies/yandex"
+   },
+   "salary": {
+    "from": null,
+    "to": null,
+    "currency": null,
+    "formatted": ""
+   },
+   "locations": [
+    {
+     "title": "Москва",
+     "href": "/vacancies?city_id=678"
+    },
+    {
+     "title": "Санкт-Петербург",
+     "href": "/vacancies?city_id=679"
+    },
+    {
+     "title": "Минск",
+     "href": "/vacancies?city_id=713"
+    }
+   ],
+   "qualification": "Middle"
+  },
+  {
+   "id": 1000168365,
+   "href": "/vacancies/1000168365",
+   "title": "Junior Go Developer",
+   "remoteWork": true,
+   "publishedDate": {
+    "date": "2026-09-23T14:27:11+03:00",
+    "title": "23 сентября"
+   },
+   "company": {
+    "title": "ITK academy",
+    "href": "/companies/itk-academy"
+   },
+   "salary": {
+    "from": 75000,
+    "to": 125000,
+    "currency": "rur",
+    "formatted": "от 75 000 до 125 000 ₽"
+   },
+   "locations": [
+    {
+     "title": "Казань",
+     "href": "/vacancies?city_id=698"
+    }
+   ],
+   "qualification": "Junior"
+  }
+ ],
+ "meta": {
+  "totalResults": 3,
+  "perPage": 25,
+  "currentPage": 1,
+  "totalPages": 1
+ }
+}

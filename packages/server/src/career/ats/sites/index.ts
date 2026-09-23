@@ -22,6 +22,7 @@ import { client as c_er_telecom } from "./er-telecom.js";
 import { client as c_etazhi } from "./etazhi.js";
 import { client as c_foxford } from "./foxford.js";
 import { client as c_gazprom_neft } from "./gazprom-neft.js";
+import { client as c_habr_career } from "./habr-career.js";
 import { client as c_infowatch } from "./infowatch.js";
 import { client as c_inventive_retail_group } from "./inventive-retail-group.js";
 import { client as c_it_one } from "./it-one.js";
@@ -70,4 +71,4 @@ import { client as c_winline } from "./winline.js";
 import { client as c_x5_tech } from "./x5-tech.js";
 import { client as c_yadro } from "./yadro.js";
 
-export const siteClients: ATSClientImpl[] = [c_1c, c_2gis, c_aeroflot, c_agima, c_alfa_bank_alfa_digital, c_amocrm, c_arenadata, c_astrum_entertainment, c_beeline, c_bitrix24_1c_bitrix, c_cdek, c_cloud_ru, c_croc, c_dalli, c_directum, c_dodo_engineering, c_dom_rf, c_elma365, c_er_telecom, c_etazhi, c_foxford, c_gazprom_neft, c_infowatch, c_inventive_retail_group, c_it_one, c_itransition, c_ivi, c_kamaz, c_kaspersky, c_kode, c_kontur, c_lamoda, c_lanit, c_lenta, c_magnit_tech, c_maximum_education, c_megafon, c_mts_bank, c_mts, c_mvideoeldorado, c_naumen, c_netology, c_nlmk, c_ozon_tech, c_pec, c_positive_technologies, c_postgres_professional, c_profi_ru, c_psb, c_reksoft, c_rostelecom, c_russian_post, c_rzd, c_samolet, c_sber, c_sbertech, c_security_code, c_selectel, c_severstal, c_simbirsoft, c_skyeng, c_solar, c_sovcombank, c_tochka, c_usergate, c_vkusvill, c_winline, c_x5_tech, c_yadro];
+export const siteClients: ATSClientImpl[] = [c_1c, c_2gis, c_aeroflot, c_agima, c_alfa_bank_alfa_digital, c_amocrm, c_arenadata, c_astrum_entertainment, c_beeline, c_bitrix24_1c_bitrix, c_cdek, c_cloud_ru, c_croc, c_dalli, c_directum, c_dodo_engineering, c_dom_rf, c_elma365, c_er_telecom, c_etazhi, c_foxford, c_gazprom_neft, c_habr_career, c_infowatch, c_inventive_retail_group, c_it_one, c_itransition, c_ivi, c_kamaz, c_kaspersky, c_kode, c_kontur, c_lamoda, c_lanit, c_lenta, c_magnit_tech, c_maximum_education, c_megafon, c_mts_bank, c_mts, c_mvideoeldorado, c_naumen, c_netology, c_nlmk, c_ozon_tech, c_pec, c_positive_technologies, c_postgres_professional, c_profi_ru, c_psb, c_reksoft, c_rostelecom, c_russian_post, c_rzd, c_samolet, c_sber, c_sbertech, c_security_code, c_selectel, c_severstal, c_simbirsoft, c_skyeng, c_solar, c_sovcombank, c_tochka, c_usergate, c_vkusvill, c_winline, c_x5_tech, c_yadro];
