@@ -125,9 +125,15 @@ function QueueCard({ item, slug }: { item: QueueItemDTO; slug: string }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <button type="button" className="btn btn-primary" disabled={act.isPending || !letter.trim()} onClick={() => start("send")}>
-          Отправить
-        </button>
+        {item.manual_apply ? (
+          <a href={v.url} target="_blank" rel="noreferrer" className="btn btn-primary">
+            Откликнуться на сайте
+          </a>
+        ) : (
+          <button type="button" className="btn btn-primary" disabled={act.isPending || !letter.trim()} onClick={() => start("send")}>
+            Отправить
+          </button>
+        )}
         <button type="button" className="btn" disabled={act.isPending} onClick={() => start("inspect")}>
           Проверить форму
         </button>

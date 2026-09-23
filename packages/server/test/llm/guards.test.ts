@@ -33,7 +33,7 @@ describe("guards", () => {
   });
 
   it("link guard catches bare hosts, emails and phones, leaves tech names and dates", () => {
-    const t = "Код: github.com/nick/repo. Пишите на nick@ya.ru. Звоните +7 999 123-45-67. Или 8 (999) 123-45-67. Профиль habr.com тоже. Работал с Node.js и Socket.io в 2019 - 2023, вилка 150 000 - 200 000. Готов.";
+    const t = "Код: github.com/nick/repo. Пишите на nick@example.com. Звоните +7 000 000-00-00. Или 8 (000) 000-00-00. Профиль habr.com тоже. Работал с Node.js и Socket.io в 2019 - 2023, вилка 150 000 - 200 000. Готов.";
     expect(stripLinkSentences(t)).toBe("Работал с Node.js и Socket.io в 2019 - 2023, вилка 150 000 - 200 000. Готов.");
   });
 

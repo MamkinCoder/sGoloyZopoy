@@ -89,12 +89,14 @@ export function applicationRoutes(deps: ApiDeps): Hono {
     const u = userOr404(store, c.req.param("slug"));
     const profile = store.getProfile(u.id);
     const rows = store.listApplications({ userId: u.id, status: [Status.QUEUED], page: 1, pageSize: 200 }).items;
+    const sitesBySlug = new Map(store.listCareerSites(u.id).map((s) => [s.slug, s]));
     const items: QueueItemDTO[] = rows.map(({ application: a, vacancy: v }) => ({
       id: a.id,
       created_at: a.createdAt,
       vacancy: { id: v.id, title: v.title, company: v.company, url: v.url, area: v.area, work_format: v.workFormat, salary_from: v.salaryFrom, salary_to: v.salaryTo, currency: v.currency },
       site: siteOf(u.id, v.source),
       pdf_url: a.generatedResumeId ? `/api/resumes/${a.generatedResumeId}/pdf` : null,
+      manual_apply: manualApplyOnly(sitesBySlug.get(v.source)?.ats ?? "custom"),
       cover_letter: a.coverLetter,
       reason: a.llmDecision?.reason ?? "",
       detail: a.reasonDetail,

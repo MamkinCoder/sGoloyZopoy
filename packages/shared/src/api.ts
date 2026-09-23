@@ -139,6 +139,8 @@ export interface QueueItemDTO {
   vacancy: { id: number; title: string; company: string; url: string; area: string; work_format: string; salary_from: number; salary_to: number; currency: string };
   site: { name: string; slug: string } | null;
   pdf_url: string | null;
+  /** The site can't be applied to by the bot (job board needing the user's login): apply by hand via the link. */
+  manual_apply: boolean;
   cover_letter: string;
   /** Claude's decide reason. */
   reason: string;
