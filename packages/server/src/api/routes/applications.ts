@@ -1,9 +1,8 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { FILTERED_STATUSES, paths, Status, type ApplicationDetailDTO, type ApplicationRow, type Decision, type Profile, type FilteredItemDTO, type Paged, type ApplicationDTO, type QueueItemDTO, type RunRequest } from "@sgz/shared";
+import { FILTERED_STATUSES, paths, Status, type ApplicationDetailDTO, type ApplicationRow, type FilteredItemDTO, type Paged, type ApplicationDTO, type QueueItemDTO, type RunRequest } from "@sgz/shared";
 import { cvFileName } from "../../career/agent-apply.js";
-import { knownContact } from "../../config/profile.js";
 import { fitOf } from "../../notify/format.js";
 import { manualApplyOnly } from "../../career/agent.js";
 import { sendingNow } from "../../runner/queue-cards.js";
@@ -90,8 +89,6 @@ export function applicationRoutes(deps: ApiDeps): Hono {
     return site ? { name: site.name, slug: site.slug } : null;
   };
 
-  const fitAndKnown = (d: Decision | null, profile: Profile | null, company: string) => ({ ...fitOf(d), known_contact: knownContact(profile, company) });
-
   // Review queue: career applications with a ready CV + letter, waiting for «Отправить» / «Пропустить».
   r.get("/users/:slug/queue", (c) => {
     const u = userOr404(store, c.req.param("slug"));
@@ -116,7 +113,7 @@ export function applicationRoutes(deps: ApiDeps): Hono {
         cover_letter: a.coverLetter,
       },
       questionnaire: store.listQuestionnaireAnswers(a.id).map((qa) => ({ question: qa.question, answer: qa.answer })),
-      ...fitAndKnown(a.llmDecision, profile, v.company),
+      ...fitOf(a.llmDecision),
     }));
     return c.json(items);
   });
@@ -125,7 +122,6 @@ export function applicationRoutes(deps: ApiDeps): Hono {
   r.get("/users/:slug/filtered", (c) => {
     const u = userOr404(store, c.req.param("slug"));
     const q = c.req.query();
-    const profile = store.getProfile(u.id);
     const source = q.source && q.source !== "all" ? q.source : undefined;
     const days = q.days ? intParam(q.days, "days") : 7;
     const limit = q.limit ? intParam(q.limit, "limit") : 100;
@@ -145,7 +141,7 @@ export function applicationRoutes(deps: ApiDeps): Hono {
       reason: a.reasonDetail || a.llmDecision?.reason || "",
       vacancy: { id: v.id, title: v.title, company: v.company, url: v.url, source: v.source },
       site: v.source === "hh" ? null : siteOf(u.id, v.source),
-      ...fitAndKnown(a.llmDecision, profile, v.company),
+      ...fitOf(a.llmDecision),
     }));
     return c.json(items);
   });

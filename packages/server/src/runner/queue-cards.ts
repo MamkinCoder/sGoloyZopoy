@@ -2,7 +2,7 @@
 // the runner is free), «Пропустить» marks the item SKIP_MANUAL. The tap is the human decision: nothing
 // is submitted without it.
 import { RunBusyError, Status, type Decision, type RunService, type Store, type Vacancy } from "@sgz/shared";
-import { escapeHtml, knownLine, vitalsLine } from "../notify/format.js";
+import { escapeHtml, vitalsLine } from "../notify/format.js";
 
 const PENDING = "queue_send_pending";
 
@@ -24,13 +24,11 @@ export function formatQueueCard(
   letter: string,
   queueUrl: string,
   decision?: Pick<Decision, "fit_score" | "fit_reason"> | null,
-  known = "",
 ): string {
   const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n).trimEnd()}…` : s);
   return [
     `📥 <b>${escapeHtml(v.title)}</b> · ${escapeHtml(v.company)}`,
     escapeHtml(vitalsLine(v, decision)),
-    escapeHtml(knownLine(known)),
     reason && `\n${escapeHtml(cut(reason, 300))}`,
     letter && `\nПисьмо: ${escapeHtml(cut(letter, 400))}`,
     `\n${escapeHtml(v.url)}`,

@@ -46,9 +46,7 @@ stores the application as `QUEUED`; a human sends or skips it here. hh.ru stays 
 site:{name, slug}|null, pdf_url|null, cover_letter, reason` (Claude's decide reason), `detail` (last send/inspect
 note), `form:{full_name, email, phone, cv_file_name, cover_letter}` (what the bot fills; the CV is uploaded as
 `Фамилия_Имя_CV.pdf`), `questionnaire:[{question, answer}]` (after inspect), `fit_score` (decide's 0-100
-match, `null` on rows decided before it existed), `fit_reason` (short overlap, «Go+K8s, вилка ок»),
-`known_contact` (who the seeker knows at the company from `profile.known_companies`, matched by
-`companyKey`; `""` if none).
+match, `null` on rows decided before it existed), `fit_reason` (short overlap, «Go+K8s, вилка ок»).
 
 `send` updates that same row to `SENT` / `FAILED_*`. `daily_limit_career` counts applications queued per day
 (`QUEUED` + `SENT` + `SKIP_MANUAL`); a queued or skipped vacancy is never queued again.
@@ -60,7 +58,7 @@ match, `null` on rows decided before it existed), `fit_reason` (short overlap, �
 Lists vacancies whose newest application row is `SKIP_FILTER`, `SKIP_LLM_REJECT`, `SKIP_DEDUP`, `SKIP_LIMIT`,
 `SKIP_COMPANY_LIMIT` or `SKIP_COMPANY_PERSONA` (dry-run, already-applied, archived, test-required and queued
 rows are excluded). `FilteredItem`: `id, created_at, status, reason` (filter detail or LLM reason),
-`vacancy:{id, title, company, url, source}, site:{name, slug}|null, fit_score|null, fit_reason, known_contact`
+`vacancy:{id, title, company, url, source}, site:{name, slug}|null, fit_score|null, fit_reason`
 (same meaning as in `QueueItem`; the panel can sort by fit).
 
 `force` ignores filters, limits and the LLM reject. hh vacancy: an `hh` run fetches it if needed, asks decide
@@ -250,8 +248,6 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       - `/company <name>`: per active user, sends, replies / invites, rejections, median time to the first
         employer message for that company key.
       - `/salary <слово>`: salary band over vacancies whose title contains the word (same rules as `analytics.salary`).
-      - `/know Компания - Имя`: adds a line to `profile.known_companies` of the user owning that chat (or the
-        only active user); the same company is replaced. Queue cards then remind about the referral.
       - `/mock [employer]`, `/stop`: text mock interview (below).
       - Anything else starting with `/` gets the help line.
   - Outcome learning (`runner/learn.ts`, advisory only, never a reason to reject):
@@ -263,8 +259,7 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       not invited hh letters (rejected, or no invite 14 days after SENT). Lessons are style-only: sentences
       with links or unverified / never-claim tech are dropped. They feed `_letter_craft.md`, so both the
       decide letter and `cover_letter_career` see them. Read / reset in Settings → Профиль → «Уроки писем».
-    - Queue cards carry a vitals line (salary · format · `fit N (reason)`) and, when `known_companies`
-      matches the company, «Знакомый: <имя> - можно попросить рекомендацию». The bot never contacts them.
+    - Queue cards carry a vitals line (salary · format · `fit N (reason)`).
     - `retro_day` (`"sun"` default, `"mon"`…`"sat"`, `""` = off) + `retro_at` (`"19:00"`): once a week,
       «Итоги недели» per active user (the `GET /users/:slug/retro` numbers as text); a user with fewer than 10
       sends that week gets nothing. Last sent day: setting `retro_last_day`. `/week` answers it on demand.

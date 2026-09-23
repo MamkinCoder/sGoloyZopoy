@@ -57,9 +57,7 @@ export const db: Command = async (args) => {
         seedDefaultUsers(store);
         // First-time setup: a new slug gets a user row with default limits, named from the profile.
         const user = store.getUserBySlug(slug) ?? store.upsertUser(newUserDefaults(slug, profile.full_name.split(" ")[0] || slug));
-        // Contacts added with /know or in the panel survive a re-import of an older profile.yaml.
-        const known = [...new Set([...(store.getProfile(user.id)?.known_companies ?? []), ...profile.known_companies])];
-        store.saveProfile(user.id, { ...withLearnedSkills(profile, learnedSkills(store, user.id)), known_companies: known });
+        store.saveProfile(user.id, withLearnedSkills(profile, learnedSkills(store, user.id)));
       } finally {
         store.close();
       }

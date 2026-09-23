@@ -157,8 +157,6 @@ export interface QueueItemDTO {
   /** decide's 0-100 fit, null on rows decided before the field existed. */
   fit_score: number | null;
   fit_reason: string;
-  /** Someone the seeker knows at this company (profile.known_companies), "" if none. */
-  known_contact: string;
 }
 
 /** A vacancy the pipeline filtered out (newest row per vacancy is a SKIP_* filter status). */
@@ -172,7 +170,6 @@ export interface FilteredItemDTO {
   site: { name: string; slug: string } | null;
   fit_score: number | null;
   fit_reason: string;
-  known_contact: string;
 }
 
 export interface ChatThreadDTO extends ChatThread {

@@ -88,8 +88,6 @@ export interface Profile {
   exclude_words: string[];
   company_blacklist: string[];
   extra: Record<string, string>; // free facts for questionnaires
-  /** «Компания - контакт» lines: people the seeker knows there (referral nudge on cards; never sent to the LLM). */
-  known_companies: string[];
 }
 
 export interface ResumeSummary {

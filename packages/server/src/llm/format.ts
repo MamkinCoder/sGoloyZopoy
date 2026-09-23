@@ -5,7 +5,7 @@ const DESCRIPTION_MAX = 3000;
 
 /** Profile as the model may see it. Contacts are dropped unless a form needs them. */
 export function profileForLLM(p: Profile, opts: { contacts?: boolean } = {}): Record<string, unknown> {
-  const { email, phone, telegram, hh_queries: _q, hh_area: _a, exclude_words: _e, company_blacklist: _b, known_companies: _k, ...rest } = p;
+  const { email, phone, telegram, hh_queries: _q, hh_area: _a, exclude_words: _e, company_blacklist: _b, ...rest } = p;
   return opts.contacts ? { ...rest, email, phone, telegram } : rest;
 }
 

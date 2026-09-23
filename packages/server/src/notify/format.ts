@@ -119,5 +119,3 @@ export function vitalsLine(v: Pick<Vacancy, "salaryFrom" | "salaryTo" | "currenc
   const fit = fit_score === null ? "" : `fit ${fit_score}${fit_reason ? ` (${fit_reason})` : ""}`;
   return [salary, format, fit].filter(Boolean).join(" · ");
 }
-
-export const knownLine = (contact: string): string => (contact ? `Знакомый: ${contact} - можно попросить рекомендацию` : "");

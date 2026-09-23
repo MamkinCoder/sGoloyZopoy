@@ -8,7 +8,6 @@ import { createScheduler } from "../scheduler/index.js";
 import { telegramFetch } from "../notify/proxy.js";
 import { startTelegramCallbacks } from "../notify/telegram.js";
 import { parseSkillCallback, resolveSkill } from "../runner/skills.js";
-import { addKnownCompany } from "../runner/skills.js";
 import { handleQueueTap, parseQueueCallback, startPendingSend } from "../runner/queue-cards.js";
 import { buildDigest, digestDue, queueList } from "../notify/digest.js";
 import { careerRotation } from "../runner/career.js";
@@ -121,7 +120,6 @@ export async function serve(): Promise<void> {
     if (cmd === "/status") return `${app.runner.active() ? `Идёт прогон #${app.runner.active()!.id}` : "Бот свободен"}\n\n${digestAll()}`;
     if (cmd === "/queue") return app.store.listUsers(true).map((u) => queueList(app.store, u, app.cfg.panelUrl)).join("\n\n");
     if (cmd === "/company") return companyReport(app.store, args);
-    if (cmd === "/know") return addKnownCompany(app.store, chatId, args);
     if (cmd === "/salary") {
       if (!args) return "Напиши слово из названия вакансии: /salary go";
       const band = app.store.salaryBand({ titleLike: args });
@@ -130,7 +128,7 @@ export async function serve(): Promise<void> {
     if (cmd === "/week") return retroAll();
     if (cmd === "/mock") return startMock(app.store, chatId, args, new Date());
     if (cmd === "/stop") return stopMock(app.store, chatId, new Date());
-    return "Команды: /status - итоги дня, /queue - очередь, /week - итоги недели, /company <название> - история откликов, /salary <слово> - рынок зарплат, /know Компания - Имя - знакомый в компании, /mock [компания] - тренировка собеседования, /stop - закончить тренировку";
+    return "Команды: /status - итоги дня, /queue - очередь, /week - итоги недели, /company <название> - история откликов, /salary <слово> - рынок зарплат, /mock [компания] - тренировка собеседования, /stop - закончить тренировку";
   };
   const onText = (chatId: string, text: string) => mockAnswer(app.store, app.llm, chatId, text, new Date());
   const stopCallbacks = app.cfg.tgBotToken

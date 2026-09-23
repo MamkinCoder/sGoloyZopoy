@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useApplicationAction, useFiltered } from "../api/hooks";
 import { RunProgress, runStartError } from "../components/RunProgress";
-import { FitBadge, KnownBadge, StatusBadge } from "../components/StatusBadge";
+import { FitBadge, StatusBadge } from "../components/StatusBadge";
 import { Empty, Section, Spinner } from "../components/Ui";
 import { fmtDateTime } from "../lib/format";
 import { toast } from "../lib/toast";
@@ -44,7 +44,6 @@ function FilteredRow({ item, slug }: { item: FilteredItemDTO; slug: string }) {
       <div className="text-[13px] flex flex-wrap items-baseline gap-1.5">
         <StatusBadge status={item.status} />
         <FitBadge score={item.fit_score} reason={item.fit_reason} />
-        <KnownBadge contact={item.known_contact} />
         <span className="muted break-words">{item.reason || "—"}</span>
       </div>
     </li>

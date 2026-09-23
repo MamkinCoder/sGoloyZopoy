@@ -2,7 +2,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parse, stringify } from "yaml";
-import { companyKey, type Profile } from "@sgz/shared";
+import type { Profile } from "@sgz/shared";
 
 export function defaultProfile(): Profile {
   return {
@@ -28,7 +28,6 @@ export function defaultProfile(): Profile {
     exclude_words: [],
     company_blacklist: [],
     extra: {},
-    known_companies: [],
   };
 }
 
@@ -80,7 +79,6 @@ export function normalizeProfile(raw: unknown): Profile {
     exclude_words: asList(r.exclude_words, d.exclude_words),
     company_blacklist: asList(r.company_blacklist, d.company_blacklist),
     extra: asStringMap(r.extra),
-    known_companies: asList(r.known_companies, d.known_companies),
   };
 }
 
@@ -91,15 +89,4 @@ export function loadProfileYaml(path: string): Profile {
 export function saveProfileYaml(path: string, p: Profile): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, stringify(normalizeProfile(p)), "utf8");
-}
-
-/** Who the seeker knows at `company` (from «Компания - контакт» lines, matched by companyKey), or "". */
-export function knownContact(p: Pick<Profile, "known_companies"> | null | undefined, company: string): string {
-  const key = companyKey(company);
-  if (!key) return "";
-  for (const line of p?.known_companies ?? []) {
-    const i = line.indexOf(" - ");
-    if (companyKey(i < 0 ? line : line.slice(0, i)) === key) return (i < 0 ? line : line.slice(i + 3)).trim();
-  }
-  return "";
 }

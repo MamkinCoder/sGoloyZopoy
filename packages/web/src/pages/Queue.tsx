@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useApplicationAction, useQueue } from "../api/hooks";
 import { RunProgress, runStartError } from "../components/RunProgress";
-import { FitBadge, KnownBadge } from "../components/StatusBadge";
+import { FitBadge } from "../components/StatusBadge";
 import { Empty, Section, Spinner } from "../components/Ui";
 import { fmtRel, fmtSalary } from "../lib/format";
 import { toast } from "../lib/toast";
@@ -60,11 +60,9 @@ function QueueCard({ item, slug, active }: { item: QueueItemDTO; slug: string; a
           {(v.salary_from > 0 || v.salary_to > 0) && <span>· {fmtSalary(v.salary_from, v.salary_to, v.currency)}</span>}
           <span className="faint">· {fmtRel(item.created_at)}</span>
           <FitBadge score={item.fit_score} reason={item.fit_reason} />
-          <KnownBadge contact={item.known_contact} />
         </div>
         {item.reason && <div className="text-[13px] mt-1">Claude: {item.reason}</div>}
         {item.fit_reason && <div className="text-[12px] muted mt-0.5">Совпадение: {item.fit_reason}</div>}
-        {item.known_contact && <div className="text-[12px] mt-0.5">Знакомый: {item.known_contact} - можно попросить рекомендацию</div>}
         {item.detail && <div className="text-[12px] faint mt-0.5">{item.detail}</div>}
       </div>
 

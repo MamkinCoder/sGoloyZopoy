@@ -47,9 +47,3 @@ export function FitBadge({ score, reason }: { score: number | null; reason: stri
   if (score === null) return null;
   return <Badge cls={FAMILY_CLASS[score >= 75 ? "sent" : score >= 50 ? "skip" : "failed"]} title={reason || undefined}>{`fit ${score}`}</Badge>;
 }
-
-/** Someone the seeker knows at the company (profile.known_companies): ask them for a referral. */
-export function KnownBadge({ contact }: { contact: string }) {
-  if (!contact) return null;
-  return <Badge cls={FAMILY_CLASS.human} title={`${contact} - можно попросить рекомендацию`}>знакомый</Badge>;
-}
