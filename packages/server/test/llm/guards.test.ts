@@ -80,3 +80,10 @@ describe("template renderer", () => {
     expect(out).toBe('P 1 B Y [\n  "q"\n]');
   });
 });
+
+describe("normalizeProse typo fixes", () => {
+  it("fixes «влюсь» but leaves other words alone", () => {
+    expect(normalizeProse("Легко влюсь в команду. Влюсь быстро.")).toBe("Легко вливаюсь в команду. Вливаюсь быстро.");
+    expect(normalizeProse("Я влюбляюсь в код")).toBe("Я влюбляюсь в код");
+  });
+});

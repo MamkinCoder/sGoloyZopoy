@@ -78,6 +78,7 @@ export function normalizeProse(text: string): string {
   return text
     .replace(/[—–]/g, " - ")
     .replace(EMOJI_RE, "")
+    .replace(/(^|[^\p{L}])(в|В)люсь(?=[^\p{L}]|$)/gu, "$1$2ливаюсь") // a recurring model typo («легко влюсь в команду»)
     .replace(/^\s*[-*•]\s+/gm, "")
     .replace(/[ \t]+/g, " ")
     .replace(/ +\n/g, "\n")
