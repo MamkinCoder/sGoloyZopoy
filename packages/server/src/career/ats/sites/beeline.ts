@@ -10,19 +10,14 @@
 import type { Discovered } from "@sgz/shared";
 import { decodeEntities, getJson, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://job.beeline.ru";
 const LIST_API = `${ORIGIN}/api/v1/vacancies/`;
 const COMPANY = "Beeline";
 const PAGE_SIZE = 200;
 
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:beeline" is itself two
-// colon-segments, so we peel our own known prefix instead (same fix as sites/er-telecom.ts).
-const KIND_PREFIX = "site:beeline:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
-
-export interface BeelineVacancy {
+interface BeelineVacancy {
   id: string;
   name: string;
   grade?: string;
@@ -69,7 +64,7 @@ async function listJobs(): Promise<Discovered[]> {
 }
 
 async function fetchJob(_token: string, d: Discovered): Promise<ReturnType<typeof makeVacancy>> {
-  const v = await getJson<BeelineVacancy>(`${LIST_API}${localId(d.externalId)}`);
+  const v = await getJson<BeelineVacancy>(`${LIST_API}${rawId(d.externalId)}`);
   return makeVacancy({
     source: "site:beeline",
     externalId: d.externalId,

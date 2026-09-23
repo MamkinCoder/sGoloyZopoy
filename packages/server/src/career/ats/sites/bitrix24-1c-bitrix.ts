@@ -11,7 +11,7 @@
 // Apply is a Bitrix24 CRM webform (script tag data-b24-form="click/82/...") opening an embedded form
 // with no public JSON submit API found -> apply() omitted, agent flow only.
 import type { Discovered } from "@sgz/shared";
-import { decodeEntities, getText, hostOf, originOf, stripHtml } from "../../http.js";
+import { decodeEntities, getText, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
 import { atsId, type ATSClientImpl } from "../types.js";
 

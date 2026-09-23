@@ -93,7 +93,7 @@ async function listJobs(): Promise<Discovered[]> {
 }
 
 /** The schema.org JobPosting JSON-LD block of a vacancy page, or null. */
-export function jobPosting(html: string): JobPosting | null {
+function jobPosting(html: string): JobPosting | null {
   for (const m of html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)) {
     try {
       const j = JSON.parse(m[1] ?? "") as JobPosting;

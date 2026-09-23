@@ -19,11 +19,6 @@ const LIST_API = `${ORIGIN}/api/vacancies`;
 const COMPANY = "CDEK";
 const PAGE_CAP = 40; // generous ceiling over the ~20 pages observed live
 
-// Our kind "site:cdek" is itself a colon-segment, so rawId()'s single-prefix strip in types.ts
-// would leave "cdek:123" instead of "123" - peel our own known prefix like sites/beeline.ts does.
-const KIND_PREFIX = "site:cdek:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
-
 function detect(baseUrl: string, html: string): { token: string } | null {
   if (hostOf(baseUrl) === "rabota.cdek.ru") return { token: ORIGIN };
   return /rabota\.cdek\.ru\/(vacancies|direction)/i.test(html) ? { token: ORIGIN } : null;
@@ -60,26 +55,15 @@ function parseListPage(html: string, origin: string): Discovered[] {
   return out;
 }
 
-async function listDirection(direction?: string): Promise<Discovered[]> {
+async function listJobs(): Promise<Discovered[]> {
   const seen = new Map<string, Discovered>();
   for (let page = 1; page <= PAGE_CAP; page++) {
-    const body: Record<string, unknown> = {
-      page,
-      query: null,
-      subdirections: [],
-      newbie: null,
-      cities: { is_remote: null, all_cities: true, ids: [] },
-    };
-    if (direction) body.direction = direction;
+    const body = { page, query: null, subdirections: [], newbie: null, cities: { is_remote: null, all_cities: true, ids: [] } };
     const data = await postJson<ListPage>(LIST_API, body);
     for (const d of parseListPage(data.vacancies, ORIGIN)) seen.set(d.externalId, d);
     if (page >= data.pagination.totalPages) break;
   }
   return [...seen.values()];
-}
-
-async function listJobs(): Promise<Discovered[]> {
-  return listDirection();
 }
 
 // "90 000 - 140 000 Руб." | "от 85 400 Руб." | "" (unset)
@@ -94,7 +78,6 @@ const DETAIL_PRICE_RE = /<p class="vacancy__price">([^<]*)<\/p>/;
 const SCHEDULE_RE = /<p class="vacancy__schedule">([^<]*)<\/p>/;
 const DETAIL_ADDRESS_RE = /<p class="vacancy__map-address-item[^"]*">([\s\S]*?)<\/p>/;
 const DESCR_RE = /<div class="vacancy__descr">([\s\S]*?)<\/div>\s*(?:<section class="vacancy__infobox"|<\/div>\s*<\/div>)/;
-const DETAIL_REMOTE_RE = /vacancies__list-item-tags-item _remote/;
 
 async function fetchJob(_token: string, d: Discovered) {
   const html = await getText(d.url);
@@ -102,7 +85,7 @@ async function fetchJob(_token: string, d: Discovered) {
   const { salaryFrom, salaryTo, currency } = parsePrice(DETAIL_PRICE_RE.exec(html)?.[1] ?? "");
   const address = stripHtml(decodeEntities(DETAIL_ADDRESS_RE.exec(html)?.[1] ?? "")).replace(/\s+/g, " ").trim();
   const schedule = stripHtml(SCHEDULE_RE.exec(html)?.[1] ?? "");
-  const remote = DETAIL_REMOTE_RE.test(html);
+  const remote = REMOTE_RE.test(html);
   const workFormat = [remote ? "можно удалённо" : "", schedule].filter(Boolean).join(", ");
   return makeVacancy({
     source: "site:cdek",
@@ -134,7 +117,7 @@ export const client: ATSClientImpl = {
     "no public JSON apply API -> agent flow only, no apply(). www.cdek.ru/ru/company/vacancy (the " +
     "corporate-site vacancy page, which just redirects here) is behind a Servicepipe JS challenge; " +
     "rabota.cdek.ru itself is not.",
-  jobsUrl: () => `${LIST_API}`,
+  jobsUrl: () => LIST_API,
   detect,
   listJobs,
   fetchJob,

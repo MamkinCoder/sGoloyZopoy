@@ -9,7 +9,7 @@
 // lastName, email, phone, messengerUsername, resume file pdf/doc/docx <=10MB, optional cover
 // letter) - no public apply API found, so apply() is omitted; agent flow only. Verified live 2026-09.
 import type { Discovered } from "@sgz/shared";
-import { decodeEntities, getText, hostOf, originOf, stripHtml } from "../../http.js";
+import { decodeEntities, getText, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
 import { atsId, type ATSClientImpl } from "../types.js";
 

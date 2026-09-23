@@ -8,12 +8,11 @@
 // Apply is a form embedded on the same page (resume file + contact fields, POST target not inspected),
 // no login, no captcha observed -> agent flow, apply() omitted.
 import type { Discovered } from "@sgz/shared";
-import { decodeEntities, getText, hostOf, originOf, stripHtml } from "../../http.js";
+import { decodeEntities, getText, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
 import { atsId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://career.directum.ru";
-const LIST_URL = `${ORIGIN}/vacancy`;
 const COMPANY = "Directum";
 
 const text = (s: string | undefined): string => stripHtml(decodeEntities(s ?? "")).trim();

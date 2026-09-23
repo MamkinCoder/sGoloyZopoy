@@ -6,7 +6,7 @@
 // JSON-LD, no structured salary/location - office city is only mentioned in prose). Apply is an
 // embedded amoforms iframe (forms.amocrm.ru) with no public JSON API -> apply() omitted, agent flow.
 import type { Discovered } from "@sgz/shared";
-import { decodeEntities, getText, hostOf, originOf, stripHtml } from "../../http.js";
+import { decodeEntities, getText, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
 import { atsId, type ATSClientImpl } from "../types.js";
 
@@ -14,8 +14,7 @@ const ORIGIN = "https://www.amocrm.ru";
 const COMPANY = "amoCRM";
 const LIST_URL = `${ORIGIN}/jobs/`;
 
-const CARD_RE =
-  /<a href="([^"]+)" class="jobs__item_link">/gi;
+const CARD_RE = /<a href="([^"]+)" class="jobs__item_link">/gi;
 const CATEGORY_RE = /<h3 class="jobs__item_category">([\s\S]*?)<\/h3>/i;
 const NAME_RE = /<div class="jobs__item_name">([\s\S]*?)<\/div>/i;
 const DESCRIPTION_RE = /<div class="content-block__main">([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/i;

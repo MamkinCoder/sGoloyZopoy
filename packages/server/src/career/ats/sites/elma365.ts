@@ -12,16 +12,11 @@ import vm from "node:vm";
 import type { Discovered } from "@sgz/shared";
 import { getText, hostOf, originOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://elma365.com";
 const LIST_PATH = "/ru/company/careers/";
 const COMPANY = "ELMA365";
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:elma365" is itself two
-// colon-segments, so we peel our own known prefix instead (same fix as sites/astrum-entertainment.ts).
-const KIND_PREFIX = "site:elma365:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 const NUXT_RE = /window\.__NUXT__\s*=\s*(\(function\([\s\S]*?\)\);?)\s*<\/script>/;
 
@@ -109,7 +104,7 @@ function descriptionOf(v: CareerDetail): string {
 }
 
 async function fetchJob(origin: string, d: Discovered) {
-  const slug = localId(d.externalId);
+  const slug = rawId(d.externalId);
   const url = `${origin}${LIST_PATH}${slug}/`;
   const html = await getText(url);
   const data = readNuxtData<DetailData>(html);

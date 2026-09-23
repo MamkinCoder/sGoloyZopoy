@@ -13,7 +13,7 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://job.ertelecom.ru";
 const LIST_API = `${ORIGIN}/api/vacancy/list/`;
@@ -45,11 +45,6 @@ function detect(baseUrl: string): { token: string } | null {
   return hostOf(baseUrl) === "job.ertelecom.ru" ? { token: ORIGIN } : null;
 }
 
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:er-telecom" is itself
-// two colon-segments, so we peel our own known prefix instead (same fix as sites/mts-bank.ts).
-const KIND_PREFIX = "site:er-telecom:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
-
 const vacancyUrl = (id: number | string): string => `${ORIGIN}/vacancy/${id}`;
 const cityOf = (v: ERVacancy): string => v.city?.[0]?.name ?? "";
 
@@ -76,7 +71,7 @@ async function listJobs(): Promise<Discovered[]> {
 const workFormatOf = (v: ERVacancy): string => v.employment?.map((e) => e.name).join(", ") ?? "";
 
 async function fetchJob(_token: string, d: Discovered) {
-  const v = await getJson<ERVacancy>(`${DETAIL_API}/${localId(d.externalId)}/`);
+  const v = await getJson<ERVacancy>(`${DETAIL_API}/${rawId(d.externalId)}/`);
   return makeVacancy({
     source: "site:er-telecom",
     externalId: d.externalId,
