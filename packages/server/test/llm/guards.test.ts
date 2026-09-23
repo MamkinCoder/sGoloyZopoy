@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { containsNeverClaim, enforceMax, ensureDecisions, normalizeProse, pickResumeId, sanitizeLetter, splitSentences, stripLinkSentences, stripNeverClaimSentences } from "../../src/llm/guards.js";
+import { blockedTech, containsNeverClaim, enforceMax, ensureDecisions, normalizeProse, pickResumeId, sanitizeLetter, splitSentences, stripLinkSentences, stripNeverClaimSentences } from "../../src/llm/guards.js";
 import { renderTemplate } from "../../src/llm/template.js";
 import { resumes, vacancies } from "./fixtures.js";
 
@@ -16,6 +16,25 @@ describe("guards", () => {
     expect(containsNeverClaim("использую kafka-connect", never)).toBe(true);
     expect(containsNeverClaim("Kafkaesque story", never)).toBe(false);
     expect(containsNeverClaim("ничего", [])).toBe(false);
+  });
+
+  it("keeps honest «not in production» sentences, still drops claims", () => {
+    expect(sanitizeLetter("Kafka в продакшене не использовал, работал с очередями на Go. Готов обсудить детали.", ["Kafka"], 1500))
+      .toBe("Kafka в продакшене не использовал, работал с очередями на Go. Готов обсудить детали.");
+    expect(sanitizeLetter("Настраивал Kafka в проде. Готов.", ["Kafka"], 1500)).toBe("Готов.");
+  });
+
+  it("blockedTech unblocks tokens inside verified skills and k8s/Kubernetes aliases", () => {
+    const b = blockedTech({ verified_skills: ["Kubernetes", "AWS S3", "Apache Kafka", "JavaScript"], never_claim_skills: [] });
+    expect(sanitizeLetter("Деплоил сервисы в k8s и хранил файлы в AWS S3. Писал в Kafka.", b, 1500)).toBe("Деплоил сервисы в k8s и хранил файлы в AWS S3. Писал в Kafka.");
+    expect(b).toContain("Java");
+    expect(blockedTech({ verified_skills: ["k8s"], never_claim_skills: [] })).not.toContain("Kubernetes");
+    expect(blockedTech({ verified_skills: ["Kubernetes"], never_claim_skills: ["k8s"] })).toContain("k8s");
+  });
+
+  it("link guard catches bare hosts, emails and phones, leaves tech names and dates", () => {
+    const t = "Код: github.com/nick/repo. Пишите на nick@ya.ru. Звоните +7 999 123-45-67. Или 8 (999) 123-45-67. Профиль habr.com тоже. Работал с Node.js и Socket.io в 2019 - 2023, вилка 150 000 - 200 000. Готов.";
+    expect(stripLinkSentences(t)).toBe("Работал с Node.js и Socket.io в 2019 - 2023, вилка 150 000 - 200 000. Готов.");
   });
 
   it("normalizes prose: em-dash, emoji, bullets", () => {
