@@ -21,7 +21,7 @@ const openSocket = (url: string): Promise<WsLike> =>
     ws.addEventListener("error", () => reject(new Error(`CDP websocket failed: ${url}`)));
   });
 
-export class RawCdp {
+class RawCdp {
   private nextId = 1;
   private readonly pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   private readonly listeners = new Map<string, Set<Listener>>();
@@ -89,7 +89,7 @@ export class RawCdp {
 
 const withQuery = (exts: string[]): string[] => exts.flatMap((e) => [`*.${e}`, `*.${e}?*`]);
 
-export const ASSET_BLOCK_PATTERNS: readonly string[] = [
+const ASSET_BLOCK_PATTERNS: readonly string[] = [
   ...withQuery(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "svg"]),
   ...withQuery(["woff", "woff2", "ttf", "otf", "eot"]),
   ...withQuery(["mp4", "webm", "mp3", "ogg", "m4a", "wav"]),
@@ -104,7 +104,7 @@ export const ASSET_BLOCK_PATTERNS: readonly string[] = [
  * Attaches (flat sessions) to every current and future page target and installs the block list.
  * Returns a disposer. Failures are swallowed: blocking is an optimisation, never a hard dependency.
  */
-export async function installAssetBlocker(wsUrl: string, patterns: readonly string[] = ASSET_BLOCK_PATTERNS): Promise<() => void> {
+export async function installAssetBlocker(wsUrl: string): Promise<() => void> {
   const cdp = await RawCdp.connect(wsUrl);
   const attached = new Set<string>();
   const arm = async (sessionId: string, targetId: string): Promise<void> => {
@@ -112,7 +112,7 @@ export async function installAssetBlocker(wsUrl: string, patterns: readonly stri
     attached.add(targetId);
     try {
       await cdp.send("Network.enable", {}, sessionId);
-      await cdp.send("Network.setBlockedURLs", { urls: [...patterns] }, sessionId);
+      await cdp.send("Network.setBlockedURLs", { urls: [...ASSET_BLOCK_PATTERNS] }, sessionId);
     } catch {
       attached.delete(targetId);
     }

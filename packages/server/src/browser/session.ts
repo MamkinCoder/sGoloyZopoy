@@ -2,15 +2,15 @@
 // everything else is deterministic Page/Locator/evaluate calls (no LLM).
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Action, Page, Stagehand, StagehandBrowser, StagehandClientExtractOptions } from "@browserbasehq/stagehand";
+import type { Page, Stagehand, StagehandBrowser, StagehandClientExtractOptions } from "@browserbasehq/stagehand";
 import type { ZodType } from "zod";
 import type { ActResult, BrowserOptions, BrowserSession, Cookie, Observed } from "@sgz/shared";
-import { ActionCache, cacheKeyFor, hostOf, type CacheEntry } from "./cache.js";
+import { ActionCache, hostOf, type CacheEntry } from "./cache.js";
 import { chromiumTreeRssMB, killChromiumLeftovers } from "./memory.js";
 
-export const DEFAULT_ACTION_TIMEOUT_MS = 15_000;
+const DEFAULT_ACTION_TIMEOUT_MS = 15_000;
 /** LLM-backed steps (observe/extract) include one or more `claude -p` calls at 3–8 s each. */
-export const LLM_STEP_TIMEOUT_MS = 120_000;
+const LLM_STEP_TIMEOUT_MS = 120_000;
 const NETWORK_IDLE_MS = 3_000;
 
 export interface SessionDeps {
@@ -92,7 +92,7 @@ export class StagehandSession implements BrowserSession {
   ): Promise<ActResult> {
     const timeout = opts.timeoutMs ?? this.actionTimeout;
     const host = hostOf(await this.url());
-    const key = cacheKeyFor(instruction, opts.cacheKey);
+    const key = opts.cacheKey ?? instruction;
     const cached = this.d.cache.get(host, key);
 
     if (cached) {
@@ -107,20 +107,10 @@ export class StagehandSession implements BrowserSession {
     const observed = await this.observeRaw(instruction, opts.variables, Math.max(timeout, LLM_STEP_TIMEOUT_MS));
     const first = observed[0];
     if (!first) return { success: false, message: `observe found nothing for: ${instruction}`, usedCache: false };
-    const action: Action = {
-      selector: first.selector,
-      description: first.description,
-      method: first.method ?? "click",
-      arguments: first.arguments ?? [],
-    };
-    const run = await this.replay({ ...action, method: action.method ?? "click", arguments: action.arguments ?? [] }, opts.variables, timeout);
+    const action = { selector: first.selector, description: first.description, method: first.method ?? "click", arguments: first.arguments ?? [] };
+    const run = await this.replay(action, opts.variables, timeout);
     if (run.ok) {
-      this.d.cache.success(host, key, {
-        selector: action.selector,
-        method: action.method ?? "click",
-        arguments: action.arguments ?? [],
-        description: action.description,
-      });
+      this.d.cache.success(host, key, action);
     } else if (cached) {
       this.d.cache.invalidate(host, key);
     }
@@ -133,14 +123,8 @@ export class StagehandSession implements BrowserSession {
     variables: Record<string, string> | undefined,
     timeout: number,
   ): Promise<{ ok: boolean; message: string }> {
-    const action: Action = {
-      selector: entry.selector,
-      description: entry.description,
-      method: entry.method,
-      arguments: entry.arguments,
-    };
     try {
-      const res = await this.d.stagehand.act(action, { timeout, ...(variables ? { variables } : {}) });
+      const res = await this.d.stagehand.act({ selector: entry.selector, description: entry.description, method: entry.method, arguments: entry.arguments }, { timeout, ...(variables ? { variables } : {}) });
       return { ok: res.data.success, message: res.data.message };
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) };

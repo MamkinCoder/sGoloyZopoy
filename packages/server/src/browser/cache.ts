@@ -3,7 +3,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export interface CachedAction {
+interface CachedAction {
   selector: string;
   method: string;
   arguments: string[];
@@ -16,11 +16,9 @@ export interface CacheEntry extends CachedAction {
   failures: number; // consecutive replay failures
 }
 
-export type HostCache = Record<string, CacheEntry>;
+type HostCache = Record<string, CacheEntry>;
 
-export const MAX_FAILURES = 2;
-
-export const cacheKeyFor = (instruction: string, cacheKey?: string): string => cacheKey ?? instruction;
+const MAX_FAILURES = 2;
 
 export const hostOf = (url: string): string => {
   try {
@@ -31,10 +29,10 @@ export const hostOf = (url: string): string => {
   }
 };
 
-export const cacheFile = (dir: string, host: string): string =>
+const cacheFile = (dir: string, host: string): string =>
   join(dir, `${host.replace(/[^a-z0-9.-]/gi, "_") || "local"}.json`);
 
-export function readHostCache(dir: string, host: string): HostCache {
+function readHostCache(dir: string, host: string): HostCache {
   try {
     const raw = JSON.parse(readFileSync(cacheFile(dir, host), "utf8")) as unknown;
     return isRecord(raw) ? (raw as HostCache) : {};
@@ -44,7 +42,7 @@ export function readHostCache(dir: string, host: string): HostCache {
 }
 
 /** tmp + rename so a crash mid-write never leaves a truncated file. */
-export function writeHostCache(dir: string, host: string, cache: HostCache): void {
+function writeHostCache(dir: string, host: string, cache: HostCache): void {
   mkdirSync(dir, { recursive: true });
   const file = cacheFile(dir, host);
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
@@ -52,7 +50,7 @@ export function writeHostCache(dir: string, host: string, cache: HostCache): voi
   renameSync(tmp, file);
 }
 
-export function recordSuccess(cache: HostCache, key: string, action: CachedAction, now = new Date()): HostCache {
+function recordSuccess(cache: HostCache, key: string, action: CachedAction, now = new Date()): HostCache {
   const prev = cache[key];
   const same = prev && prev.selector === action.selector && prev.method === action.method;
   return {
@@ -70,18 +68,15 @@ export function recordSuccess(cache: HostCache, key: string, action: CachedActio
 }
 
 /** Counts a replay failure; the entry is removed once MAX_FAILURES is reached. */
-export function recordFailure(cache: HostCache, key: string): HostCache {
+function recordFailure(cache: HostCache, key: string): HostCache {
   const prev = cache[key];
   if (!prev) return cache;
   const failures = prev.failures + 1;
-  if (failures >= MAX_FAILURES) {
-    const { [key]: _dropped, ...rest } = cache;
-    return rest;
-  }
+  if (failures >= MAX_FAILURES) return invalidate(cache, key);
   return { ...cache, [key]: { ...prev, failures } };
 }
 
-export function invalidate(cache: HostCache, key: string): HostCache {
+function invalidate(cache: HostCache, key: string): HostCache {
   if (!(key in cache)) return cache;
   const { [key]: _dropped, ...rest } = cache;
   return rest;

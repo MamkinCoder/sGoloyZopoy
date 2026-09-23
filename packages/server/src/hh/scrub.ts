@@ -20,10 +20,9 @@ const DEFAULT_RULES: ScrubReplacement[] = [
  * Applies `replacements` (literal strings are replaced globally, RegExps as given) and then the
  * built-in rules. Order matters: user rules first so a known full name is gone before generic rules run.
  */
-export const scrubHtml = (html: string, replacements: ScrubReplacement[] = [], opts?: { builtins?: boolean }): string => {
+export const scrubHtml = (html: string, replacements: ScrubReplacement[] = []): string => {
   let out = html;
-  const rules = opts?.builtins === false ? replacements : [...replacements, ...DEFAULT_RULES];
-  for (const r of rules) {
+  for (const r of [...replacements, ...DEFAULT_RULES]) {
     if (typeof r.find === "string") {
       if (r.find) out = out.split(r.find).join(r.replace);
     } else out = out.replace(r.find, r.replace);

@@ -9,7 +9,7 @@ interface Proc {
   command: string;
 }
 
-export async function listProcesses(): Promise<Proc[]> {
+async function listProcesses(): Promise<Proc[]> {
   const out = await new Promise<string>((resolve, reject) => {
     execFile("ps", ["-A", "-o", "pid=,ppid=,rss=,command="], { maxBuffer: 16 * 1024 * 1024 }, (err, stdout) =>
       err ? reject(err) : resolve(stdout),
@@ -24,7 +24,7 @@ export async function listProcesses(): Promise<Proc[]> {
 }
 
 /** Pids of every process whose command names `userDataDir`, plus all their descendants. */
-export function chromiumTree(procs: Proc[], userDataDir: string): Proc[] {
+function chromiumTree(procs: Proc[], userDataDir: string): Proc[] {
   const needle = `--user-data-dir=${userDataDir}`;
   const byParent = new Map<number, Proc[]>();
   for (const p of procs) {

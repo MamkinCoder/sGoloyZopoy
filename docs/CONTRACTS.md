@@ -15,7 +15,7 @@ If a contract lacks something: work around it inside your own folder and list th
 | W | Owns | Exports (exact names other packages will import) |
 |---|---|---|
 | A | `config/`, `db/` (except 001_init.sql), `commands/db.ts` | `loadConfig(): Config`, `ensureDirs(c)`, `openStore(path): Store`, `seedDefaultUsers(store)` |
-| B | `browser/` | `createLauncher(llm: StagehandLLM): BrowserLauncher`, `loadCookies(path)`, `saveCookies(path, cookies)`, `defaultUserAgent()`, `browser/fake.ts: FakeSession` |
+| B | `browser/` | `createLauncher(llm: StagehandLLM): BrowserLauncher`, `loadCookies(path)`, `defaultUserAgent()` |
 | C | `hh/`, `commands/hh-login.ts`, `commands/hh-record.ts` | `createHHClient(opts: {snapshotDir: string}): HHClient`, `createHHRecorder(c: HHClient): HHRecorder`, `loginInteractive(launcher, opts, cookiesOut)` |
 | D | `llm/`, `prompts/` (server/prompts/*.md), may tighten `CLAUDE.md` | `createLLM(cfg: Config, store: Store \| null): LLMClient` |
 | E | `resume/`, `commands/resume.ts` | `loadCV(path)`, `saveCV(path, cv)`, `importTex(tex)`, `renderTex(cv)`, `buildPdf(opts)`, `validateCV(base, tailored, never)` |

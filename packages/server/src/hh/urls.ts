@@ -38,12 +38,6 @@ export const negotiationsUrl = (opts?: { onlyUnread?: boolean; page?: number }):
 export const resumesUrl = (): string => `${HH_ORIGIN}/applicant/resumes`;
 export const loginUrl = (): string => `${HH_ORIGIN}/account/login?role=applicant`;
 export const resumeUrl = (hash: string): string => `${HH_ORIGIN}/resume/${hash}`;
-export const chatUrl = (chatId: string): string => `${HH_CHAT_ORIGIN}/chat/${chatId}`;
-
-export const resumeHashFrom = (url: string): string | null => {
-  const m = /\/resume\/([0-9a-f]{20,40})/i.exec(url);
-  return m?.[1] ?? null;
-};
 
 export const isLoginUrl = (url: string): boolean => /\/account\/login|\/login(\?|$)/.test(url);
 export const isCaptchaUrl = (url: string): boolean => /captcha/i.test(url);
