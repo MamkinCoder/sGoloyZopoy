@@ -11,9 +11,9 @@
 // blank. Apply is a Contact Form 7 POST (name, email, optional message, required resume file) gated
 // by a hidden reCAPTCHA token field -> no public apply API, agent flow only. Verified live 2026-09.
 import type { Discovered } from "@sgz/shared";
-import { getText, hostOf, originOf, stripHtml } from "../../http.js";
+import { getText, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, rawId, type ATSClientImpl } from "../types.js";
+import { atsId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://corp.ivi.ru";
 const LISTING_URL = `${ORIGIN}/vacancies/`;

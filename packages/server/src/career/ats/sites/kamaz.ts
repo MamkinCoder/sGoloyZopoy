@@ -16,11 +16,6 @@ const ORIGIN = "https://kamaz.ru";
 const LIST_PATH = "/career/work/vacancies/";
 const COMPANY = "КАМАЗ";
 
-// rawId() strips one "[a-z_]+:" segment; our kind "site:kamaz" is itself two colon-segments, so
-// peel our own known prefix instead (same issue as sites/rzd.ts and sites/rostelecom.ts).
-const KIND_PREFIX = "site:kamaz:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
-
 const text = (s: string | undefined): string => stripHtml(decodeEntities(s ?? "")).trim();
 
 function detect(baseUrl: string, html: string): { token: string } | null {

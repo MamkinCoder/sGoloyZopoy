@@ -21,18 +21,13 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const KIND = "site:aeroflot";
-const KIND_PREFIX = `${KIND}:`;
 const ORIGIN = "https://vacancy.aeroflot.ru";
 const API = `${ORIGIN}/api`;
 const COMPANY = "Aeroflot";
 const PAGE_SIZE = 100;
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:aeroflot" is itself two
-// segments, so it would only strip "site:" and leave "aeroflot:477" - use our own full-prefix strip.
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 const HEADERS = {
   "content-type": "application/json;odata=verbose",
@@ -111,7 +106,7 @@ function descriptionOf(v: AflVacancy): string {
 
 async function fetchJob(_token: string, d: Discovered) {
   const res = await postApi<{ data: AflVacancy }>("PublicVacancies/getById", {
-    data: { vacancyId: Number(localId(d.externalId)) },
+    data: { vacancyId: Number(rawId(d.externalId)) },
   });
   const v = res.data;
   return makeVacancy({

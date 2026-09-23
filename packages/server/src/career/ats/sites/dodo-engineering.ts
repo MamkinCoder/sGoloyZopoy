@@ -19,7 +19,7 @@
 import type { Discovered } from "@sgz/shared";
 import { decodeEntities, getJson, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const SITE_ORIGIN = "https://dodoengineering.ru";
 const API_ORIGIN = "https://job-site-backend.dodo-ai-platform.io";
@@ -28,11 +28,6 @@ const LIST_API = `${API_ORIGIN}/api/v1/vacancies`;
 const DETAIL_API = `${API_ORIGIN}/api/v1/pages/vacancy`;
 const COMPANY = "Dodo Engineering";
 const BRAND = "Engineering";
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:dodo-engineering" is
-// itself two colon-segments, so we peel our own known prefix instead (same fix as sites/beeline.ts).
-const KIND_PREFIX = "site:dodo-engineering:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 interface DodoListItem {
   id: number;
@@ -105,7 +100,7 @@ function descriptionOf(blocks: DodoContentBlock[]): string {
 }
 
 async function fetchJob(_token: string, d: Discovered): Promise<ReturnType<typeof makeVacancy>> {
-  const res = await getJson<DodoDetailResponse>(`${DETAIL_API}/${localId(d.externalId)}`);
+  const res = await getJson<DodoDetailResponse>(`${DETAIL_API}/${rawId(d.externalId)}`);
   const blocks = res.data.page.content;
   const main = blocks.find((b) => b.type === "vacancy_main")?.data as
     | { position?: string; vacancy_location?: string; work_format?: string }

@@ -17,7 +17,7 @@ import vm from "node:vm";
 import type { Discovered } from "@sgz/shared";
 import { USER_AGENT, hostOf, originOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://astrum-entertainment.ru";
 const NUXT_RE = /<script[^>]*>\s*window\.__NUXT__=(\(function\([\s\S]*?\)\);?)\s*<\/script>/;
@@ -40,11 +40,6 @@ async function getSiteText(origin: string, url: string): Promise<string> {
   if (!res.ok) throw new Error(`GET ${url} -> HTTP ${res.status}`);
   return await res.text();
 }
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:astrum-entertainment" is
-// itself two colon-segments, so we peel our own known prefix instead (same fix as sites/beeline.ts).
-const KIND_PREFIX = "site:astrum-entertainment:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 interface ListFetchShape {
   vacancies?: { id: number; job_title?: string }[];
@@ -105,7 +100,7 @@ function descriptionOf(v: NonNullable<DetailFetchShape["vacancy"]>): string {
 }
 
 async function fetchJob(origin: string, d: Discovered) {
-  const id = localId(d.externalId);
+  const id = rawId(d.externalId);
   const url = `${origin}/careers/${id}`;
   const html = await getSiteText(origin, url);
   const fetchBag = readNuxtFetch(html);

@@ -44,7 +44,6 @@ async function listJobs(): Promise<Discovered[]> {
       url: `${ORIGIN}/career/vacancies/${id}`,
       title,
       company: COMPANY,
-      raw: undefined,
     });
   }
   return out;
