@@ -23,7 +23,7 @@ import { isRunActive } from "../lib/status";
 import { api, qs } from "./client";
 
 export type StatsRange = "today" | "7d" | "30d" | "all";
-export type SettingsMap = Record<string, unknown>;
+type SettingsMap = Record<string, unknown>;
 
 export const keys = {
   me: ["me"] as const,
@@ -36,10 +36,9 @@ export const keys = {
   resumes: (slug: string) => ["resumes", slug] as const,
   chats: (slug: string) => ["chats", slug] as const,
   chatMessages: (id: number) => ["chat-messages", id] as const,
-  runs: (slug: string | undefined, limit: number) => ["runs", slug ?? "all", limit] as const,
+  runs: (slug: string, limit: number) => ["runs", slug, limit] as const,
   run: (id: number) => ["run", id] as const,
   runEvents: (id: number) => ["run-events", id] as const,
-  activeRun: ["run-active"] as const,
   dedup: (id: number) => ["dedup", id] as const,
   careerSites: (slug: string) => ["career-sites", slug] as const,
   adapters: ["adapters"] as const,
@@ -112,7 +111,7 @@ export const useAnalytics = (slug: string, range: StatsRange) =>
   });
 
 // ---- applications
-export interface ApplicationsParams {
+interface ApplicationsParams {
   status?: string; // comma-separated
   source?: string;
   since?: string;
@@ -158,7 +157,6 @@ export function useApplicationAction() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["queue"] });
       qc.invalidateQueries({ queryKey: ["filtered"] });
-      qc.invalidateQueries({ queryKey: keys.activeRun });
       qc.invalidateQueries({ queryKey: ["runs"] });
     },
   });
@@ -177,7 +175,6 @@ export function useResumeAction(slug: string) {
         body: arg.action === "expand" ? { max: arg.max } : undefined,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: keys.activeRun });
       qc.invalidateQueries({ queryKey: ["runs"] });
       qc.invalidateQueries({ queryKey: keys.health });
     },
@@ -205,7 +202,7 @@ export const useChatMessages = (id: number | null) =>
   });
 
 // ---- runs
-export const useRuns = (slug: string | undefined, limit = 50) =>
+export const useRuns = (slug: string, limit: number) =>
   useQuery({
     queryKey: keys.runs(slug, limit),
     queryFn: () => api<RunDTO[]>(`/runs${qs({ user: slug, limit })}`),
@@ -227,9 +224,6 @@ export const useRunEvents = (id: number, enabled = true) =>
     staleTime: Infinity,
   });
 
-export const useActiveRun = () =>
-  useQuery({ queryKey: keys.activeRun, queryFn: () => api<RunDTO | null>("/runs/active"), refetchInterval: 10_000 });
-
 export const useDedup = (id: number, enabled = true) =>
   useQuery({ queryKey: keys.dedup(id), queryFn: () => api<DedupRowDTO[]>(`/runs/${id}/dedup`), enabled });
 
@@ -239,7 +233,6 @@ export function useStartRun() {
     mutationFn: (body: StartRunBody) => api<{ run_id: number }>("/runs", { method: "POST", body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["runs"] });
-      qc.invalidateQueries({ queryKey: keys.activeRun });
       qc.invalidateQueries({ queryKey: keys.health });
     },
   });
@@ -251,7 +244,6 @@ export function useStopRun(id: number) {
     mutationFn: () => api<{ ok: boolean }>(`/runs/${id}/stop`, { method: "POST" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.run(id) });
-      qc.invalidateQueries({ queryKey: keys.activeRun });
     },
   });
 }
@@ -284,7 +276,6 @@ export function useCareerSiteMutations(slug: string) {
   // Queue a `career` run that onboards one configured site.
   const runStarted = () => {
     qc.invalidateQueries({ queryKey: ["runs"] });
-    qc.invalidateQueries({ queryKey: keys.activeRun });
   };
   const onboard = useMutation({
     mutationFn: (id: number) => api<{ run_id: number }>(`/users/${slug}/career-sites/${id}/onboard`, { method: "POST" }),

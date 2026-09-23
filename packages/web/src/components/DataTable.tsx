@@ -6,7 +6,6 @@ export interface Column<T> {
   render: (row: T) => ReactNode;
   /** Value used for sorting; column is sortable when present. */
   sortValue?: (row: T) => string | number | null | undefined;
-  className?: string;
   align?: "left" | "right";
 }
 
@@ -54,7 +53,7 @@ export function DataTable<T>({ columns, rows, rowKey, onRowClick, expandedKey, r
             {columns.map((c) => (
               <th
                 key={c.key}
-                className={`th ${c.align === "right" ? "text-right" : ""} ${c.sortValue ? "cursor-pointer select-none hover:text-[var(--text)]" : ""} ${c.className ?? ""}`}
+                className={`th ${c.align === "right" ? "text-right" : ""} ${c.sortValue ? "cursor-pointer select-none hover:text-[var(--text)]" : ""}`}
                 onClick={c.sortValue ? () => toggleSort(c.key) : undefined}
               >
                 {c.header}
@@ -81,7 +80,7 @@ export function DataTable<T>({ columns, rows, rowKey, onRowClick, expandedKey, r
                   className={`${onRowClick ? "cursor-pointer hover:bg-[var(--surface-2)]" : ""} ${isOpen ? "bg-[var(--surface-2)]" : ""}`}
                 >
                   {columns.map((c) => (
-                    <td key={c.key} className={`td ${pad} ${c.align === "right" ? "text-right tabular-nums" : ""} ${c.className ?? ""}`}>
+                    <td key={c.key} className={`td ${pad} ${c.align === "right" ? "text-right tabular-nums" : ""}`}>
                       {c.render(row)}
                     </td>
                   ))}

@@ -30,30 +30,14 @@ export function FamilyBadge({ family, label }: { family: Family; label: string }
   return <Badge cls={FAMILY_CLASS[family]}>{label}</Badge>;
 }
 
+const ACTIVE = "bg-[var(--accent-soft)] text-[var(--accent)]";
+const RUN_CLASS: Partial<Record<RunStatus, string>> = { done: FAMILY_CLASS.sent, failed: FAMILY_CLASS.failed, running: ACTIVE, stopped: FAMILY_CLASS.skip };
+const THREAD_CLASS: Partial<Record<ThreadState, string>> = { invited: FAMILY_CLASS.sent, rejected: FAMILY_CLASS.failed, needs_human: FAMILY_CLASS.human, new: ACTIVE };
+
 export function RunStatusBadge({ status }: { status: RunStatus }) {
-  const cls =
-    status === "done"
-      ? FAMILY_CLASS.sent
-      : status === "failed"
-        ? FAMILY_CLASS.failed
-        : status === "running"
-          ? "bg-[var(--accent-soft)] text-[var(--accent)]"
-          : status === "stopped"
-            ? FAMILY_CLASS.skip
-            : NEUTRAL;
-  return <Badge cls={cls}>{RUN_STATUS_LABEL[status] ?? status}</Badge>;
+  return <Badge cls={RUN_CLASS[status] ?? NEUTRAL}>{RUN_STATUS_LABEL[status] ?? status}</Badge>;
 }
 
 export function ThreadStateBadge({ state }: { state: ThreadState }) {
-  const cls =
-    state === "invited"
-      ? FAMILY_CLASS.sent
-      : state === "rejected"
-        ? FAMILY_CLASS.failed
-        : state === "needs_human"
-          ? FAMILY_CLASS.human
-          : state === "new"
-            ? "bg-[var(--accent-soft)] text-[var(--accent)]"
-            : NEUTRAL;
-  return <Badge cls={cls}>{THREAD_STATE_LABEL[state] ?? state}</Badge>;
+  return <Badge cls={THREAD_CLASS[state] ?? NEUTRAL}>{THREAD_STATE_LABEL[state] ?? state}</Badge>;
 }

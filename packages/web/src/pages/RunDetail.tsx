@@ -59,7 +59,6 @@ export function RunDetailPage() {
         setConn("closed");
         qc.invalidateQueries({ queryKey: keys.run(id) });
         qc.invalidateQueries({ queryKey: keys.runEvents(id) });
-        qc.invalidateQueries({ queryKey: keys.activeRun });
         qc.invalidateQueries({ queryKey: ["runs"] });
       },
       onStatus: setConn,

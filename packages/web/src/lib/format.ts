@@ -7,13 +7,6 @@ export function fmtDateTime(iso: string | null | undefined): string {
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
-}
-
 export function fmtTime(iso: string): string {
   const d = new Date(iso);
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
@@ -48,17 +41,11 @@ export function fmtInt(n: number | null | undefined): string {
 export function fmtSalary(from: number, to: number, currency: string): string {
   if (!from && !to) return "—";
   const cur = currency === "RUR" || currency === "RUB" || !currency ? "₽" : currency;
-  const f = (n: number) => new Intl.NumberFormat("ru-RU").format(n);
-  if (from && to) return `${f(from)}–${f(to)} ${cur}`;
-  if (from) return `от ${f(from)} ${cur}`;
-  return `до ${f(to)} ${cur}`;
+  if (from && to) return `${fmtInt(from)}–${fmtInt(to)} ${cur}`;
+  if (from) return `от ${fmtInt(from)} ${cur}`;
+  return `до ${fmtInt(to)} ${cur}`;
 }
 
 export function fmtMb(n: number | null | undefined): string {
   return n == null ? "—" : `${Math.round(n)} МБ`;
-}
-
-/** YYYY-MM-DD of a date in local time, for <input type=date>. */
-export function isoDay(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
