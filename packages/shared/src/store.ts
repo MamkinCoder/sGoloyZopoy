@@ -139,6 +139,9 @@ export interface Store {
   getCareerSite(id: number): CareerSite | null;
   upsertCareerSite(c: Omit<CareerSite, "id"> & { id?: number }): CareerSite;
   deleteCareerSite(id: number): void;
+  /** Per site slug since `sinceISO`: vacancies that got an application row (`found`) and how many reached
+   * QUEUED/SENT (`queued`). Feeds the autopilot's rotation order. */
+  careerSiteYield(userId: number, sinceISO: string): Record<string, { found: number; queued: number }>;
 
   // runs
   insertRun(r: Omit<Run, "id" | "startedAt" | "finishedAt">): Run;

@@ -42,13 +42,13 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 }
 
 /** Horizontal bar list: one hue, label + count in text tokens, bar carries magnitude only. */
-export function BarList({ rows, max }: { rows: { key: string; label: ReactNode; value: number; family?: string }[]; max?: number }) {
+export function BarList({ rows, max }: { rows: { key: string; label: ReactNode; value: number; family?: string; note?: ReactNode; dim?: boolean }[]; max?: number }) {
   const top = max ?? Math.max(1, ...rows.map((r) => r.value));
   if (rows.length === 0) return <Empty />;
   return (
     <div className="flex flex-col gap-1.5">
       {rows.map((r) => (
-        <div key={r.key} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 items-center text-[12px]">
+        <div key={r.key} className={`grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 items-center text-[12px] ${r.dim ? "opacity-50" : ""}`}>
           <div className="flex items-center gap-2 min-w-0">
             <div className="truncate min-w-[110px] max-w-[45%]">{r.label}</div>
             <div className="flex-1 h-2 rounded-sm bg-[var(--surface-2)] overflow-hidden">
@@ -56,6 +56,7 @@ export function BarList({ rows, max }: { rows: { key: string; label: ReactNode; 
             </div>
           </div>
           <div className="tabular-nums text-right w-8">{r.value}</div>
+          {r.note != null && <div className="col-span-2 text-[11px] faint tabular-nums">{r.note}</div>}
         </div>
       ))}
     </div>

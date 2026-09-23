@@ -358,6 +358,18 @@ function SiteRow({
         <span className="faint text-[11px] hidden sm:inline">
           {site.lastRunAt ? `обход ${fmtDateTime(site.lastRunAt)}` : "не обходился"}
           {site.profile.last_verified_at && ` · проверен ${fmtDateTime(site.profile.last_verified_at)}`}
+          {site.yield && (
+            <span title="за 30 дней: вакансий дошло до фильтров / попало в очередь или отправлено">
+              {" "}
+              · 30д {site.yield.found}/{site.yield.queued}
+            </span>
+          )}
+          {!!site.fails && (
+            <span className="text-[var(--bad)]" title="неудачных обходов подряд; с 5 сайт обходится раз в неделю">
+              {" "}
+              · ошибок {site.fails}
+            </span>
+          )}
         </span>
         <Toggle checked={site.enabled} onChange={onToggleEnabled} label="вкл" />
         <button type="button" className="btn btn-sm" onClick={onOnboard}>

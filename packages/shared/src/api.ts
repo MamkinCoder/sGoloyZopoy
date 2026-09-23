@@ -34,6 +34,11 @@ export interface StatsDTO {
 export interface AnalyticsCount {
   key: string;
   n: number;
+  /** Conversion (companies / sources / resumes / directions only): of `n` sent, `hh` went through hh
+   * (career sites have no negotiation threads), `resp` got a reply / view, `inv` an invitation. */
+  hh?: number;
+  resp?: number;
+  inv?: number;
 }
 
 export interface AnalyticsDay {
@@ -181,7 +186,8 @@ export interface DedupRowDTO {
   detail: string;
 }
 
-export type CareerSiteDTO = CareerSite;
+/** `yield` (last 30 days) and `fails` (consecutive failed visits) come only from the list endpoint. */
+export type CareerSiteDTO = CareerSite & { yield?: { found: number; queued: number }; fails?: number };
 
 export interface HealthDTO {
   ok: boolean;

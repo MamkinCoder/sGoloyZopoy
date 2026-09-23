@@ -1,5 +1,7 @@
 import { Hono } from "hono";
-import type { CareerSite, RunRequest } from "@sgz/shared";
+import type { CareerSite, CareerSiteDTO, RunRequest } from "@sgz/shared";
+import { siteFails, YIELD_DAYS } from "../../runner/career.js";
+import { isoDaysAgo } from "../../runner/filters.js";
 import type { ApiDeps } from "../deps.js";
 import { badRequest, notFound } from "../errors.js";
 import { ATS_KINDS, CareerSiteSchema, parseBody } from "../validate.js";
@@ -24,7 +26,11 @@ export function careerRoutes(deps: ApiDeps): Hono {
 
   r.get("/users/:slug/career-sites", (c) => {
     const u = userOr404(store, c.req.param("slug"));
-    return c.json(store.listCareerSites(u.id));
+    const y = store.careerSiteYield(u.id, isoDaysAgo(new Date(), YIELD_DAYS));
+    const sites: CareerSiteDTO[] = store
+      .listCareerSites(u.id)
+      .map((s) => ({ ...s, yield: y[s.slug] ?? { found: 0, queued: 0 }, fails: siteFails(store, s.id) }));
+    return c.json(sites);
   });
 
   r.post("/users/:slug/career-sites", async (c) => {

@@ -519,10 +519,10 @@ describe("stats / settings / llm / career / backup", () => {
     expect(a.funnel.map((f) => [f.key, f.n])).toEqual([["found", 9], ["decided", 3], ["approved", 2], ["sent", 2], ["viewed", 2], ["invited", 1]]);
     expect(a.skip_reasons).toEqual([{ key: "SKIP_LLM_REJECT", n: 1 }]);
     expect(a.reject_reasons).toEqual([{ key: "уровень / опыт", n: 1 }]);
-    expect(a.companies).toEqual([{ key: "Acme", n: 2 }]);
-    expect(a.sources).toEqual([{ key: "hh", n: 2 }]);
-    expect(a.resumes).toEqual([{ key: "Go dev", n: 2 }]);
-    expect(a.directions).toEqual([{ key: "go", n: 2 }]);
+    expect(a.companies).toEqual([{ key: "Acme", n: 2, hh: 2, resp: 2, inv: 1 }]);
+    expect(a.sources).toEqual([{ key: "hh", n: 2, hh: 2, resp: 2, inv: 1 }]);
+    expect(a.resumes).toEqual([{ key: "Go dev", n: 2, hh: 2, resp: 2, inv: 1 }]);
+    expect(a.directions).toEqual([{ key: "go", n: 2, hh: 2, resp: 2, inv: 1 }]);
     expect(a.work_formats).toEqual([{ key: "office", n: 1 }, { key: "remote", n: 1 }]);
     expect(a.llm_tasks).toEqual([{ key: "decide_hh", n: 2 }]);
     expect(a.recent.map((e) => e.kind).sort()).toEqual(["bot", "employer", "sent", "sent"]);
@@ -551,6 +551,33 @@ describe("stats / settings / llm / career / backup", () => {
       { run_id: null, ok: 1, error: "" },
       { run_id: 7, ok: 0, error: "boom" },
     ]);
+  });
+
+  it("userAnalytics: career sends count toward n but not the hh conversion denominator", () => {
+    const u = store.upsertUser(userFixture("a"));
+    const hv = store.upsertVacancy(vacancyFixture("1"));
+    const cv = store.upsertVacancy(vacancyFixture("https://acme.io/j/1", { source: "acme" }));
+    store.insertApplication(appFixture(u.id, hv.id, { direction: "go" }));
+    store.insertApplication(appFixture(u.id, cv.id, { direction: "go" }));
+    store.upsertChatThread({ userId: u.id, hhNegotiationId: "n1", isBot: false, vacancyId: hv.id, employer: "X", state: "rejected", lastSeenAt: "" });
+    const a = store.userAnalytics(u.id, null);
+    expect(a.directions).toEqual([{ key: "go", n: 2, hh: 1, resp: 1, inv: 0 }]);
+    expect(a.sources).toContainEqual({ key: "career · acme", n: 1, hh: 0, resp: 0, inv: 0 });
+  });
+
+  it("careerSiteYield: distinct vacancies per career source, queued = QUEUED/SENT, hh and old rows excluded", () => {
+    const u = store.upsertUser(userFixture("a"));
+    const v1 = store.upsertVacancy(vacancyFixture("https://acme.io/j/1", { source: "acme" }));
+    const v2 = store.upsertVacancy(vacancyFixture("https://acme.io/j/2", { source: "acme" }));
+    const v3 = store.upsertVacancy(vacancyFixture("https://beta.io/j/1", { source: "beta" }));
+    const hv = store.upsertVacancy(vacancyFixture("9"));
+    store.insertApplication(appFixture(u.id, v1.id, { status: Status.SKIP_LLM_REJECT }));
+    store.insertApplication(appFixture(u.id, v1.id, { status: Status.QUEUED }));
+    store.insertApplication(appFixture(u.id, v2.id, { status: Status.SKIP_FILTER }));
+    store.insertApplication(appFixture(u.id, v3.id, { status: Status.SENT }));
+    store.insertApplication(appFixture(u.id, hv.id));
+    expect(store.careerSiteYield(u.id, past)).toEqual({ acme: { found: 2, queued: 1 }, beta: { found: 1, queued: 1 } });
+    expect(store.careerSiteYield(u.id, future)).toEqual({});
   });
 
   it("career site profile roundtrip", () => {

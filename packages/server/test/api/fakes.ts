@@ -262,6 +262,9 @@ export class FakeStore implements Store {
   deleteCareerSite(id: number) {
     this.sites = this.sites.filter((s) => s.id !== id);
   }
+  careerSiteYield() {
+    return {};
+  }
 
   insertRun(r: Omit<Run, "id" | "startedAt" | "finishedAt">): Run {
     const run: Run = { ...r, id: this.nextId(), startedAt: nowISO(), finishedAt: null };

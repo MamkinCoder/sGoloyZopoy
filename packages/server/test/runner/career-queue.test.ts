@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { Status, type CareerAgent, type CareerApplyRequest, type Profile, type RunRequest } from "@sgz/shared";
 import { FakeLLM } from "../../src/llm/fake.js";
-import { careerRotation, runCareerUser } from "../../src/runner/career.js";
+import { careerRotation, rotationScore, runCareerUser, siteFails } from "../../src/runner/career.js";
 import type { RunContext } from "../../src/runner/context.js";
 import { planCareer } from "../../src/runner/pipeline.js";
 import { createStats } from "../../src/runner/stats.js";
@@ -53,7 +53,7 @@ function setup(applyResult: { status: Status; reasonDetail: string; questions?: 
     await runCareerUser(ctx, { user, profile, stats }, planCareer("career", stage)!);
     return stats.snapshot();
   };
-  return { store, site, apply, llm, run, user };
+  return { store, site, apply, llm, run, user, career };
 }
 
 describe("career review queue", () => {
@@ -134,5 +134,45 @@ describe("career review queue", () => {
     expect(t.llm.calls.filter((c) => c.method === "decide")).toHaveLength(decides);
     expect(t.apply).not.toHaveBeenCalled();
     expect(t.store.applications.at(-1)).toMatchObject({ vacancyId: rejected.vacancyId, status: Status.QUEUED, llmDecision: expect.objectContaining({ apply: true, reason: expect.stringContaining("forced by user (was SKIP_LLM_REJECT: senior only)") }) });
+  });
+});
+
+describe("career rotation order", () => {
+  const now = new Date("2026-09-23T12:00:00Z");
+  const ago = (d: number) => new Date(now.getTime() - d * 864e5).toISOString();
+
+  it("rotationScore: cold first, a week-old site forced, 5 failures parked until a week passes", () => {
+    expect(rotationScore({ lastRunAt: null }, undefined, 0, now)).toBe(Infinity);
+    expect(rotationScore({ lastRunAt: ago(8) }, undefined, 9, now)).toBeGreaterThan(1000);
+    expect(rotationScore({ lastRunAt: ago(2) }, undefined, 5, now)).toBe(-Infinity);
+    const productive = rotationScore({ lastRunAt: ago(2) }, { found: 20, queued: 3 }, 0, now);
+    const empty = rotationScore({ lastRunAt: ago(3) }, { found: 0, queued: 0 }, 0, now);
+    const failing = rotationScore({ lastRunAt: ago(3) }, { found: 0, queued: 0 }, 2, now);
+    expect(productive).toBeGreaterThan(empty);
+    expect(empty).toBeGreaterThan(failing);
+  });
+
+  it("careerRotation sorts by score and drops parked sites", () => {
+    const t = setup();
+    const add = (slug: string, lastRunAt: string | null) =>
+      t.store.upsertCareerSite({ userId: t.user.id, slug, name: slug, baseUrl: `https://${slug}.test`, ats: "greenhouse", profile: {}, enabled: true, lastRunAt });
+    t.store.upsertCareerSite({ ...t.site, lastRunAt: ago(3) }); // acme: nothing found
+    add("good", ago(2));
+    add("cold", null);
+    add("stale", ago(9));
+    const blocked = add("blocked", ago(2));
+    t.store.setSetting(`site_fail:${blocked.id}`, "5");
+    t.store.careerSiteYield = () => ({ good: { found: 10, queued: 2 } });
+    expect(careerRotation(t.store, t.user, "UTC", now).sites.map((s) => s.slug)).toEqual(["cold", "stale", "good", "acme"]);
+  });
+
+  it("a failed discovery bumps the site's fail counter, a clean visit resets it", async () => {
+    const t = setup();
+    vi.mocked(t.career.discover).mockRejectedValueOnce(new Error("captcha")).mockRejectedValueOnce(new Error("captcha"));
+    await t.run();
+    await t.run();
+    expect(siteFails(t.store, t.site.id)).toBe(2);
+    await t.run();
+    expect(siteFails(t.store, t.site.id)).toBe(0);
   });
 });

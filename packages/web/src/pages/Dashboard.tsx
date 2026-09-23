@@ -46,9 +46,32 @@ const EVENT_CLASS: Record<AnalyticsEvent["kind"], string> = {
 const compact = (n: number) => new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 1 }).format(n);
 const pct = (r: number | null) => (r == null ? "—" : `${Math.round(r * 100)}%`);
 
-function Bars({ rows, label = (k) => k }: { rows: AnalyticsCount[] | undefined; label?: (key: string) => ReactNode }) {
+/** Below this many hh sends a conversion rate is noise: the row is dimmed and sorts last by conversion. */
+const MIN_N = 5;
+const rate = (r: AnalyticsCount) => (r.hh && r.hh >= MIN_N ? (r.resp ?? 0) / r.hh + (r.inv ?? 0) / r.hh : -1);
+
+function Bars({ rows, label = (k) => k, byRate = false }: { rows: AnalyticsCount[] | undefined; label?: (key: string) => ReactNode; byRate?: boolean }) {
   if (!rows) return <Spinner />;
-  return <BarList rows={rows.map((r) => ({ key: r.key, label: label(r.key), value: r.n }))} />;
+  const sorted = byRate ? [...rows].sort((a, b) => rate(b) - rate(a) || b.n - a.n) : rows;
+  return (
+    <BarList
+      rows={sorted.map((r) => ({
+        key: r.key,
+        label: label(r.key),
+        value: r.n,
+        dim: r.hh !== undefined && r.hh < MIN_N,
+        note:
+          r.hh === undefined ? undefined : r.hh ? (
+            <>
+              ответы {pct((r.resp ?? 0) / r.hh)} · приглашения {pct((r.inv ?? 0) / r.hh)}
+              {r.hh < r.n && ` · из ${r.hh} через hh`}
+            </>
+          ) : (
+            "конверсия: нет данных (сайты компаний)"
+          ),
+      }))}
+    />
+  );
 }
 
 function Kpis({ k }: { k: AnalyticsDTO["kpi"] }) {
@@ -75,6 +98,7 @@ export function DashboardPage() {
   const { slug = "" } = useParams();
   const nav = useNavigate();
   const [range, setRange] = useState<StatsRange>("30d");
+  const [byRate, setByRate] = useState(false);
   const an = useAnalytics(slug, range);
   const runs = useRuns(slug, 10);
   const health = useHealth();
@@ -134,6 +158,24 @@ export function DashboardPage() {
         <Section title="Вызовы LLM по дням">{a ? daily.length ? <ColumnChart rows={daily} series={LLM_SERIES} height={150} /> : <Empty /> : <Spinner />}</Section>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 text-[12px]">
+        <span className="muted">Разбивки:</span>
+        <div className="flex gap-1" role="group" aria-label="Сортировка разбивок">
+          {[false, true].map((v) => (
+            <button
+              key={String(v)}
+              type="button"
+              aria-pressed={byRate === v}
+              onClick={() => setByRate(v)}
+              className={`btn btn-sm ${byRate === v ? "bg-[var(--surface-2)] font-semibold" : "font-normal"}`}
+            >
+              {v ? "по конверсии" : "по откликам"}
+            </button>
+          ))}
+        </div>
+        <span className="faint">конверсия считается по откликам через hh, от {MIN_N} штук</span>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Section title="Причины пропуска">
           <Bars rows={a?.skip_reasons} label={(k) => <StatusBadge status={k as Status} />} />
@@ -142,16 +184,16 @@ export function DashboardPage() {
           <Bars rows={a?.reject_reasons} />
         </Section>
         <Section title="Топ компаний (отправлено)">
-          <Bars rows={a?.companies} />
+          <Bars byRate={byRate} rows={a?.companies} />
         </Section>
         <Section title="Источник">
-          <Bars rows={a?.sources} label={(k) => SOURCE_LABEL[k] ?? k} />
+          <Bars byRate={byRate} rows={a?.sources} label={(k) => SOURCE_LABEL[k] ?? k} />
         </Section>
         <Section title="Резюме">
-          <Bars rows={a?.resumes} />
+          <Bars byRate={byRate} rows={a?.resumes} />
         </Section>
         <Section title="Направление">
-          <Bars rows={a?.directions} />
+          <Bars byRate={byRate} rows={a?.directions} />
         </Section>
         <Section title="Формат работы">
           <Bars rows={a?.work_formats} />
