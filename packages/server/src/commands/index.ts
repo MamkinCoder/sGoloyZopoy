@@ -2,6 +2,7 @@
 import { db } from "./db.js";
 import { hhLogin } from "./hh-login.js";
 import { habrLogin } from "./habr-login.js";
+import { habrResume } from "./habr-resume.js";
 import { hhRecord } from "./hh-record.js";
 import { run } from "./run.js";
 import { serve } from "./serve.js";
@@ -17,6 +18,7 @@ export const commands: Record<string, Command> = {
   pool,
   "hh-login": hhLogin,
   "habr-login": habrLogin,
+  "habr-resume": habrResume,
   "hh-record": hhRecord,
   db,
   resume,
