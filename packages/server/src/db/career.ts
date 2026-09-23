@@ -13,7 +13,7 @@ export const mapSite = (r: Row): CareerSite => ({
   lastRunAt: strOrNull(r.last_run_at),
 });
 
-type CareerRepo = Pick<Store, "listCareerSites" | "getCareerSite" | "upsertCareerSite" | "deleteCareerSite">;
+type CareerRepo = Pick<Store, "listCareerSites" | "getCareerSite" | "upsertCareerSite" | "deleteCareerSite" | "careerSiteYield">;
 
 export function careerRepo(s: Sql): CareerRepo {
   return {
@@ -51,6 +51,19 @@ export function careerRepo(s: Sql): CareerRepo {
     },
     deleteCareerSite(id) {
       s.run("DELETE FROM career_sites WHERE id = ?", id);
+    },
+    careerSiteYield(userId, sinceISO) {
+      const out: Record<string, { found: number; queued: number }> = {};
+      for (const r of s.all(
+        `SELECT v.source AS slug, COUNT(DISTINCT a.vacancy_id) AS found,
+           COUNT(DISTINCT CASE WHEN a.status IN ('QUEUED','SENT') THEN a.vacancy_id END) AS queued
+         FROM applications a JOIN vacancies v ON v.id = a.vacancy_id
+         WHERE a.user_id = ? AND a.created_at >= ? AND v.source <> 'hh' GROUP BY v.source`,
+        userId,
+        sinceISO,
+      ))
+        out[str(r.slug)] = { found: num(r.found), queued: num(r.queued) };
+      return out;
     },
   };
 }

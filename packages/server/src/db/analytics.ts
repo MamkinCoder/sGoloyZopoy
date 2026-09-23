@@ -22,7 +22,14 @@ export function rejectBucket(reason: string): string {
   return "другое";
 }
 
-const counts = (rows: Row[]): AnalyticsCount[] => rows.map((r) => ({ key: str(r.k) || "—", n: num(r.n) }));
+const counts = (rows: Row[]): AnalyticsCount[] =>
+  rows.map((r) => ({ key: str(r.k) || "—", n: num(r.n), ...(r.hh === undefined ? {} : { hh: num(r.hh), resp: num(r.resp), inv: num(r.inv) }) }));
+
+/** Per-key conversion columns over SENT rows `a`/`v`: only hh sends have negotiation threads, so rates use
+ * `hh` as the denominator. "Responded" matches the funnel (thread viewed / invited / rejected). */
+const threadIs = (states: string) =>
+  `EXISTS (SELECT 1 FROM chat_threads t WHERE t.user_id = a.user_id AND t.vacancy_id = a.vacancy_id AND t.state IN (${states}))`;
+const RATE_COLS = `SUM(v.source = 'hh') AS hh, SUM(${threadIs("'viewed','invited','rejected'")}) AS resp, SUM(${threadIs("'invited'")}) AS inv`;
 
 export function userAnalytics(s: Sql, userId: number, sinceISO: string | null): AnalyticsDTO {
   const since = sinceISO ?? "";
@@ -97,8 +104,8 @@ export function userAnalytics(s: Sql, userId: number, sinceISO: string | null): 
   // ---- breakdowns over SENT applications
   const sentFrom = (join = "") =>
     `FROM applications a JOIN vacancies v ON v.id = a.vacancy_id ${join} WHERE a.user_id = ? AND a.status = 'SENT' AND a.created_at >= ?`;
-  const sentBy = (expr: string, join = "") =>
-    top(`SELECT ${expr} AS k, COUNT(*) AS n ${sentFrom(join)} GROUP BY 1 ORDER BY n DESC, k LIMIT 10`, userId, since);
+  const sentBy = (expr: string, join = "", rates = false) =>
+    top(`SELECT ${expr} AS k, COUNT(*) AS n${rates ? `, ${RATE_COLS}` : ""} ${sentFrom(join)} GROUP BY 1 ORDER BY n DESC, k LIMIT 10`, userId, since);
 
   const rejects = new Map<string, number>();
   for (const r of s.all("SELECT reason_detail FROM applications WHERE user_id = ? AND status = 'SKIP_LLM_REJECT' AND created_at >= ?", userId, since)) {
@@ -159,7 +166,7 @@ export function userAnalytics(s: Sql, userId: number, sinceISO: string | null): 
       since,
     ),
     companies: top(
-      `SELECT MAX(v.company) AS k, COUNT(*) AS n ${sentFrom()} GROUP BY CASE WHEN v.company_key <> '' THEN v.company_key ELSE v.company END
+      `SELECT MAX(v.company) AS k, COUNT(*) AS n, ${RATE_COLS} ${sentFrom()} GROUP BY CASE WHEN v.company_key <> '' THEN v.company_key ELSE v.company END
        ORDER BY n DESC, k LIMIT 10`,
       userId,
       since,
@@ -167,12 +174,14 @@ export function userAnalytics(s: Sql, userId: number, sinceISO: string | null): 
     sources: sentBy(
       "CASE WHEN v.source = 'hh' THEN 'hh' ELSE 'career · ' || COALESCE(cs.ats, v.source) END",
       "LEFT JOIN career_sites cs ON cs.user_id = a.user_id AND cs.slug = v.source",
+      true,
     ),
     resumes: sentBy(
       "COALESCE(r.title, CASE WHEN a.generated_resume_id IS NOT NULL THEN 'PDF под вакансию' END, '')",
       "LEFT JOIN hh_resumes r ON r.id = a.hh_resume_id",
+      true,
     ),
-    directions: sentBy("COALESCE(NULLIF(a.direction,''), json_extract(a.llm_decision_json,'$.direction'), '')"),
+    directions: sentBy("COALESCE(NULLIF(a.direction,''), json_extract(a.llm_decision_json,'$.direction'), '')", "", true),
     reject_reasons: [...rejects].map(([key, n]) => ({ key, n })).sort((a, b) => b.n - a.n),
     work_formats: sentBy("v.work_format"),
     areas: sentBy("v.area"),

@@ -30,14 +30,36 @@ export interface CareerPlan {
   rotate: boolean;
 }
 
-/** Sites still to visit today and the remaining career budget, for the autopilot's `rotate` chunks. */
+const DAY_MS = 24 * 3600 * 1000;
+/** Consecutive onboarding/discovery failures per site id (settings key), reset on the next clean visit. */
+export const siteFailKey = (id: number) => `site_fail:${id}`;
+export const siteFails = (store: RunContext["store"], id: number) => Number(store.getSetting(siteFailKey(id))) || 0;
+export const YIELD_DAYS = 30;
+
+/** Rotation priority (higher = sooner): never-visited sites first, then any site unvisited for a week
+ * (exploration, nothing starves), else recent yield + age minus failures. -Infinity = skip for now
+ * (5+ failures in a row and visited within the week). */
+// ponytail: hand-tuned weights; revisit once there are months of per-site yield to fit against.
+export function rotationScore(site: Pick<CareerSite, "lastRunAt">, y: { found: number; queued: number } | undefined, fails: number, now: Date): number {
+  if (!site.lastRunAt) return Infinity;
+  const days = (now.getTime() - Date.parse(site.lastRunAt)) / DAY_MS;
+  if (days >= 7) return 1000 + days;
+  if (fails >= 5) return -Infinity;
+  return (y?.queued ?? 0) * 3 + Math.min(y?.found ?? 0, 10) * 0.2 + days - 5 * fails;
+}
+
+/** Sites still to visit today (most promising first) and the remaining career budget, for the autopilot's `rotate` chunks. */
 export function careerRotation(store: RunContext["store"], user: UserRun["user"], tz: string, now: Date): { sites: CareerSite[]; budget: number } {
   const day = dayInTz(now, tz);
   const enabled = store.listCareerSites(user.id, true).filter((s) => s.ats !== "hh_hosted");
   const budget = dailyBudget(store, user, enabled.map((s) => s.slug), user.dailyLimitCareer, 0, day);
+  const yields = store.careerSiteYield(user.id, isoDaysAgo(now, YIELD_DAYS));
   const sites = enabled
     .filter((s) => !s.lastRunAt || dayInTz(new Date(s.lastRunAt), tz) !== day)
-    .sort((a, b) => (a.lastRunAt ?? "").localeCompare(b.lastRunAt ?? ""));
+    .map((s) => ({ s, score: rotationScore(s, yields[s.slug], siteFails(store, s.id), now) }))
+    .filter((x) => x.score > -Infinity)
+    .sort((a, b) => b.score - a.score || (a.s.lastRunAt ?? "").localeCompare(b.s.lastRunAt ?? ""))
+    .map((x) => x.s);
   return { sites, budget };
 }
 
@@ -92,7 +114,10 @@ export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPla
         if (e instanceof RunAbortError || isStop(e)) throw e;
         ctx.log.error(`onboard:${site.id}`, `${site.name}: onboarding failed: ${errMessage(e)}`, { site_id: site.id });
         // Mark it visited so the autopilot's rotation moves on instead of retrying it every chunk.
-        if (!ctx.req.dryRun) ctx.store.upsertCareerSite({ ...site, lastRunAt: ctx.now().toISOString() });
+        if (!ctx.req.dryRun) {
+          ctx.store.upsertCareerSite({ ...site, lastRunAt: ctx.now().toISOString() });
+          ctx.store.setSetting(siteFailKey(site.id), String(siteFails(ctx.store, site.id) + 1));
+        }
         continue;
       }
       const onboarded = { ...site, ats: r.ats, profile: { ...r.profile, last_verified_at: ctx.now().toISOString() } };
@@ -103,6 +128,7 @@ export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPla
       if (plan.onboardOnly !== null) continue;
     }
     if (!plan.discover) continue;
+    let fails = 0;
     try {
       // Spread wide: at most career_per_site vacancies per site per run.
       const cap = Math.min(budget, Number(ctx.store.getSetting("career_per_site") || 3) || 3);
@@ -110,8 +136,12 @@ export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPla
     } catch (e) {
       if (e instanceof RunAbortError || isStop(e)) throw e;
       ctx.log.error("discover", `${site.name}: ${errMessage(e)}`, { site_id: site.id });
+      fails = siteFails(ctx.store, site.id) + 1;
     }
-    if (!ctx.req.dryRun) ctx.store.upsertCareerSite({ ...site, lastRunAt: ctx.now().toISOString() });
+    if (!ctx.req.dryRun) {
+      ctx.store.upsertCareerSite({ ...site, lastRunAt: ctx.now().toISOString() });
+      ctx.store.setSetting(siteFailKey(site.id), String(fails));
+    }
   }
 }
 

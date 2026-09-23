@@ -91,7 +91,7 @@ by_status:{}, chat_replies, invitations, rejections, top_vacancies:[], dry_run},
 | GET | /runs/:id/dedup | | `[{vacancy:{title,company,url}, reason:"SKIP_DEDUP"\|"SKIP_ALREADY_APPLIED"\|"SKIP_EXCLUDED", detail}]` |
 
 ## Career sites
-| GET | /users/:slug/career-sites | | `[CareerSite]` |
+| GET | /users/:slug/career-sites | | `[CareerSite & {yield:{found, queued}, fails}]` (yield = last 30 days: vacancies with an application row / reached QUEUED or SENT; fails = consecutive failed visits) |
 | POST | /users/:slug/career-sites | `{adapter, base_url, config, enabled}` | `CareerSite` |
 | PUT | /career-sites/:id | same | `CareerSite` |
 | DELETE | /career-sites/:id | | `{ok}` |
@@ -149,7 +149,10 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   llm_result_chars, llm_avg_ms, runs}`, `daily:[{day, sent, skipped, failed, msgs_in, bot_out, llm_calls}]`
   (UTC days, gap-filled up to today), `funnel:[{key:found|decided|approved|sent|viewed|invited, n}]`,
   top-N `{key, n}` lists `skip_reasons, companies, sources, resumes, directions, reject_reasons,
-  work_formats, areas, llm_tasks` (breakdowns other than skip/reject/llm are over SENT applications),
+  work_formats, areas, llm_tasks` (breakdowns other than skip/reject/llm are over SENT applications;
+  `companies, sources, resumes, directions` rows also carry `hh` (of `n`, sent through hh), `resp`
+  (hh thread viewed / invited / rejected, same as the funnel) and `inv` (invited): rates are `resp/hh`,
+  `inv/hh`, career-site sends have no threads so `hh = 0` means no data),
   and `recent:[{at, kind:sent|employer|bot, title, detail}]` (last 20). Thread counts use
   `last_seen_at` in range; `needs_human_open` and resume counts are current totals; LLM calls are tied to
   the user through `runs.user_id`.
@@ -186,7 +189,11 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   - Chats: `feedback_request` (`"0"` = no feedback request after a rejection), `chat_track_since` (`YYYY-MM-DD`).
   - Career autopilot (`sgz serve`): between chat polls it runs `career` stage `rotate` chunks.
     - `career_autopilot`: `"0"` turns the chunks off.
-    - `career_sites_per_run`: sites per chunk, default 1 (keeps chat polls frequent); each chunk takes the least recently visited sites not yet visited today.
+    - `career_sites_per_run`: sites per chunk, default 1 (keeps chat polls frequent); each chunk takes the
+      highest-scoring sites not yet visited today: never-visited first, then any site unvisited for 7+ days,
+      else `queued*3 + min(found,10)*0.2 + days since last visit - 5*fails` (30-day yield, see
+      `GET /users/:slug/career-sites`). A site with 5+ consecutive failed visits waits a week.
+    - `site_fail:<site id>` (internal, written by the runner): consecutive onboarding/discovery failures, reset on a clean visit.
     - `career_per_site`: max vacancies queued per site per run, default 3.
     - Every ~4h it also runs hh stage `touch` (raise resumes in search).
 - Unknown `/api/*` path → 404 `{error:"not found"}`; malformed JSON body → 400.
