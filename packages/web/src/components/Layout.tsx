@@ -78,7 +78,7 @@ export function Layout() {
       <main className="max-w-[1280px] w-full mx-auto px-4 py-4 flex-1 min-w-0">
         <Outlet />
       </main>
-      <RunDialog open={runOpen} onClose={() => setRunOpen(false)} slug={slug} />
+      <RunDialog key={slug} open={runOpen} onClose={() => setRunOpen(false)} slug={slug} />
     </div>
   );
 }

@@ -26,7 +26,7 @@ function QueueCard({ item, slug }: { item: QueueItemDTO; slug: string }) {
   const saveLetter = () => act.mutateAsync({ id: item.id, action: "cover-letter", text: letter });
   const start = async (action: "send" | "inspect" | "retailor") => {
     try {
-      if (dirty) await saveLetter();
+      if (dirty && letter.trim()) await saveLetter();
       const r = await act.mutateAsync({ id: item.id, action });
       if (r.run_id) setRunId(r.run_id);
       toast.ok(action === "send" ? "Отправка запущена" : action === "inspect" ? "Проверка формы запущена" : "Пересобираю CV и письмо");

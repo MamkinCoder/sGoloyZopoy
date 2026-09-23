@@ -42,6 +42,10 @@ describe("career sites", () => {
     expect(upd).toMatchObject({ id: site.id, name: "Acme", ats: "greenhouse", enabled: false });
     const renamed = await (await h.json("PUT", `/api/career-sites/${site.id}`, { name: "Acme renamed" })).json();
     expect(renamed).toMatchObject({ enabled: false, name: "Acme renamed" });
+    // A PUT without config/profile keeps the learned profile; {profile} alone replaces it.
+    expect(renamed.profile).toEqual({ filters: ["go"] });
+    const hinted = await (await h.json("PUT", `/api/career-sites/${site.id}`, { profile: { filters: ["go"], apply_hints: "x" } })).json();
+    expect(hinted.profile).toEqual({ filters: ["go"], apply_hints: "x" });
     expect(await (await h.get("/api/users/yaroslav/career-sites")).json()).toHaveLength(1);
 
     const onb = await h.json("POST", `/api/users/yaroslav/career-sites/${site.id}/onboard`);
@@ -105,6 +109,9 @@ describe("system", () => {
     const put = await h.json("PUT", "/api/settings", { schedule_at: "09:30", dedup_window_days: 45 });
     expect(await put.json()).toMatchObject({ schedule_at: "09:30", dedup_window_days: "45" });
     expect(h.store.settings.get("dedup_window_days")).toBe("45");
+    // 0/1 flags arrive as numbers from older panels; stored as strings.
+    expect(await (await h.json("PUT", "/api/settings", { career_autopilot: 0 })).json()).toMatchObject({ career_autopilot: "0" });
+    expect((await h.json("PUT", "/api/settings", { career_autopilot: 2 })).status).toBe(400);
     expect((await h.json("PUT", "/api/settings", { schedule_at: "nine" })).status).toBe(400);
     expect((await h.json("PUT", "/api/settings", { schedule_at: "25:90" })).status).toBe(400);
     expect((await h.json("PUT", "/api/settings", { tz: "Invalid/Timezone" })).status).toBe(400);
