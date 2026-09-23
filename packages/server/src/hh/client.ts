@@ -33,29 +33,28 @@ export interface HHClientOptions {
   log?: (msg: string, data?: Record<string, unknown>) => void;
 }
 
-export const QuestionSchema = z.object({
-  questions: z.array(
-    z.object({
-      text: z.string(),
-      kind: z.enum(["radio", "checkbox", "text", "select", "number", "file"]),
-      options: z.array(z.string()).optional(),
-      required: z.boolean().optional(),
-    }),
-  ),
+const ExtractedQuestion = z.object({
+  text: z.string(),
+  kind: z.enum(["radio", "checkbox", "text", "select", "number", "file"]),
+  options: z.array(z.string()).optional(),
+  required: z.boolean().optional(),
 });
+
+const QuestionSchema = z.object({ questions: z.array(ExtractedQuestion) });
 
 const ChatExtractSchema = z.object({
   employer: z.string().optional(),
   vacancyId: z.string().optional(),
   messages: z.array(z.object({ author: z.enum(["employer", "bot", "me"]), text: z.string() })),
-  survey: z.array(
-    z.object({
-      text: z.string(),
-      kind: z.enum(["radio", "checkbox", "text", "select", "number", "file"]),
-      options: z.array(z.string()).optional(),
-      required: z.boolean().optional(),
-    }),
-  ),
+  survey: z.array(ExtractedQuestion),
+});
+
+const toQuestion = (q: z.infer<typeof ExtractedQuestion>, idx: number): Question => ({
+  idx,
+  text: q.text,
+  kind: q.kind,
+  required: q.required ?? true,
+  ...(q.options?.length ? { options: q.options } : {}),
 });
 
 const sleep = (ms: number): Promise<void> => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
@@ -228,11 +227,7 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
       "На странице/в форме отклика есть вопросы от работодателя. Извлеки все вопросы по порядку: текст вопроса, тип (radio - один вариант, checkbox - несколько, text - свободный текст, select - выпадающий список, number, file), варианты ответа если есть, обязателен ли вопрос.",
       QuestionSchema,
     );
-    return res.questions.map((q, idx) => {
-      const out: Question = { idx, text: q.text, kind: q.kind, required: q.required ?? true };
-      if (q.options?.length) out.options = q.options;
-      return out;
-    });
+    return res.questions.map(toQuestion);
   };
 
   const fillLetter = async (s: BrowserSession, letter: string, id: string): Promise<{ ok: boolean; via: string }> => {
@@ -603,11 +598,7 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
         ChatExtractSchema,
       );
       messages = ex.messages.map((m) => ({ hhMessageId: null, direction: m.author === "me" ? "out" : "in", author: m.author, text: m.text, isQuestion: m.author !== "me" && asksQuestion(m.text) }));
-      survey = ex.survey.map((q, idx) => {
-        const out: Question = { idx, text: q.text, kind: q.kind, required: q.required ?? true };
-        if (q.options?.length) out.options = q.options;
-        return out;
-      });
+      survey = ex.survey.map(toQuestion);
       employer = employer || ex.employer || "";
       vacancyExternalId = vacancyExternalId ?? (ex.vacancyId && /^\d+$/.test(ex.vacancyId) ? ex.vacancyId : null);
     }

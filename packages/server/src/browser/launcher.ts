@@ -13,13 +13,13 @@ import { ActionCache } from "./cache.js";
 import { installAssetBlocker } from "./cdp.js";
 import { StagehandSession } from "./session.js";
 
-export const VIEWPORT = { width: 1366, height: 850 } as const;
+const VIEWPORT = { width: 1366, height: 850 } as const;
 const DISK_CACHE_BYTES = 50_000_000;
 const DOM_SETTLE_MS = 3_000;
 
 // Not included on purpose: --no-sandbox, --single-process (RAM/security), and --disable-extensions —
 // Stagehand v4 IS a Chrome extension (Extensions.loadUnpacked over CDP), so disabling extensions kills it.
-export const CHROMIUM_ARGS: readonly string[] = [
+const CHROMIUM_ARGS: readonly string[] = [
   "--disable-gpu",
   "--disable-dev-shm-usage",
   "--no-first-run",
@@ -36,14 +36,6 @@ export const CHROMIUM_ARGS: readonly string[] = [
   `--window-size=${VIEWPORT.width},${VIEWPORT.height}`,
 ];
 
-export function chromiumArgs(opts: Pick<BrowserOptions, "userAgent">, diskCacheDir?: string): string[] {
-  return [
-    ...CHROMIUM_ARGS,
-    ...(opts.userAgent ? [`--user-agent=${opts.userAgent}`] : []),
-    ...(diskCacheDir ? [`--disk-cache-dir=${diskCacheDir}`, `--disk-cache-size=${DISK_CACHE_BYTES}`] : []),
-  ];
-}
-
 export function createLauncher(llm: StagehandLLM): BrowserLauncher {
   const generate = adaptLLM(llm);
   return {
@@ -56,7 +48,12 @@ export function createLauncher(llm: StagehandLLM): BrowserLauncher {
         executablePath: opts.executablePath,
         userDataDir: opts.userDataDir,
         headless: opts.headless,
-        args: chromiumArgs(opts, diskCacheDir),
+        args: [
+          ...CHROMIUM_ARGS,
+          ...(opts.userAgent ? [`--user-agent=${opts.userAgent}`] : []),
+          `--disk-cache-dir=${diskCacheDir}`,
+          `--disk-cache-size=${DISK_CACHE_BYTES}`,
+        ],
         viewport: { ...VIEWPORT },
       });
 

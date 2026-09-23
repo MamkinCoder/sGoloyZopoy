@@ -6,7 +6,7 @@ import type { Card, Question, ThreadState } from "@sgz/shared";
 import { HH_CHAT_ORIGIN, HH_ORIGIN } from "./urls.js";
 import { type Salary, salaryFromCompensation } from "./salary.js";
 
-export type State = Record<string, unknown>;
+type State = Record<string, unknown>;
 type Obj = Record<string, unknown>;
 
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -57,7 +57,7 @@ export const get = (obj: unknown, path: string): unknown => {
 };
 
 /** Depth-first search for objects satisfying `pred`; returns [value, path] pairs (path in get() syntax). */
-export const findObjects = (root: unknown, pred: (o: Obj, path: string) => boolean, opts?: { limit?: number; maxDepth?: number }): { value: Obj; path: string }[] => {
+const findObjects = (root: unknown, pred: (o: Obj, path: string) => boolean, opts?: { limit?: number; maxDepth?: number }): { value: Obj; path: string }[] => {
   const limit = opts?.limit ?? 50;
   const maxDepth = opts?.maxDepth ?? 14;
   const out: { value: Obj; path: string }[] = [];
@@ -97,7 +97,7 @@ const pick = (o: Obj, ...keys: string[]): unknown => {
 };
 
 /** Strips tags and collapses whitespace; keeps list items/paragraph breaks as newlines. */
-export const htmlToText = (html: string): string =>
+const htmlToText = (html: string): string =>
   decodeEntities(
     html
       .replace(/<\s*(br|\/p|\/li|\/div|\/h\d|\/tr)\s*\/?>/gi, "\n")
@@ -113,7 +113,7 @@ export const htmlToText = (html: string): string =>
 const SEARCH_PATHS = ["vacancySearchResult.vacancies", "vacancySearch.vacancies", "searchResult.vacancies", "vacancySearchResult.items", "vacancies"];
 const looksLikeVacancy = (o: Obj): boolean => ("vacancyId" in o || ("id" in o && "links" in o)) && typeof o.name === "string";
 
-export interface ParsedSearch {
+interface ParsedSearch {
   cards: Card[];
   matchedPath: string | null;
   totalPages: number | null;
@@ -174,7 +174,7 @@ export const parseSearch = (state: State | null): ParsedSearch => {
 const VACANCY_PATHS = ["vacancyView", "vacancy", "vacancyPage.vacancy", "vacancyView.vacancy"];
 const looksLikeVacancyView = (o: Obj): boolean => typeof o.name === "string" && ("vacancyId" in o || "id" in o) && ("description" in o || "hasTest" in o || "responseLetterRequired" in o);
 
-export interface ParsedVacancy {
+interface ParsedVacancy {
   externalId: string;
   url: string;
   title: string;
@@ -265,7 +265,7 @@ const looksLikeResume = (o: Obj): boolean => {
   return typeof u.hash === "string" && HASH_RE.test(u.hash) && (typeof u.title === "string" || Array.isArray(u.title));
 };
 
-export interface ParsedResume {
+interface ParsedResume {
   hhResumeId: string;
   title: string;
   url: string;
@@ -379,7 +379,7 @@ export const parseNegotiations = (state: State | null): { threads: ParsedThread[
 const CHAT_PATHS = ["chatik.messages", "chat.messages", "messages", "chatik.chat.messages", "chatik.currentChat.messages"];
 const looksLikeMessage = (o: Obj): boolean => typeof pick(o, "text", "body", "message") === "string" && ("author" in o || "isMine" in o || "participantId" in o || "sender" in o || "direction" in o);
 
-export interface ParsedChatMessage {
+interface ParsedChatMessage {
   hhMessageId: string | null;
   direction: "in" | "out";
   author: "employer" | "bot" | "me";
@@ -389,7 +389,7 @@ export interface ParsedChatMessage {
   createdAt?: string;
 }
 
-export interface ParsedChat {
+interface ParsedChat {
   messages: ParsedChatMessage[];
   survey: Question[];
   employer: string;

@@ -1,19 +1,19 @@
 // Maps Stagehand's client-LLM callback (`model: { generate }`, see ClientLLMSchema in
 // @browserbasehq/stagehand dist/index.d.mts) onto our text-only StagehandLLM contract and back.
-// Pure: no I/O, unit-tested without a browser.
+// Pure: no I/O.
 import type { ClientLLM } from "@browserbasehq/stagehand";
 import type { StagehandLLM } from "@sgz/shared";
 
-export type StagehandGenerate = ClientLLM["generate"];
-export type GenerateParams = Parameters<StagehandGenerate>[0];
-export type GenerateResult = Awaited<ReturnType<StagehandGenerate>>;
-export type LLMParams = Parameters<StagehandLLM["generate"]>[0];
-export type LLMResponse = Awaited<ReturnType<StagehandLLM["generate"]>>;
+type StagehandGenerate = ClientLLM["generate"];
+type GenerateParams = Parameters<StagehandGenerate>[0];
+type GenerateResult = Awaited<ReturnType<StagehandGenerate>>;
+type LLMParams = Parameters<StagehandLLM["generate"]>[0];
+type LLMResponse = Awaited<ReturnType<StagehandLLM["generate"]>>;
 
 type ContentPart = GenerateParams["messages"][number]["content"];
 
 /** Flattens Stagehand's content parts (text / image / tool_use / tool_result) into plain text. */
-export function partsToText(content: ContentPart): string {
+function partsToText(content: ContentPart): string {
   const parts = Array.isArray(content) ? content : [content];
   return parts
     .map((p) => {
@@ -33,7 +33,7 @@ export function partsToText(content: ContentPart): string {
     .join("\n");
 }
 
-export function toLLMParams(params: GenerateParams): LLMParams {
+function toLLMParams(params: GenerateParams): LLMParams {
   const rf = params.responseFormat;
   return {
     messages: params.messages.map((m) => ({ role: m.role, content: partsToText(m.content) })),
@@ -44,7 +44,7 @@ export function toLLMParams(params: GenerateParams): LLMParams {
 }
 
 /** Accepts raw JSON or a ```json fenced block; throws on anything else. */
-export function parseStructured(text: string): unknown {
+function parseStructured(text: string): unknown {
   const trimmed = text.trim();
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
   const body = fenced?.[1] ?? trimmed;
@@ -58,7 +58,7 @@ export function parseStructured(text: string): unknown {
   }
 }
 
-export function toStagehandResult(params: GenerateParams, res: LLMResponse): GenerateResult {
+function toStagehandResult(params: GenerateParams, res: LLMResponse): GenerateResult {
   const text = res.text ?? "";
   if (params.responseFormat?.type === "json_schema") {
     const structured = res.structured !== undefined ? res.structured : parseStructured(text);

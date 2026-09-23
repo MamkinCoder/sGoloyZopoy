@@ -7,7 +7,7 @@ export interface Salary {
   currency: string; // RUR | USD | EUR | KZT | BYR | UZS | "" when unknown
 }
 
-export const GROSS_TO_NET = 0.87;
+const GROSS_TO_NET = 0.87;
 const NBSP = /[   \s]/g;
 
 const CURRENCY_TOKENS: [RegExp, string][] = [
@@ -22,12 +22,14 @@ const CURRENCY_TOKENS: [RegExp, string][] = [
   [/£|GBP/i, "GBP"],
 ];
 
-export const normalizeCurrency = (code: string | null | undefined): string => {
-  if (!code) return "";
+const detectCurrency = (text: string): string => {
+  for (const [re, iso] of CURRENCY_TOKENS) if (re.test(text)) return iso;
+  return "";
+};
+
+const normalizeCurrency = (code: string): string => {
   const c = code.trim();
-  if (!c) return "";
-  for (const [re, iso] of CURRENCY_TOKENS) if (re.test(c)) return iso;
-  return c.toUpperCase();
+  return c && (detectCurrency(c) || c.toUpperCase());
 };
 
 const toNumber = (s: string): number => Number(s.replace(NBSP, "").replace(/,/g, "."));
@@ -67,11 +69,6 @@ export const parseSalary = (raw: string | null | undefined): Salary => {
   return { from: Math.round(from * factor), to: Math.round(to * factor), currency };
 };
 
-const detectCurrency = (text: string): string => {
-  for (const [re, iso] of CURRENCY_TOKENS) if (re.test(text)) return iso;
-  return "";
-};
-
 /** hh InitialState `compensation`: {from, to, currencyCode, gross} (names unverified; several tried). */
 export const salaryFromCompensation = (c: unknown): Salary => {
   const empty: Salary = { from: 0, to: 0, currency: "" };
@@ -85,12 +82,4 @@ export const salaryFromCompensation = (c: unknown): Salary => {
   const factor = gross ? GROSS_TO_NET : 1;
   const currency = normalizeCurrency(String(o.currencyCode ?? o.currency ?? o.code ?? ""));
   return { from: Math.round(from * factor), to: Math.round(to * factor), currency };
-};
-
-export const formatSalary = (s: Salary): string => {
-  if (!s.from && !s.to) return "";
-  const cur = s.currency || "";
-  if (s.from && s.to) return `${s.from}-${s.to} ${cur}`.trim();
-  if (s.from) return `от ${s.from} ${cur}`.trim();
-  return `до ${s.to} ${cur}`.trim();
 };

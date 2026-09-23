@@ -13,7 +13,7 @@ export interface LoginOptions extends BrowserOptions {
   log?: (msg: string) => void;
 }
 
-export const isHHCookie = (c: Cookie): boolean => /(^|\.)hh\.ru$/i.test(c.domain.replace(/^\./, ""));
+const isHHCookie = (c: Cookie): boolean => /(^|\.)hh\.ru$/i.test(c.domain.replace(/^\./, ""));
 
 export const loginInteractive = async (launcher: BrowserLauncher, opts: LoginOptions, cookiesOut: string): Promise<Cookie[]> => {
   const pollMs = opts.pollMs ?? 2000;
