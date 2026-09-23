@@ -167,6 +167,7 @@ export const SETTING_KEYS = [
   "company_limit_persona_lock",
   "feedback_request",
   "chat_track_since",
+  "chat_followup_days",
   "career_per_site",
   "career_sites_per_run",
   "career_autopilot",
@@ -189,6 +190,15 @@ export const SettingsSchema = z
     career_autopilot: boolish, // "0" = no automatic career gathering between chat polls
     career_per_site: numish, // max vacancies queued per career site per run (spread wide)
     chat_track_since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD"), // chats modified since this day are tracked
+    chat_followup_days: numish, // one polite follow-up after this many days of employer silence; 0 = off
   })
   .partial()
   .refine((o) => Object.keys(o).length > 0, "no settings given");
+
+export const InterviewSchema = z.object({
+  interview_at: z
+    .string()
+    .refine((v) => !Number.isNaN(Date.parse(v)), "expected an ISO date-time")
+    .transform((v) => new Date(v).toISOString())
+    .nullable(),
+});

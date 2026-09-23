@@ -9,6 +9,7 @@ import { telegramFetch } from "../notify/proxy.js";
 import { startTelegramCallbacks } from "../notify/telegram.js";
 import { parseSkillCallback, resolveSkill } from "../runner/skills.js";
 import { careerRotation } from "../runner/career.js";
+import { remindInterviews } from "../runner/interview.js";
 import { nextJob } from "../scheduler/autopilot.js";
 import { errMessage } from "../runner/util.js";
 import type { RunRequest } from "@sgz/shared";
@@ -65,6 +66,7 @@ export async function serve(): Promise<void> {
   // Every minute: one job when the runner is idle (see scheduler/autopilot.ts for the order).
   // Career chunks keep a single-run runner from starving the chat bot for hours.
   const tick = () => {
+    void remindInterviews(app.store, app.notifier, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: interview reminders: ${errMessage(e)}`));
     if (app.runner.active()) return;
     const job = nextJob({
       now: Date.now(),

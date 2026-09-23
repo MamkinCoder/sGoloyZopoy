@@ -1,10 +1,11 @@
-import type { ChatThreadDTO } from "@sgz/shared";
-import { useEffect, useRef } from "react";
+import type { ChatThreadDTO, InterviewPrep } from "@sgz/shared";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useChatMessages, useChats } from "../api/hooks";
+import { useChatMessages, useChats, useSetInterview } from "../api/hooks";
 import { ThreadStateBadge } from "../components/StatusBadge";
 import { Empty, Spinner } from "../components/Ui";
 import { fmtDateTime, fmtRel } from "../lib/format";
+import { toast } from "../lib/toast";
 
 export function ChatsPage() {
   const { slug = "", id } = useParams();
@@ -47,6 +48,7 @@ export function ChatsPage() {
                 <div className="flex items-center gap-1.5 mt-1 text-[11px]">
                   <ThreadStateBadge state={t.state} />
                   {t.isBot && <span className="chip py-0">бот</span>}
+                  {upcoming(t.interviewAt) && <span className="chip py-0" title="Собеседование">📅 {fmtDateTime(t.interviewAt)}</span>}
                   <span className="faint ml-auto">{fmtRel(t.lastSeenAt)}</span>
                 </div>
                 {t.last_message && <div className="faint text-[12px] truncate mt-0.5">{t.last_message}</div>}
@@ -100,6 +102,8 @@ function ThreadView({ thread, threadId, slug }: { thread: ChatThreadDTO | null; 
           Нужен человек: бот не стал отвечать сам. Ответьте на hh.ru вручную.
         </div>
       )}
+      {thread && <InterviewBar thread={thread} slug={slug} />}
+      {thread?.prep && <PrepCard prep={thread.prep} />}
       <div className="p-3 max-h-[70vh] overflow-y-auto grid gap-2">
         {msgs.isLoading && <Spinner />}
         {msgs.data?.length === 0 && <Empty>Сообщений нет</Empty>}
@@ -125,5 +129,65 @@ function ThreadView({ thread, threadId, slug }: { thread: ChatThreadDTO | null; 
         <div ref={bottom} />
       </div>
     </div>
+  );
+}
+
+const upcoming = (iso: string | null | undefined): iso is string => !!iso && Date.parse(iso) > Date.now();
+
+/** ISO -> value for <input type="datetime-local"> in the browser's timezone. */
+function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+/** Interview time: captured by the bot from the chat, or set by hand for a time agreed elsewhere. */
+function InterviewBar({ thread, slug }: { thread: ChatThreadDTO; slug: string }) {
+  const save = useSetInterview(slug);
+  const [value, setValue] = useState(toLocalInput(thread.interviewAt));
+  useEffect(() => setValue(toLocalInput(thread.interviewAt)), [thread.interviewAt]);
+  const put = (at: string | null) =>
+    save.mutate({ id: thread.id, at }, { onSuccess: () => toast.ok(at ? "Время собеседования сохранено, напомню за 2 часа" : "Время собеседования убрано") });
+  return (
+    <div className="px-3 py-2 border-b border-[var(--border)] flex flex-wrap items-center gap-2 text-[13px]">
+      <span className="muted">📅 Собеседование</span>
+      <input className="input w-auto" type="datetime-local" value={value} onChange={(e) => setValue(e.target.value)} aria-label="Время собеседования" />
+      <button
+        type="button"
+        className="btn btn-sm"
+        disabled={save.isPending || !value || value === toLocalInput(thread.interviewAt)}
+        onClick={() => put(new Date(value).toISOString())}
+      >
+        Сохранить
+      </button>
+      {thread.interviewAt && (
+        <button type="button" className="btn btn-sm" disabled={save.isPending} onClick={() => put(null)}>
+          Убрать
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PrepCard({ prep }: { prep: InterviewPrep }) {
+  const block = (title: string, xs: string[]) =>
+    xs.length > 0 && (
+      <div>
+        <div className="font-semibold mt-2">{title}</div>
+        <ul className="list-disc pl-5">
+          {xs.map((x, i) => (
+            <li key={i}>{x}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  return (
+    <details className="px-3 py-2 border-b border-[var(--border)] text-[13px]">
+      <summary className="cursor-pointer font-semibold">📝 Подготовка к собеседованию</summary>
+      {block("Вероятные вопросы", prep.questions)}
+      {block("Что рассказать", prep.stories.map((s) => `${s.skill}: ${s.prompt}`))}
+      {block("Пробелы и как ответить", prep.gaps)}
+      {block("Спросить у них", prep.ask_them)}
+    </details>
   );
 }

@@ -16,6 +16,7 @@ import {
   type Config,
   type GeneratedResume,
   type HHResume,
+  type InterviewPrep,
   type NewApplication,
   type NewChatMessage,
   type NewRunEvent,
@@ -219,6 +220,15 @@ export class FakeStore implements Store {
   }
   markAnswered(ids: number[]) {
     for (const m of this.messages) if (ids.includes(m.id)) m.answered = true;
+  }
+  setChatInterview(threadId: number, atISO: string | null) {
+    for (const t of this.threads) if (t.id === threadId) t.interviewAt = atISO;
+  }
+  setChatPrep(threadId: number, prep: InterviewPrep) {
+    for (const t of this.threads) if (t.id === threadId) t.prep = prep;
+  }
+  claimInterviewReminders(): ChatThread[] {
+    return [];
   }
 
   insertGeneratedResume(g: Omit<GeneratedResume, "id" | "createdAt">): GeneratedResume {

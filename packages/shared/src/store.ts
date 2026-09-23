@@ -7,6 +7,7 @@ import type {
   ChatThread,
   GeneratedResume,
   HHResume,
+  InterviewPrep,
   Profile,
   Question,
   QuestionnaireAnswer,
@@ -121,6 +122,11 @@ export interface Store {
   insertChatMessages(threadId: number, msgs: NewChatMessage[]): number;
   listChatMessages(threadId: number): ChatMessage[];
   markAnswered(messageIds: number[]): void;
+  /** Sets (null clears) the interview time; a changed time re-arms its reminder. */
+  setChatInterview(threadId: number, atISO: string | null): void;
+  setChatPrep(threadId: number, prep: InterviewPrep): void;
+  /** Threads with an interview in (now, until] not reminded yet; marks them reminded. */
+  claimInterviewReminders(nowISO: string, untilISO: string): ChatThread[];
 
   // generated resumes
   insertGeneratedResume(g: Omit<GeneratedResume, "id" | "createdAt">): GeneratedResume;

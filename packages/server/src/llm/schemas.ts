@@ -30,6 +30,14 @@ export const ChatReplySchema = z.object({
   needs_human: z.boolean().default(false),
   reason: z.string().default(""),
   unknown_skills: z.array(z.string()).default([]),
+  interview_at: z.string().nullable().default(null),
+});
+
+export const InterviewPrepSchema = z.object({
+  questions: z.array(z.string()).default([]),
+  stories: z.array(z.object({ skill: z.string(), prompt: z.string() })).default([]),
+  gaps: z.array(z.string()).default([]),
+  ask_them: z.array(z.string()).default([]),
 });
 
 export const ResumeSummarySchema = z.object({

@@ -17,6 +17,17 @@ describe("chats", () => {
     const msgs = await (await h.get(`/api/chats/${t.id}/messages`)).json();
     expect(msgs).toHaveLength(3);
   });
+
+  it("PUT interview sets, normalizes and clears the time; 404 for another user's thread", async () => {
+    const h = await harness();
+    const u = h.store.getUserBySlug("yaroslav")!;
+    const t = h.store.upsertChatThread({ userId: u.id, hhNegotiationId: "n1", isBot: false, vacancyId: null, employer: "Co", state: "invited", lastSeenAt: "" });
+    const set = await h.json("PUT", `/api/users/yaroslav/chats/${t.id}/interview`, { interview_at: "2026-09-25T14:00:00+03:00" });
+    expect(await set.json()).toMatchObject({ id: t.id, interviewAt: "2026-09-25T11:00:00.000Z" });
+    expect((await h.json("PUT", `/api/users/yaroslav/chats/${t.id}/interview`, { interview_at: "завтра" })).status).toBe(400);
+    expect(await (await h.json("PUT", `/api/users/yaroslav/chats/${t.id}/interview`, { interview_at: null })).json()).toMatchObject({ interviewAt: null });
+    expect((await h.json("PUT", "/api/users/yaroslav/chats/999/interview", { interview_at: null })).status).toBe(404);
+  });
 });
 
 describe("career sites", () => {
@@ -80,6 +91,7 @@ describe("system", () => {
       company_limit_persona_lock: "1",
       feedback_request: "1",
       chat_track_since: "2026-09-23",
+      chat_followup_days: "7",
       career_per_site: "3",
       career_sites_per_run: "1",
       career_autopilot: "1",

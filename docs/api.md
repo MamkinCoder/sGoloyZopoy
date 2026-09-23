@@ -74,6 +74,7 @@ application row replaces the filtered one as the vacancy's newest, so it drops o
 ## Chats
 | GET | /users/:slug/chats | | `[{id, hh_negotiation_id, vacancy:{id,title,company,url}|null, employer, state, last_seen_at, unanswered:int}]` |
 | GET | /chats/:id/messages | | `[ChatMessage]` |
+| PUT | /users/:slug/chats/:id/interview | `{interview_at: ISO string|null}` | `ChatThread` |
 
 ## Runs
 | GET | /runs?user=slug&limit=50 | | `[Run]` |
@@ -162,7 +163,13 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   comes from settings key `resume_capacity:<slug>` (JSON `{created, max}`) or is null.
 - `POST .../resumes/sync|expand|touch` answer **202** `{run_id}`; run stages are `pool-sync`,
   `pool-expand` (`max` → `limit`), `touch`. 409 when a run is already active.
-- `GET /users/:slug/chats?state=` optional filter; each thread also has `last_message`.
+- `GET /users/:slug/chats?state=` optional filter; each thread also has `last_message`, `interviewAt`
+  (UTC ISO or null: captured by the chat bot from `answer_chat.interview_at`, or set by hand) and `prep`
+  (`{questions, stories:[{skill,prompt}], gaps, ask_them}` or null: the interview brief generated on an invitation
+  and also sent to Telegram).
+- `PUT /users/:slug/chats/:id/interview`: any `Date`-parseable string, stored as UTC ISO; `null` clears it; 400 on
+  an unparseable date, 404 when the thread is not this user's. A changed time re-arms the reminder: `sgz serve`
+  checks every minute and sends one Telegram ping ~2h before the interview.
 - `POST /runs` answers **202** `{run_id}` (docs table says `{run_id}`; status is 202, not 200).
   `user` must exist or be `"all"` (404 otherwise); `source` ∉ hh|career|all|pool → 400.
 - `GET /runs?user=all` is the same as omitting `user`. `limit` is capped at 500.
@@ -183,7 +190,9 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   Other keys → 400.
   - Schedule: `schedule_at` (`"HH:MM"` or `""`), `schedule_jitter_min`, `tz`, `dedup_window_days`.
   - Company limiter: `company_limit_max`, `company_limit_window_days`, `company_limit_persona_lock`.
-  - Chats: `feedback_request` (`"0"` = no feedback request after a rejection), `chat_track_since` (`YYYY-MM-DD`).
+  - Chats: `feedback_request` (`"0"` = no feedback request after a rejection), `chat_track_since` (`YYYY-MM-DD`),
+    `chat_followup_days` (default `"7"`, `"0"` = off): one fixed polite follow-up in a new/viewed chat after that
+    many days of employer silence, at most 3 chats checked per poll.
   - Career autopilot (`sgz serve`): between chat polls it runs `career` stage `rotate` chunks.
     - `career_autopilot`: `"0"` turns the chunks off.
     - `career_sites_per_run`: sites per chunk, default 1 (keeps chat polls frequent); each chunk takes the least recently visited sites not yet visited today.

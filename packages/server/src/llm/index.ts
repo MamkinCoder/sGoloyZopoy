@@ -8,6 +8,7 @@ import type {
   DecideInput,
   Decision,
   HHResume,
+  InterviewPrep,
   LLMClient,
   PoolVariant,
   Profile,
@@ -27,6 +28,7 @@ import {
   ChatReplySchema,
   CoverLetterSchema,
   DecisionsSchema,
+  InterviewPrepSchema,
   PoolVariantsSchema,
   ResumeSummarySchema,
   TailorSchema,
@@ -169,16 +171,18 @@ function makeClient(ctx: Ctx): LLMClient {
       // A reply may go out together with needs_human (e.g. «да, пришлите тестовое» + ping the human);
       // unknown skills hold the reply until the human answers in Telegram.
       const unknown_skills = r.unknown_skills.map((s) => s.trim()).filter(Boolean).slice(0, 5);
+      const at = r.interview_at ? new Date(r.interview_at) : null;
+      const interview_at = at && !Number.isNaN(at.getTime()) ? at.toISOString() : null;
       if (choices.length && !unknown_skills.length) {
         // Quick-reply buttons: only an exact option is accepted by the employer's chat bot.
         const norm = (s: string) => s.trim().toLowerCase();
         const picked = choices.find((c) => norm(c) === norm(r.reply)) ?? choices.find((c) => norm(r.reply).includes(norm(c)) || norm(c).includes(norm(r.reply)));
         return picked
-          ? { reply: picked, needs_human: r.needs_human, reason: enforceMax(r.reason, LIMITS.reason), unknown_skills }
-          : { reply: "", needs_human: true, reason: enforceMax(`не выбрал вариант из кнопок: ${r.reply}`, LIMITS.reason), unknown_skills };
+          ? { reply: picked, needs_human: r.needs_human, reason: enforceMax(r.reason, LIMITS.reason), unknown_skills, interview_at }
+          : { reply: "", needs_human: true, reason: enforceMax(`не выбрал вариант из кнопок: ${r.reply}`, LIMITS.reason), unknown_skills, interview_at };
       }
       const reply = unknown_skills.length ? "" : sanitizeLetter(r.reply, blockedTech(profile), LIMITS.chatReply);
-      return { reply, needs_human: r.needs_human, reason: enforceMax(r.reason, LIMITS.reason), unknown_skills };
+      return { reply, needs_human: r.needs_human, reason: enforceMax(r.reason, LIMITS.reason), unknown_skills, interview_at };
     },
 
     async summarizeResume(resumeText: string): Promise<ResumeSummary> {
@@ -221,6 +225,28 @@ function makeClient(ctx: Ctx): LLMClient {
       });
       const r = await call(ctx, { task: "cover_letter_career", tier: "write", prompt, schema: CoverLetterSchema, jsonSchema: toJsonSchema(CoverLetterSchema) });
       return sanitizeLetter(r.cover_letter, blockedTech(profile), LIMITS.coverLetterCareer);
+    },
+
+    async interviewPrep(profile: Profile, vacancy: Vacancy, invitation: string): Promise<InterviewPrep> {
+      const prompt = renderPrompt("interview_prep", {
+        never_claim: neverClaimList(profile),
+        profile: profileForLLM(profile),
+        vacancy: renderVacancy(vacancy, 3000),
+        invitation: invitation.slice(0, 1500) || "(без текста)",
+      });
+      const r = await call(ctx, { task: "interview_prep", tier: "write", prompt, schema: InterviewPrepSchema, jsonSchema: toJsonSchema(InterviewPrepSchema) });
+      // Read by the seeker only, still no invented experience: stories lose never-claim sentences.
+      const line = (t: string) => enforceMax(normalizeProse(t), 300);
+      const lines = (xs: string[], n: number) => xs.map(line).filter(Boolean).slice(0, n);
+      return {
+        questions: lines(r.questions, 7),
+        stories: r.stories
+          .map((st) => ({ skill: line(st.skill), prompt: stripNeverClaimSentences(line(st.prompt), blockedTech(profile)) }))
+          .filter((st) => st.skill && st.prompt)
+          .slice(0, 3),
+        gaps: lines(r.gaps, 6),
+        ask_them: lines(r.ask_them, 3),
+      };
     },
 
     async json<T>(task: string, tier: Tier, prompt: string, schemaDescription: string): Promise<T> {

@@ -7,6 +7,7 @@ import type {
   DecideInput,
   Decision,
   HHResume,
+  InterviewPrep,
   LLMClient,
   PoolVariant,
   Profile,
@@ -81,6 +82,13 @@ export class FakeLLM implements LLMClient {
   onCoverLetterCareer: (profile: Profile, cv: CV, vacancy: Vacancy) => string = (_p, _cv, v) =>
     `Здравствуйте. Откликаюсь на позицию ${v.title} в ${v.company}. Опыт совпадает по стеку. Готов обсудить детали.`;
 
+  onInterviewPrep: (profile: Profile, vacancy: Vacancy, invitation: string) => InterviewPrep = (_p, v) => ({
+    questions: [`Расскажите про опыт с задачами из вакансии ${v.title}`],
+    stories: [{ skill: "Go", prompt: "fake: история из опыта" }],
+    gaps: [],
+    ask_them: ["Как устроена команда?"],
+  });
+
   onJson: (task: string, tier: Tier, prompt: string, schemaDescription: string) => unknown = () => ({});
 
   onStagehand: StagehandLLM["generate"] = async (p) => {
@@ -119,6 +127,10 @@ export class FakeLLM implements LLMClient {
   async coverLetterCareer(profile: Profile, cv: CV, vacancy: Vacancy): Promise<string> {
     this.record("coverLetterCareer", [profile, cv, vacancy]);
     return this.onCoverLetterCareer(profile, cv, vacancy);
+  }
+  async interviewPrep(profile: Profile, vacancy: Vacancy, invitation: string): Promise<InterviewPrep> {
+    this.record("interviewPrep", [profile, vacancy, invitation]);
+    return this.onInterviewPrep(profile, vacancy, invitation);
   }
   async json<T>(task: string, tier: Tier, prompt: string, schemaDescription: string): Promise<T> {
     this.record("json", [task, tier, prompt, schemaDescription]);
