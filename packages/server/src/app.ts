@@ -7,6 +7,7 @@ import { createLauncher, loadCookies } from "./browser/index.js";
 import { createCareerAgent } from "./career/agent.js";
 import { ensureDirs, loadConfig } from "./config/index.js";
 import { openStore, seedDefaultUsers } from "./db/index.js";
+import { createHabrClient } from "./habr/client.js";
 import { createHHClient } from "./hh/index.js";
 import { createLLM } from "./llm/index.js";
 import { telegramFetch } from "./notify/proxy.js";
@@ -76,10 +77,11 @@ export async function createAppContext(opts: { withScheduler?: boolean } = {}): 
   const llm = createLLM(cfg, store);
   const launcher = createLauncher(llm.stagehand());
   const hh = createHHClient({ snapshotDir: paths.snapshots(cfg) });
+  const habr = createHabrClient();
   const career = createCareerAgent(llm);
 
   const notifier = createTelegram(cfg.tgBotToken, cfg.tgChatId, cfg.panelUrl, { tz: cfg.tz, warn, fetch: telegramFetch() });
-  const runner = createRunner({ cfg, store, launcher, hh, career, llm, notifier, resume, loadCookies });
+  const runner = createRunner({ cfg, store, launcher, hh, habr, career, llm, notifier, resume, loadCookies });
   const scheduler =
     opts.withScheduler && cfg.scheduleAt && cfg.runnerEnabled ? createScheduler(runner, { at: cfg.scheduleAt, tz: cfg.tz, jitterMin: cfg.scheduleJitterMin, log: warn }) : null;
 

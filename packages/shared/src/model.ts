@@ -1,7 +1,7 @@
 // Shared domain types. FROZEN contract: every package codes against these.
 // No runtime deps here — plain TypeScript types + a few pure helpers.
 
-export type Source = "hh" | string; // "hh" or a career-site slug
+export type Source = "hh" | "habr" | string; // "hh", "habr" (Habr Career auto-apply) or a career-site slug
 
 export const Status = {
   SENT: "SENT",
@@ -317,7 +317,7 @@ export interface SiteProfile {
 
 export type RunTrigger = "schedule" | "manual" | "cli";
 export type RunStatus = "queued" | "running" | "done" | "failed" | "stopped";
-export type RunSource = "hh" | "career" | "all" | "pool";
+export type RunSource = "hh" | "habr" | "career" | "all" | "pool";
 
 export interface RunStats {
   found: number;

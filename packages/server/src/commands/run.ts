@@ -1,9 +1,9 @@
-// sgz run --user u|all --source hh|career|all|pool [--stage s] [--dry-run] [--limit N]
+// sgz run --user u|all --source hh|habr|career|all|pool [--stage s] [--dry-run] [--limit N]
 import { parseArgs } from "node:util";
 import type { RunSource } from "@sgz/shared";
 import { createAppContext } from "../app.js";
 
-const SOURCES: RunSource[] = ["hh", "career", "all", "pool"];
+const SOURCES: RunSource[] = ["hh", "habr", "career", "all", "pool"];
 
 export function parseRunArgs(args: string[]) {
   const { values } = parseArgs({

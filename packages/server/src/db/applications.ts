@@ -52,9 +52,9 @@ const mapRow = (r: Row): ApplicationRow => ({
   resumeTitle: str(r.resume_title) || (r.gen_tex_path ? basename(str(r.gen_tex_path), ".tex") : ""),
 });
 
-/** "hh" and site slugs match exactly; "career" means every non-hh source. */
+/** "hh", "habr" and site slugs match exactly; "career" means every career-site source (not hh, not habr). */
 function sourceClause(alias: string, source: string): { sql: string; params: Param[] } {
-  if (source === "career") return { sql: `${alias}.source <> 'hh'`, params: [] };
+  if (source === "career") return { sql: `${alias}.source NOT IN ('hh','habr')`, params: [] };
   return { sql: `${alias}.source = ?`, params: [source] };
 }
 

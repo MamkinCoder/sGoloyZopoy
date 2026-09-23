@@ -8,6 +8,8 @@ import { RunStoppedError, errMessage, sleep as defaultSleep } from "./util.js";
 export interface BrowserHandle {
   /** Launch (if needed) with the user's persistent profile and verify the hh login. */
   openHH(user: User): Promise<BrowserSession>;
+  /** Same browser and profile, Habr Career login verified (habr cookies injected when needed). */
+  openHabr(user: User): Promise<BrowserSession>;
   /** Launch (if needed) without any login check (career sites). */
   open(user: User): Promise<BrowserSession>;
   close(): Promise<void>;
@@ -46,6 +48,7 @@ export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: 
 
   let session: BrowserSession | null = null;
   let sessionSlug = "";
+  let habrChecked: BrowserSession | null = null;
 
   const launch = async (user: User): Promise<BrowserSession> => {
     checkAbort();
@@ -95,6 +98,25 @@ export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: 
       }
       if (!ok) throw new RunAbortError(Status.FAILED_LOGIN_EXPIRED, `hh.ru session for ${user.slug} is not authenticated; run \`sgz hh-login --user ${user.slug}\``);
       log.info("session", "hh login ok");
+      return s;
+    },
+    async openHabr(user) {
+      const s = await launch(user);
+      if (habrChecked === s) return s;
+      const habr = deps.habr;
+      if (!habr) throw new Error("habr client is not configured");
+      let ok = await habr.checkLogin(s);
+      if (!ok) {
+        const cookies = await loadCookies(paths.habrCookies(deps.cfg, user.slug));
+        if (cookies && cookies.length) {
+          log.info("session", `habr: not logged in, trying ${cookies.length} saved cookies`);
+          await s.setCookies(cookies);
+          ok = await habr.checkLogin(s);
+        }
+      }
+      if (!ok) throw new RunAbortError(Status.FAILED_LOGIN_EXPIRED, `Habr Career session for ${user.slug} is not authenticated; run \`sgz habr-login --user ${user.slug}\``);
+      habrChecked = s;
+      log.info("session", "habr login ok");
       return s;
     },
     close,

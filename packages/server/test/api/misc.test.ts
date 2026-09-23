@@ -129,6 +129,7 @@ describe("system", () => {
       career_autopilot: "1",
       run_max_min: "0",
       digest_at: "20:00",
+      habr_daily_limit: "20",
       queue_tg_cards: "1",
       viewers_enabled: "1",
       retro_day: "sun",

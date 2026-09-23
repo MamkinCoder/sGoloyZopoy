@@ -16,7 +16,7 @@ import { idParam, toApplicationDTO, userOr404 } from "./common.js";
  *  career sites, so match by prefix on the directory listing rather than by glob. */
 function findSnapshot(deps: ApiDeps, row: ApplicationRow): string | null {
   // A career send/inspect runs later than discovery, in its own run dir, as applyViaAgent's `career-<slug>-<id>`.
-  if (row.vacancy.source !== "hh") {
+  if (row.vacancy.source !== "hh" && row.vacancy.source !== "habr") {
     const root = paths.snapshots(deps.cfg);
     const name = `career-${row.vacancy.source}-${row.vacancy.externalId.replace(/[^a-z0-9]+/gi, "_").slice(0, 60)}`.replace(/[^a-z0-9._-]/gi, "_");
     const hit = existsSync(root)
@@ -140,7 +140,7 @@ export function applicationRoutes(deps: ApiDeps): Hono {
       status: a.status,
       reason: a.reasonDetail || a.llmDecision?.reason || "",
       vacancy: { id: v.id, title: v.title, company: v.company, url: v.url, source: v.source },
-      site: v.source === "hh" ? null : siteOf(u.id, v.source),
+      site: v.source === "hh" || v.source === "habr" ? null : siteOf(u.id, v.source),
       ...fitOf(a.llmDecision),
     }));
     return c.json(items);
@@ -192,12 +192,12 @@ export function applicationRoutes(deps: ApiDeps): Hono {
     return c.json({ ok: true });
   });
 
-  // «Всё равно откликнуться»: hh applies right away, career sites go through tailoring into the queue.
+  // «Всё равно откликнуться»: hh and Habr apply right away, career sites go through tailoring into the queue.
   r.post("/applications/:id/force", async (c) => {
     const id = idParam(c);
     const row = rowOr404(id);
     if (!FILTERED_STATUSES.includes(row.application.status)) throw badRequest(`application is ${row.application.status}, not filtered`);
-    return c.json({ run_id: await startFor(row, row.vacancy.source === "hh" ? "hh" : "career", `force:${id}`) }, 202);
+    return c.json({ run_id: await startFor(row, row.vacancy.source === "hh" || row.vacancy.source === "habr" ? row.vacancy.source : "career", `force:${id}`) }, 202);
   });
 
   return r;

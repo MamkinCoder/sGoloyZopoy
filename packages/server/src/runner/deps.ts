@@ -11,6 +11,7 @@ import type {
   Notifier,
   Store,
 } from "@sgz/shared";
+import type { HabrClient } from "../habr/client.js";
 
 /** Resume toolchain (workstream E) as the runner uses it. app.ts adapts the real exports. */
 export interface ResumeDeps {
@@ -27,6 +28,8 @@ export interface RunnerDeps {
   store: Store;
   launcher: BrowserLauncher;
   hh: HHClient;
+  /** Habr Career auto-apply; null/absent = the habr source is skipped. */
+  habr?: HabrClient | null;
   career: CareerAgent | null;
   llm: LLMClient;
   notifier: Notifier;

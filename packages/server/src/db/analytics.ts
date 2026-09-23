@@ -178,7 +178,7 @@ export function userAnalytics(s: Sql, userId: number, sinceISO: string | null): 
       since,
     ),
     sources: sentBy(
-      "CASE WHEN v.source = 'hh' THEN 'hh' ELSE 'career · ' || COALESCE(cs.ats, v.source) END",
+      "CASE WHEN v.source IN ('hh','habr') THEN v.source ELSE 'career · ' || COALESCE(cs.ats, v.source) END",
       "LEFT JOIN career_sites cs ON cs.user_id = a.user_id AND cs.slug = v.source",
       true,
     ),

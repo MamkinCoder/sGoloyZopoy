@@ -51,6 +51,7 @@ export function systemRoutes(deps: ApiDeps): Hono {
     digest_at: "20:00",
     queue_tg_cards: "1",
     viewers_enabled: "1",
+    habr_daily_limit: "20",
     retro_day: "sun",
     retro_at: "19:00",
   };

@@ -100,7 +100,7 @@ export const UserPatchSchema = z.object({
 
 export const StartRunSchema = z.object({
   user: z.string().min(1),
-  source: z.enum(["hh", "career", "all", "pool"]),
+  source: z.enum(["hh", "habr", "career", "all", "pool"]),
   dry_run: z.boolean().optional(),
   limit: z.number().int().min(0).optional(),
   stage: z.string().optional(),
@@ -175,6 +175,7 @@ export const SETTING_KEYS = [
   "digest_at",
   "queue_tg_cards",
   "viewers_enabled",
+  "habr_daily_limit",
   "retro_day",
   "retro_at",
 ] as const;
@@ -195,6 +196,7 @@ export const SettingsSchema = z
     career_sites_per_run: numish, // sites per autopilot chunk (between chat polls)
     career_autopilot: boolish, // "0" = no automatic career gathering between chat polls
     career_per_aggregator: numish, // same for job boards (Habr Career), default 8
+    habr_daily_limit: numish, // Habr Career auto-applies per day, default 20
     career_per_site: numish, // max vacancies queued per career site per run (spread wide)
     run_max_min: numish, // watchdog: max minutes per run, "0" = built-in caps (20 chats/touch, 30 career chunk, 150 full)
     chat_track_since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD"), // chats modified since this day are tracked

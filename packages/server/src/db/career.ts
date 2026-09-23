@@ -58,7 +58,7 @@ export function careerRepo(s: Sql): CareerRepo {
         `SELECT v.source AS slug, COUNT(DISTINCT a.vacancy_id) AS found,
            COUNT(DISTINCT CASE WHEN a.status IN ('QUEUED','SENT') THEN a.vacancy_id END) AS queued
          FROM applications a JOIN vacancies v ON v.id = a.vacancy_id
-         WHERE a.user_id = ? AND a.created_at >= ? AND v.source <> 'hh' GROUP BY v.source`,
+         WHERE a.user_id = ? AND a.created_at >= ? AND v.source NOT IN ('hh','habr') GROUP BY v.source`,
         userId,
         sinceISO,
       ))

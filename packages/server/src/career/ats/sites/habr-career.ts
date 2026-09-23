@@ -10,6 +10,9 @@
 // JSON-LD block (title, HTML description, hiringOrganization, jobLocation, jobLocationType, baseSalary);
 // there is no JSON detail endpoint (/api/frontend/vacancies/<id> -> 404).
 // Apply requires the seeker's Habr account -> no apply(); the review-queue card links the vacancy page.
+// SUPERSEDED by the "habr" source (src/habr, src/runner/habr.ts: logged-in auto-apply). Keep this site
+// DISABLED once that source runs, or the same vacancies land in the review queue as well. Its listing URL is
+// reused by the habr client.
 // 403/429 on the listing stops listing cleanly with what was collected so far (no bypass).
 import type { Discovered } from "@sgz/shared";
 import { hostOf, httpFetch, getText, stripHtml } from "../../http.js";

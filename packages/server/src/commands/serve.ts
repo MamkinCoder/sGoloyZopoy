@@ -67,7 +67,8 @@ export async function serve(): Promise<void> {
     if (!(chatPollMin > 0) || app.runner.active()) return;
     lastChatPoll = Date.now();
     // The interval counts from the poll's end: a slow poll must still leave room for career chunks.
-    void start({ userSlug: "all", source: "hh", stage: "chats" }).then(async (id) => {
+    // source "all" + stage chats = hh chats, then Habr Career conversations (career has no chats stage).
+    void start({ userSlug: "all", source: "all", stage: "chats" }).then(async (id) => {
       if (typeof id === "number") await app.runner.wait(id).catch(() => undefined);
       lastChatPoll = Date.now();
     });
