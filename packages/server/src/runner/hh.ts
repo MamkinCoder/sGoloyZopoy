@@ -6,8 +6,9 @@ import type { RunContext } from "./context.js";
 import { classify, companyLimitSettings, createRunCompanyTracker, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
 import { expandPool, syncPool, syncIsStale } from "./pool.js";
 import { askSkill, skillCallback, threadWaiting } from "./skills.js";
+import { followupChats, sendInterviewPrep } from "./interview.js";
 import { mapNegotiationState } from "../hh/state.js";
-import { dayInTz } from "../scheduler/tz.js";
+import { dayInTz, shortStamp } from "../scheduler/tz.js";
 import type { UserRun } from "./user.js";
 import { errMessage, parseSalary } from "./util.js";
 
@@ -417,6 +418,7 @@ async function chatsStage(ctx: RunContext, u: UserRun): Promise<void> {
         const vtitle = vacancy?.title ? ` (${vacancy.title})` : "";
         const said = [...detail.messages].reverse().find((m) => m.direction === "in" && m.text.trim())?.text.trim().slice(0, 800);
         await ctx.deps.notifier.alert(`🎉 Приглашение: ${t.employer}${vtitle}`, `${user.name}: работодатель пригласил на следующий этап.\n${said ? `\n«${said}»\n\n` : ""}${t.chatUrl}`).catch(() => undefined);
+        await sendInterviewPrep(ctx, u, thread.id, t.employer, vacancy, said ?? "");
       }
       if (detail.thread.state === "rejected" && prev?.state !== "rejected") {
         stats.rejection();
@@ -488,11 +490,16 @@ async function chatsStage(ctx: RunContext, u: UserRun): Promise<void> {
         continue;
       }
       const text = reply.reply.trim();
+      const interviewAt = reply.interview_at && Date.parse(reply.interview_at) > ctx.now().getTime() ? reply.interview_at : null;
+      if (interviewAt && !ctx.req.dryRun) ctx.store.setChatInterview(thread.id, interviewAt);
+      const when = interviewAt ? `📅 Собеседование: ${shortStamp(new Date(interviewAt), ctx.cfg.tz)}\n\n` : "";
       if (reply.needs_human) {
         // A reply can still go out (e.g. «да, пришлите тестовое»); the human is pinged either way.
         ctx.store.upsertChatThread({ ...thread, state: "needs_human" });
         ctx.log.warn("chats", `${t.employer}: needs human (${reply.reason})`, { thread_id: thread.id });
-        await ctx.deps.notifier.alert(`Чат требует внимания: ${t.employer}`, `${user.name}: ${last.text}\n\n${text ? `Ответ бота: ${text}\n\n` : ""}${reply.reason}\n${t.chatUrl}`);
+        await ctx.deps.notifier.alert(`Чат требует внимания: ${t.employer}`, `${user.name}: ${last.text}\n\n${when}${text ? `Ответ бота: ${text}\n\n` : ""}${reply.reason}\n${t.chatUrl}`);
+      } else if (interviewAt && interviewAt !== thread.interviewAt) {
+        await ctx.deps.notifier.alert(`📅 Собеседование: ${t.employer}`, `${user.name}: ${when}${t.chatUrl}`).catch(() => undefined);
       }
       if (!text) {
         if (!ctx.req.dryRun) ctx.store.markAnswered(unansweredQuestionIds(history));
@@ -512,6 +519,7 @@ async function chatsStage(ctx: RunContext, u: UserRun): Promise<void> {
       ctx.log.error("chats", `${t.employer}: ${errMessage(e)}`, { negotiation: t.negotiationId });
     }
   }
+  replies += await followupChats(ctx, u, s, all.filter((t) => !threads.includes(t)), known);
   ctx.log.info("chats", `done: ${replies} replies`, { replies });
 }
 

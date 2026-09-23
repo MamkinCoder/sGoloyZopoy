@@ -11,6 +11,7 @@ import { parseSkillCallback, resolveSkill } from "../runner/skills.js";
 import { handleQueueTap, parseQueueCallback, startPendingSend } from "../runner/queue-cards.js";
 import { buildDigest, digestDue, queueList } from "../notify/digest.js";
 import { careerRotation } from "../runner/career.js";
+import { remindInterviews } from "../runner/interview.js";
 import { nextJob } from "../scheduler/autopilot.js";
 import { checkHeartbeat } from "../scheduler/health.js";
 import { errMessage } from "../runner/util.js";
@@ -69,6 +70,7 @@ export async function serve(): Promise<void> {
   // Career chunks keep a single-run runner from starving the chat bot for hours.
   let lastHealth = Date.now();
   const tick = async () => {
+    void remindInterviews(app.store, app.notifier, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: interview reminders: ${errMessage(e)}`));
     if (Date.now() - lastHealth >= 30 * 60_000) {
       lastHealth = Date.now();
       void checkHeartbeat(app.store, app.notifier, app.startedAt, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: heartbeat: ${errMessage(e)}`));

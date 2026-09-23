@@ -188,6 +188,15 @@ export function useResumeAction(slug: string) {
 export const useChats = (slug: string) =>
   useQuery({ queryKey: keys.chats(slug), queryFn: () => api<ChatThreadDTO[]>(`/users/${slug}/chats`), refetchInterval: 60_000 });
 
+export function useSetInterview(slug: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, at }: { id: number; at: string | null }) =>
+      api<ChatThreadDTO>(`/users/${slug}/chats/${id}/interview`, { method: "PUT", body: { interview_at: at } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.chats(slug) }),
+  });
+}
+
 export const useChatMessages = (id: number | null) =>
   useQuery({
     queryKey: keys.chatMessages(id ?? 0),

@@ -32,6 +32,7 @@ const outputs: Record<string, unknown> = {
   propose_pool_variants: [],
   tailor_cv: { cv, changes: [] },
   cover_letter_career: { cover_letter: "Здравствуйте. Готов обсудить детали." },
+  interview_prep: { questions: [], stories: [], gaps: [], ask_them: [] },
 };
 
 describe("prompt templates", () => {
@@ -49,6 +50,8 @@ describe("prompt templates", () => {
   it("propose_pool_variants", async () => check("propose_pool_variants", await capture("propose_pool_variants", (l) => l.proposePoolVariants(profile, resumes, 2))));
   it("tailor_cv", async () => check("tailor_cv", await capture("tailor_cv", (l) => l.tailorCV(profile, cv, vacancies[1]!))));
   it("cover_letter_career", async () => check("cover_letter_career", await capture("cover_letter_career", (l) => l.coverLetterCareer(profile, cv, vacancies[0]!))));
+
+  it("interview_prep", async () => check("interview_prep", await capture("interview_prep", (l) => l.interviewPrep(profile, vacancies[0]!, "Приглашаем на техническое собеседование в четверг."))));
 
   it("site_onboard and pick_element render via renderPrompt", () => {
     check("site_onboard", renderPrompt("site_onboard", { url: "https://example.com/careers", hints: "", page_text: "Careers at Example. Open roles: Backend Engineer (Go). Powered by Lever. jobs.lever.co/example" }), false);

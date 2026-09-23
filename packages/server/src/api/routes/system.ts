@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { HealthDTO } from "@sgz/shared";
 import type { ApiDeps } from "../deps.js";
 import { careerRotation } from "../../runner/career.js";
+import { FOLLOWUP_DAYS_DEFAULT } from "../../runner/interview.js";
 import { parseBody, SETTING_KEYS, SettingsSchema } from "../validate.js";
 
 const DEDUP_WINDOW_DAYS_DEFAULT = "60";
@@ -46,6 +47,7 @@ export function systemRoutes(deps: ApiDeps): Hono {
     company_limit_persona_lock: COMPANY_LIMIT_PERSONA_LOCK_DEFAULT,
     feedback_request: "1",
     chat_track_since: "2026-09-23",
+    chat_followup_days: FOLLOWUP_DAYS_DEFAULT,
     career_per_site: "3",
     career_sites_per_run: "1",
     career_autopilot: "1",

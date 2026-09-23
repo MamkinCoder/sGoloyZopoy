@@ -74,12 +74,12 @@ describe("migrations", () => {
         .prepare("SELECT name FROM schema_migrations ORDER BY name")
         .all()
         .map((r) => r.name);
-      expect(names).toEqual(["001_init.sql", "002_hh_resumes_created_at.sql", "003_company_limiter.sql"]);
+      expect(names).toEqual(["001_init.sql", "002_hh_resumes_created_at.sql", "003_company_limiter.sql", "004c_chat_interview.sql"]);
       expect(a.db.prepare("PRAGMA journal_mode").get()?.journal_mode).toBe("wal");
       a.upsertUser(userFixture("x"));
       a.close();
       const b = openStore(path);
-      expect(b.db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get()?.n).toBe(3);
+      expect(b.db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get()?.n).toBe(names.length);
       expect(b.listUsers()).toHaveLength(1);
       b.close();
     } finally {
@@ -350,6 +350,31 @@ describe("hh resumes", () => {
 });
 
 describe("chats", () => {
+  it("interview time: reminder claimed once, re-armed only by a new time; prep round-trips", () => {
+    const u = store.upsertUser(userFixture("a"));
+    const t = store.upsertChatThread({ userId: u.id, hhNegotiationId: "n1", isBot: false, vacancyId: null, employer: "Acme", state: "invited", lastSeenAt: "" });
+    expect(t.interviewAt).toBeNull();
+    const now = "2026-09-25T10:00:00.000Z";
+    const until = "2026-09-25T12:00:00.000Z";
+    store.setChatInterview(t.id, "2026-09-25T11:00:00.000Z");
+    expect(store.claimInterviewReminders("2026-09-25T08:00:00.000Z", "2026-09-25T10:00:00.000Z")).toHaveLength(0); // not yet
+    expect(store.claimInterviewReminders(now, until).map((x) => x.id)).toEqual([t.id]);
+    expect(store.claimInterviewReminders(now, until)).toHaveLength(0); // once
+    store.setChatInterview(t.id, "2026-09-25T11:00:00.000Z"); // same time from a later reply
+    expect(store.claimInterviewReminders(now, until)).toHaveLength(0);
+    store.setChatInterview(t.id, "2026-09-25T11:30:00.000Z"); // moved
+    expect(store.claimInterviewReminders(now, until)).toHaveLength(1);
+    // a regular upsert (chat poll) keeps the captured time
+    const again = store.upsertChatThread({ ...t, state: "needs_human" });
+    expect(again.interviewAt).toBe("2026-09-25T11:30:00.000Z");
+    store.setChatInterview(t.id, null);
+    expect(store.listChatThreads(u.id)[0]!.interviewAt).toBeNull();
+
+    const prep = { questions: ["Q"], stories: [{ skill: "Go", prompt: "p" }], gaps: [], ask_them: ["A"] };
+    store.setChatPrep(t.id, prep);
+    expect(store.listChatThreads(u.id)[0]!.prep).toEqual(prep);
+  });
+
   it("thread upsert and message dedup via hh id and via text", () => {
     const u = store.upsertUser(userFixture("a"));
     const t = store.upsertChatThread({ userId: u.id, hhNegotiationId: "n1", isBot: true, vacancyId: null, employer: "Acme", state: "new", lastSeenAt: "" });

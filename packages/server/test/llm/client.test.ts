@@ -100,11 +100,29 @@ describe("createLLM", () => {
     const dir = stubDir();
     const llm = createLLM(cfg, null, { env: stubEnv(dir, "valid", { reply: "Да — готов к удалёнке. Kubernetes использовал. Пишите t.me/x.", needs_human: false, reason: "факты из профиля" }) });
     const r = await llm.answerChat(profile, vacancies[0]!, history);
-    expect(r).toEqual({ reply: "Да - готов к удалёнке.", needs_human: false, reason: "факты из профиля", unknown_skills: [] });
+    expect(r).toEqual({ reply: "Да - готов к удалёнке.", needs_human: false, reason: "факты из профиля", unknown_skills: [], interview_at: null });
     const llm2 = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "Да, пришлите тестовое.", needs_human: true, reason: "тестовое" }) });
     expect((await llm2.answerChat(profile, null, history)).reply).toBe("Да, пришлите тестовое.");
     const llm3 = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "Да, работал.", needs_human: false, reason: "x", unknown_skills: ["Scala"] }) });
     expect(await llm3.answerChat(profile, null, history)).toMatchObject({ reply: "", unknown_skills: ["Scala"] });
+    const llm4 = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "Да, буду.", needs_human: true, reason: "время", interview_at: "2026-09-25T14:00:00+03:00" }) });
+    expect((await llm4.answerChat(profile, null, history)).interview_at).toBe("2026-09-25T11:00:00.000Z");
+    const llm5 = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "Да.", needs_human: true, reason: "x", interview_at: "завтра" }) });
+    expect((await llm5.answerChat(profile, null, history)).interview_at).toBeNull();
+  });
+
+  it("interviewPrep: caps lists, strips never-claim claims from stories", async () => {
+    const llm = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", {
+      questions: ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8"],
+      stories: [{ skill: "Go", prompt: "Сервис биллинга на Go. Kubernetes настраивал сам." }, { skill: "", prompt: "пусто" }],
+      gaps: ["Kafka: в продакшене не использовал, есть Redis"],
+      ask_them: ["a", "b", "c", "d"],
+    }) });
+    const p = await llm.interviewPrep(profile, vacancies[0]!, "Приглашаем на собеседование");
+    expect(p.questions).toHaveLength(7);
+    expect(p.ask_them).toHaveLength(3);
+    expect(p.stories).toEqual([{ skill: "Go", prompt: "Сервис биллинга на Go." }]);
+    expect(p.gaps).toHaveLength(1);
   });
 
   it("answerChat with quick-reply buttons returns exactly one option", async () => {

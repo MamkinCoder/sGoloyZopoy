@@ -206,6 +206,18 @@ export interface ChatThread {
   employer: string;
   state: ThreadState;
   lastSeenAt: string;
+  /** Interview time agreed in the chat (UTC ISO); upsertChatThread ignores it, see Store.setChatInterview. */
+  interviewAt?: string | null;
+  /** Prep brief generated on an invitation; upsertChatThread ignores it, see Store.setChatPrep. */
+  prep?: InterviewPrep | null;
+}
+
+/** Interview prep brief for the seeker (Telegram + panel), grounded in the profile and the vacancy. */
+export interface InterviewPrep {
+  questions: string[];
+  stories: { skill: string; prompt: string }[];
+  gaps: string[];
+  ask_them: string[];
 }
 
 export interface ChatMessage {
