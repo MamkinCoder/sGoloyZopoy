@@ -64,6 +64,10 @@ export const SEL = {
     unread: '[data-qa="negotiations-item-unread"]',
     chatLink: 'a[href*="chatik.hh.ru"], a[data-qa="negotiations-item-chat"]',
   },
+  // «Кто смотрел резюме»: employer links are read inside these; `main` when the data-qa are gone.
+  resumeViews: {
+    scope: '[data-qa^="resume-history"], [data-qa^="resume-view"], main',
+  },
   chat: {
     input: ['[data-qa="chatik-message-input"] textarea', '[data-qa="chatik-new-message-text"]', 'textarea[data-qa="chat-input"]', '[contenteditable="true"][data-qa*="message"]'],
     send: ['[data-qa="chatik-do-send-message"]', '[data-qa="chatik-send-message-button"]', 'button[data-qa="chat-send"]'],

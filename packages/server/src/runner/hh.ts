@@ -7,6 +7,7 @@ import { classify, companyLimitSettings, createRunCompanyTracker, dedupWindowDay
 import { expandPool, syncPool, syncIsStale } from "./pool.js";
 import { askSkill, skillCallback, threadWaiting } from "./skills.js";
 import { followupChats, sendInterviewPrep } from "./interview.js";
+import { viewersStage } from "./viewers.js";
 import { mapNegotiationState } from "../hh/state.js";
 import { dayInTz, shortStamp } from "../scheduler/tz.js";
 import type { UserRun } from "./user.js";
@@ -26,7 +27,7 @@ export interface HHPlan {
 
 const MAX_PAGES_PER_QUERY = 5;
 
-interface Candidate {
+export interface Candidate {
   card: Card;
   vacancy: Vacancy;
   companyKey: string;
@@ -55,6 +56,9 @@ export async function runHHUser(ctx: RunContext, u: UserRun, plan: HHPlan): Prom
   // across several search pages or dry-run "would-be" sends.
   const companyTracker = createRunCompanyTracker();
   if (plan.force !== null) return forceApply(ctx, u, plan.force, pool);
+
+  // Warm leads first: employers who opened a resume get the budget before cold search does.
+  if (plan.apply && budget > 0) budget = await viewersStage(ctx, u, pool, budget, companyTracker);
 
   let approved: Approved[] = [];
   if (plan.search) {
@@ -132,7 +136,7 @@ interface Fetched {
   lockedDirection: string;
 }
 
-async function fetchStage(ctx: RunContext, u: UserRun, candidates: Candidate[], budget: number): Promise<Fetched[]> {
+export async function fetchStage(ctx: RunContext, u: UserRun, candidates: Candidate[], budget: number): Promise<Fetched[]> {
   const { user, stats } = u;
   const s = await ctx.browser.openHH(user);
   const slice = candidates.slice(0, Math.max(budget * 2, 10));
@@ -167,7 +171,7 @@ async function fetchStage(ctx: RunContext, u: UserRun, candidates: Candidate[], 
   return out;
 }
 
-async function decideStage(ctx: RunContext, u: UserRun, fetched: Fetched[], pool: HHResume[]): Promise<Approved[]> {
+export async function decideStage(ctx: RunContext, u: UserRun, fetched: Fetched[], pool: HHResume[]): Promise<Approved[]> {
   const { user, profile, stats } = u;
   if (!fetched.length) {
     ctx.log.info("decide", "nothing to decide");
@@ -199,7 +203,7 @@ async function decideStage(ctx: RunContext, u: UserRun, fetched: Fetched[], pool
   return approved;
 }
 
-async function applyStage(ctx: RunContext, u: UserRun, approved: Approved[], pool: HHResume[], budget: number, companyTracker: RunCompanyTracker): Promise<number> {
+export async function applyStage(ctx: RunContext, u: UserRun, approved: Approved[], pool: HHResume[], budget: number, companyTracker: RunCompanyTracker): Promise<number> {
   const { user, profile, stats } = u;
   ctx.log.info("apply", `applying to up to ${Math.min(budget, approved.length)} of ${approved.length}`, { budget });
   const company = companyLimitSettings(ctx.store);
@@ -570,7 +574,7 @@ async function touchStage(ctx: RunContext, u: UserRun, pool: HHResume[]): Promis
 /** hh professional roles searched (IT category): developer, DevOps, QA, data scientist, systems engineer.
  * Without it short queries like «go» return couriers and marketers that only burn fetch + decide time.
  * ponytail: one list for every user; move to profile when a non-developer user appears. */
-const IT_ROLES = ["96", "160", "124", "165", "114"];
+export const IT_ROLES = ["96", "160", "124", "165", "114"];
 
 const CHAT_TRACK_SINCE_DEFAULT = "2026-09-23";
 

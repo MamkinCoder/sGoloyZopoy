@@ -50,6 +50,7 @@ export function systemRoutes(deps: ApiDeps): Hono {
     run_max_min: "0",
     digest_at: "20:00",
     queue_tg_cards: "1",
+    viewers_enabled: "1",
   };
   const readSettings = (): Record<string, string> =>
     Object.fromEntries(SETTING_KEYS.map((k) => [k, store.getSetting(k) ?? defaults[k]]));

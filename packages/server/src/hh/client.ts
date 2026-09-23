@@ -22,7 +22,7 @@ import {
 import { SEL, TEXT } from "./selectors.js";
 import { asksQuestion, extractInitialState, get, parseChat, parseChatik, parseNegotiations, parseResumes, parseSearch, parseVacancy, type ParsedThread } from "./state.js";
 import { parseSalary } from "./salary.js";
-import { HH_ORIGIN, isCaptchaUrl, isLoginUrl, negotiationsUrl, resumeUrl, resumesUrl, searchUrl, vacancyIdFrom, vacancyUrl } from "./urls.js";
+import { HH_ORIGIN, isCaptchaUrl, isLoginUrl, negotiationsUrl, resumeUrl, resumeViewsUrl, resumesUrl, searchUrl, vacancyIdFrom, vacancyUrl } from "./urls.js";
 
 export interface HHClientOptions {
   snapshotDir: string;
@@ -673,5 +673,26 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     }
   };
 
-  return { checkLogin, assertNotBlocked, search, fetchVacancy, apply, syncResumes, resumeText, resumeCapacity, duplicateResume, editResume, publishResume, touchResume, listThreads, readThread, sendMessage, submitSurvey };
+  // ------------------------------------------------------------ resume viewers
+
+  // Every numeric /employer/<id> link in the views list; hidden companies have no link and are skipped.
+  const DOM_VIEWERS_JS = `(() => {
+    const out = []; const seen = new Set();
+    const scopes = Array.from(document.querySelectorAll(${JSON.stringify(SEL.resumeViews.scope)}));
+    for (const root of scopes.length ? scopes : [document]) for (const a of root.querySelectorAll('a[href*="/employer/"]')) {
+      const m = /\\/employer\\/(\\d+)/.exec(a.href); const name = (a.textContent || "").trim();
+      if (!m || !name || seen.has(m[1])) continue;
+      seen.add(m[1]); out.push({ employerId: m[1], employer: name });
+    }
+    return out;
+  })()`;
+
+  const listResumeViewers: HHClient["listResumeViewers"] = async (s, resumeHash) => {
+    await open(s, resumeViewsUrl(resumeHash), true);
+    const rows = await s.evaluate<{ employerId: string; employer: string }[]>(DOM_VIEWERS_JS).catch(() => []);
+    log("hh.viewers", { resume: resumeHash, count: Array.isArray(rows) ? rows.length : 0 });
+    return Array.isArray(rows) ? rows : [];
+  };
+
+  return { checkLogin, assertNotBlocked, search, fetchVacancy, apply, syncResumes, resumeText, resumeCapacity, duplicateResume, editResume, publishResume, touchResume, listThreads, readThread, sendMessage, submitSurvey, listResumeViewers };
 };

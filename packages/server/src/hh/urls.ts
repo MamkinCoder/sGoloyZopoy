@@ -12,6 +12,7 @@ export const searchUrl = (p: SearchParams): string => {
   q.set("page", String(p.page ?? 0));
   if (p.area) q.set("area", p.area);
   for (const r of p.roles ?? []) q.append("professional_role", r);
+  if (p.employerId) q.set("employer_id", p.employerId);
   return `${HH_ORIGIN}/search/vacancy?${q.toString()}`;
 };
 
@@ -38,6 +39,7 @@ export const negotiationsUrl = (opts?: { onlyUnread?: boolean; page?: number }):
 export const resumesUrl = (): string => `${HH_ORIGIN}/applicant/resumes`;
 export const loginUrl = (): string => `${HH_ORIGIN}/account/login?role=applicant`;
 export const resumeUrl = (hash: string): string => `${HH_ORIGIN}/resume/${hash}`;
+export const resumeViewsUrl = (hash: string): string => `${HH_ORIGIN}/applicant/resumes/views?resume=${encodeURIComponent(hash)}`;
 
 export const isLoginUrl = (url: string): boolean => /\/account\/login|\/login(\?|$)/.test(url);
 export const isCaptchaUrl = (url: string): boolean => /captcha/i.test(url);

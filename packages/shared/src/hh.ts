@@ -12,6 +12,8 @@ export interface SearchParams {
   area?: string;
   /** hh professional_role ids (api.hh.ru/professional_roles); empty = any role. */
   roles?: string[];
+  /** hh employer id: only this employer's vacancies. */
+  employerId?: string;
 }
 
 export interface Card {
@@ -83,6 +85,8 @@ export interface HHClient {
   readThread(s: BrowserSession, chatUrl: string): Promise<ThreadDetail>;
   sendMessage(s: BrowserSession, chatUrl: string, text: string): Promise<void>;
   submitSurvey(s: BrowserSession, chatUrl: string, answers: Answer[]): Promise<void>;
+  /** Employers who opened this resume («Кто смотрел резюме», /applicant/resumes/views); [] when the page lists none. */
+  listResumeViewers(s: BrowserSession, resumeHash: string): Promise<{ employerId: string; employer: string }[]>;
 }
 
 /** Records every step of the real flows (html+png+url+state.json) for offline debugging. */

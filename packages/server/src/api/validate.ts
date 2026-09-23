@@ -174,6 +174,7 @@ export const SETTING_KEYS = [
   "run_max_min",
   "digest_at",
   "queue_tg_cards",
+  "viewers_enabled",
 ] as const;
 const numish = z.union([z.number().int().min(0), z.string().regex(/^\d+$/)]).transform(String);
 const boolish = z.union([z.literal("0"), z.literal("1"), z.literal(0), z.literal(1)]).transform(String);
@@ -198,6 +199,7 @@ export const SettingsSchema = z
     digest_at: z.union([z.literal(""), z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM")]), // evening Telegram digest, "" = off
     queue_tg_cards: boolish, // "0" = no Telegram card per new review-queue item
     chat_followup_days: numish, // one polite follow-up after this many days of employer silence; 0 = off
+    viewers_enabled: boolish, // "0" = no warm-lead applies to employers who opened a resume
   })
   .partial()
   .refine((o) => Object.keys(o).length > 0, "no settings given");

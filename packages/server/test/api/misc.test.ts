@@ -105,6 +105,7 @@ describe("system", () => {
       run_max_min: "0",
       digest_at: "20:00",
       queue_tg_cards: "1",
+      viewers_enabled: "1",
     });
     const put = await h.json("PUT", "/api/settings", { schedule_at: "09:30", dedup_window_days: 45 });
     expect(await put.json()).toMatchObject({ schedule_at: "09:30", dedup_window_days: "45" });

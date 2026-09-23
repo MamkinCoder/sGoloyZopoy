@@ -198,6 +198,12 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   - Chats: `feedback_request` (`"0"` = no feedback request after a rejection), `chat_track_since` (`YYYY-MM-DD`),
     `chat_followup_days` (default `"7"`, `"0"` = off): one fixed polite follow-up in a new/viewed chat after that
     many days of employer silence, at most 3 chats checked per poll.
+  - Resume viewers: `viewers_enabled` (default `"1"`, `"0"` = off). Every hh run with the apply stage first reads
+    «Кто смотрел резюме» (`/applicant/resumes/views?resume=<hash>`) for each pool resume, at most every 6h. A new
+    viewer the seeker never applied to gets one employer-only search (`employer_id`, IT roles, 30 days); its vacancies
+    go through the usual filters, decide and apply (company limiter, daily budget), at most 3 sends per run, before
+    cold search. One Telegram alert «Кто смотрел резюме» lists the outcome per employer. Internal keys:
+    `viewers_checked_at:<user id>`, `viewer_seen:<user id>:<company key>`.
   - Career autopilot (`sgz serve`): between chat polls it runs `career` stage `rotate` chunks.
     - `career_autopilot`: `"0"` turns the chunks off.
     - `career_sites_per_run`: sites per chunk, default 1 (keeps chat polls frequent); each chunk takes the
