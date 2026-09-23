@@ -42,7 +42,7 @@ interface Approved {
 export async function runHHUser(ctx: RunContext, u: UserRun, plan: HHPlan): Promise<void> {
   const { user, profile, stats } = u;
   const day = dayInTz(ctx.now(), ctx.cfg.tz);
-  let budget = dailyBudget(ctx.store, user, ["hh"], user.dailyLimitHH, ctx.req.limit, day);
+  let budget = dailyBudget(ctx.store, user, ["hh"], user.dailyLimitHH, ctx.req.limit, ctx.now(), ctx.cfg.tz);
   ctx.log.info("session", `hh: user ${user.slug}, budget ${budget}, dry_run=${ctx.req.dryRun}`, { budget, day });
 
   let pool = ctx.store.listHHResumes(user.id);

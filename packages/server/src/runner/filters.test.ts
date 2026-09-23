@@ -142,12 +142,14 @@ describe("RunCompanyTracker", () => {
 
 describe("recordSkip", () => {
   it("does not repeat the same skip for a vacancy seen again", () => {
-    const rows: { status: string; reasonDetail: string }[] = [];
-    const store = { lastApplication: () => rows.at(-1) ?? null, insertApplication: (a: never) => rows.push(a) } as unknown as Store;
+    const rows: { id: number; status: string; reasonDetail: string }[] = [];
+    const touched: number[] = [];
+    const store = { lastApplication: () => rows.at(-1) ?? null, insertApplication: (a: never) => rows.push({ ...(a as object), id: rows.length + 1 } as never), touchApplication: (id: number) => touched.push(id) } as unknown as Store;
     const skip = (detail: string) => ({ userId: 1, vacancyId: 2, status: Status.SKIP_FILTER, reasonDetail: detail }) as never;
     recordSkip(store, skip("exclude word: lead"));
     recordSkip(store, skip("exclude word: lead"));
     expect(rows).toHaveLength(1);
+    expect(touched).toEqual([1]); // re-seen today: stays on the Filtered page
     recordSkip(store, skip("exclude word: лид"));
     expect(rows).toHaveLength(2);
   });

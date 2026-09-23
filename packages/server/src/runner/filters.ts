@@ -106,10 +106,11 @@ export function titleScore(title: string, profile: Pick<Profile, "hh_queries" | 
   return score;
 }
 
-/** Records a filter skip unless the vacancy's newest row already says the same: re-seen listings don't pile up rows. */
+/** Records a filter skip unless the vacancy's newest row already says the same: re-seen listings don't pile up
+ * rows, the existing one is touched instead so the Filtered page (last N days) keeps showing it. */
 export function recordSkip(store: Store, a: NewApplication): void {
   const last = store.lastApplication(a.userId, a.vacancyId);
-  if (last && last.status === a.status && last.reasonDetail === a.reasonDetail) return;
+  if (last && last.status === a.status && last.reasonDetail === a.reasonDetail) return store.touchApplication(last.id);
   store.insertApplication(a);
 }
 

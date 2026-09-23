@@ -108,11 +108,14 @@ export interface Store {
   lastApplication(userId: number, vacancyId: number): Application | null;
   insertApplication(a: NewApplication): Application;
   getApplication(id: number): ApplicationRow | null;
-  updateApplicationStatus(id: number, status: Status, detail: string): void;
+  /** With `from`, only a row still in that status changes (a human may have skipped / marked it meanwhile). True when a row changed. */
+  updateApplicationStatus(id: number, status: Status, detail: string, from?: Status): boolean;
   updateApplicationCoverLetter(id: number, text: string): void;
+  /** created_at = now: a filter skip seen again stays on the Filtered page (listed by the newest row's created_at). */
+  touchApplication(id: number): void;
   listApplications(f: ApplicationFilter): { items: ApplicationRow[]; total: number };
-  /** SENT + QUEUED + SKIP_MANUAL created that day: for career sites the daily limit counts queued items. */
-  countSentToday(userId: number, source: Source, dayISO: string): number;
+  /** SENT + QUEUED + SKIP_MANUAL created in [sinceISO, untilISO) (the local day's UTC bounds): for career sites the daily limit counts queued items. */
+  countSentToday(userId: number, source: Source, sinceISO: string, untilISO: string): number;
   insertQuestionnaireAnswers(applicationId: number, qs: Question[], as: Answer[]): void;
   listQuestionnaireAnswers(applicationId: number): QuestionnaireAnswer[];
   deleteQuestionnaireAnswers(applicationId: number): void;

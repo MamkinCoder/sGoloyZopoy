@@ -82,6 +82,18 @@ describe("review queue", () => {
   });
 });
 
+describe("manual-only boards", () => {
+  it("send is refused for Habr Career (the human applies with their own login); inspect / mark-sent still work", async () => {
+    const h = await harness();
+    const { u, mk } = seed(h);
+    h.store.upsertCareerSite({ userId: u.id, slug: "habr", name: "Habr Career", baseUrl: "https://career.habr.com", ats: "site:habr-career", profile: {}, enabled: true, lastRunAt: null } as never);
+    const q = mk("habr", "QUEUED");
+    expect((await h.json("POST", `/api/applications/${q.id}/send`)).status).toBe(400);
+    expect(h.runner.started).toHaveLength(0);
+    expect((await h.json("POST", `/api/applications/${q.id}/mark-sent`)).status).toBe(200);
+  });
+});
+
 describe("filtered list + force", () => {
   it("lists the newest filter skip per vacancy, excluding dry-run, already-applied and queued", async () => {
     const h = await harness();

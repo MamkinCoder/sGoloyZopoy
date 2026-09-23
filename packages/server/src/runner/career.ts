@@ -5,6 +5,7 @@ import { mkdirSync } from "node:fs";
 import { paths, RunAbortError, Status, type ATSKind, type Answer, type CV, type CareerSite, type Decision, type Discovered, type Question, type Vacancy } from "@sgz/shared";
 import { dailyBudget } from "./budget.js";
 import { atsClientFor } from "../career/ats/index.js";
+import { manualApplyOnly } from "../career/agent.js";
 import type { RunContext } from "./context.js";
 import { classify, titleScore, companyLimitSettings, createRunCompanyTracker, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
 import { isStop, newApp } from "./hh.js";
@@ -56,7 +57,7 @@ export function rotationScore(site: Pick<CareerSite, "lastRunAt">, y: { found: n
 export function careerRotation(store: RunContext["store"], user: UserRun["user"], tz: string, now: Date): { sites: CareerSite[]; budget: number } {
   const day = dayInTz(now, tz);
   const enabled = store.listCareerSites(user.id, true).filter((s) => s.ats !== "hh_hosted");
-  const budget = dailyBudget(store, user, enabled.map((s) => s.slug), user.dailyLimitCareer, 0, day);
+  const budget = dailyBudget(store, user, ["career"], user.dailyLimitCareer, 0, now, tz);
   const yields = store.careerSiteYield(user.id, isoDaysAgo(now, YIELD_DAYS));
   const sites = enabled
     .filter((s) => !s.lastRunAt || dayInTz(new Date(s.lastRunAt), tz) !== day)
@@ -65,6 +66,13 @@ export function careerRotation(store: RunContext["store"], user: UserRun["user"]
     .sort((a, b) => b.score - a.score || (a.s.lastRunAt ?? "").localeCompare(b.s.lastRunAt ?? ""))
     .map((x) => x.s);
   return { sites, budget };
+}
+
+/** A non-negative number setting; "0" is honoured, missing / empty / invalid -> def. */
+function settingNum(ctx: RunContext, key: string, def: number): number {
+  const raw = ctx.store.getSetting(key);
+  const n = Number(raw);
+  return raw !== null && raw.trim() !== "" && Number.isFinite(n) && n >= 0 ? n : def;
 }
 
 export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPlan): Promise<void> {
@@ -85,15 +93,15 @@ export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPla
   if (plan.rotate) {
     const r = careerRotation(ctx.store, user, ctx.cfg.tz, ctx.now());
     if (r.budget <= 0) return ctx.log.info("discover", "career: daily limit reached, nothing to rotate");
-    const n = Number(ctx.store.getSetting("career_sites_per_run") || 1) || 1;
+    const n = Math.max(1, settingNum(ctx, "career_sites_per_run", 1)); // 0 would start empty chunks every minute
     sites = r.sites.slice(0, n);
   }
   if (!sites.length) {
     ctx.log.info("discover", plan.onboardOnly !== null ? `career site ${plan.onboardOnly} not found or disabled` : "no enabled career sites");
     return;
   }
-  const day = dayInTz(ctx.now(), ctx.cfg.tz);
-  let budget = dailyBudget(ctx.store, user, sites.map((s) => s.slug), user.dailyLimitCareer, ctx.req.limit, day);
+  // The daily limit is per day across all career sites, whichever ones this chunk visits.
+  let budget = dailyBudget(ctx.store, user, ["career"], user.dailyLimitCareer, ctx.req.limit, ctx.now(), ctx.cfg.tz);
   ctx.log.info("discover", `career: ${sites.length} sites, budget ${budget}`, { budget });
 
   // Shared across sites so the company quota/persona lock applies across e.g. Ozon's own careers
@@ -105,6 +113,13 @@ export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPla
     if (site.ats === "hh_hosted") {
       ctx.log.info("discover", `${site.name}: hh-hosted, handled by the hh pipeline`);
       continue;
+    }
+    // Visited (and failed, until it finishes cleanly) before the work starts: a visit that hangs into the
+    // watchdog or aborts on low memory still moves the rotation on instead of retrying this site all day.
+    const markVisit = plan.discover && !ctx.req.dryRun;
+    if (markVisit) {
+      site = ctx.store.upsertCareerSite({ ...site, lastRunAt: ctx.now().toISOString() });
+      ctx.store.setSetting(siteFailKey(site.id), String(siteFails(ctx.store, site.id) + 1));
     }
     // CSV imports carry profile.notes, so "never onboarded" = no listing_url yet.
     const needsOnboard = plan.onboardOnly !== null || !site.profile?.listing_url;
@@ -118,7 +133,7 @@ export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPla
         if (e instanceof RunAbortError || isStop(e)) throw e;
         ctx.log.error(`onboard:${site.id}`, `${site.name}: onboarding failed: ${errMessage(e)}`, { site_id: site.id });
         // Mark it visited so the autopilot's rotation moves on instead of retrying it every chunk.
-        if (!ctx.req.dryRun) {
+        if (!ctx.req.dryRun && !markVisit) {
           ctx.store.upsertCareerSite({ ...site, lastRunAt: ctx.now().toISOString() });
           ctx.store.setSetting(siteFailKey(site.id), String(siteFails(ctx.store, site.id) + 1));
         }
@@ -132,21 +147,16 @@ export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPla
       if (plan.onboardOnly !== null) continue;
     }
     if (!plan.discover) continue;
-    let fails = 0;
     try {
       // Spread wide: at most career_per_site vacancies per site per run.
       // Job boards (Habr Career) list hundreds of employers: a bigger share than one company's site.
-      const perSite = atsClientFor(site.ats as ATSKind)?.aggregator ? Number(ctx.store.getSetting("career_per_aggregator") || 8) || 8 : Number(ctx.store.getSetting("career_per_site") || 3) || 3;
+      const perSite = atsClientFor(site.ats as ATSKind)?.aggregator ? settingNum(ctx, "career_per_aggregator", 8) : settingNum(ctx, "career_per_site", 3);
       const cap = Math.min(budget, perSite);
       budget -= cap - (await runSite(ctx, u, site, cap, plan.apply, companyTracker));
+      if (markVisit) ctx.store.setSetting(siteFailKey(site.id), "0");
     } catch (e) {
       if (e instanceof RunAbortError || isStop(e)) throw e;
       ctx.log.error("discover", `${site.name}: ${errMessage(e)}`, { site_id: site.id });
-      fails = siteFails(ctx.store, site.id) + 1;
-    }
-    if (!ctx.req.dryRun) {
-      ctx.store.upsertCareerSite({ ...site, lastRunAt: ctx.now().toISOString() });
-      ctx.store.setSetting(siteFailKey(site.id), String(fails));
     }
   }
 }
@@ -254,7 +264,7 @@ async function runSite(ctx: RunContext, u: UserRun, site: CareerSite, budget: nu
 
 /** One vacancy → base CV (honouring the company's persona lock) → tailored CV → PDF → cover letter →
  * QUEUED for review (SKIP_DRY_RUN on a dry run). Failures are recorded as application rows; null = nothing queued. */
-async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effectiveLock: string, decision: Decision | null): Promise<{ status: Status; direction: string } | null> {
+async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effectiveLock: string, decision: Decision | null): Promise<{ status: Status; direction: string; id: number } | null> {
   const { user, profile, stats } = u;
   const resume = ctx.deps.resume;
   if (!resume) {
@@ -283,6 +293,7 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
     ctx.log.info("tailor", `${vacancy.title} @ ${vacancy.company}: tailoring (${tier})`, { vacancy_id: vacancy.id });
     const t = await ctx.llm.tailorCV(profile, base, vacancy, tier);
     stats.llmCall();
+    ctx.checkAbort(); // stopped / watchdog-abandoned while tailoring: no xelatex, no QUEUED row next to the next run
     cv = t.cv;
     const violations = resume.validateCV(base, cv, profile.never_claim_skills);
     if (violations.length) {
@@ -300,11 +311,13 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
       /* fake fs in tests / read-only dir: buildPdf will report */
     }
     const built = await resume.buildPdf({ tex, texDir: paths.texDir(ctx.cfg), outPdf: `${outDir}/${vacancy.id}.pdf`, xelatexBin: ctx.cfg.xelatexBin });
+    ctx.checkAbort();
     pdfPath = built.pdfPath;
     generatedId = ctx.store.insertGeneratedResume({ userId: user.id, vacancyId: vacancy.id, texPath: built.texPath, pdfPath, model: tier }).id;
     ctx.log.info("build", `${vacancy.title}: pdf ready`, { vacancy_id: vacancy.id, pdf: pdfPath });
     coverLetter = await ctx.llm.coverLetterCareer(profile, cv, vacancy);
     stats.llmCall();
+    ctx.checkAbort();
   } catch (e) {
     if (e instanceof RunAbortError || isStop(e)) throw e;
     const status = /xelatex|latex/i.test(errMessage(e)) ? Status.FAILED_LATEX : Status.FAILED_LLM;
@@ -329,11 +342,12 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
   // One-tap review from the phone: «Отправить» / «Пропустить» land in serve's Telegram callback handler.
   if (status === Status.QUEUED && ctx.store.getSetting("queue_tg_cards") !== "0") {
     const queueUrl = ctx.cfg.panelUrl ? `${ctx.cfg.panelUrl}/u/${user.slug}/queue#app-${queued.id}` : "";
+    const site = ctx.store.listCareerSites(user.id).find((x) => x.slug === vacancy.source);
     await ctx.deps.notifier
-      ?.ask?.(formatQueueCard(vacancy, decision?.reason ?? "", coverLetter, queueUrl), queueButtons(queued.id))
+      ?.ask?.(formatQueueCard(vacancy, decision?.reason ?? "", coverLetter, queueUrl), queueButtons(queued.id, !site || !manualApplyOnly(site.ats)))
       .catch((e: unknown) => ctx.log.warn("apply", `telegram card failed: ${errMessage(e)}`));
   }
-  return { status, direction: picked.direction };
+  return { status, direction: picked.direction, id: queued.id };
 }
 
 /** Stage send:<id> / inspect:<id>: submit one QUEUED application, or open its form without submitting
@@ -354,6 +368,18 @@ async function reviewQueued(ctx: RunContext, u: UserRun, review: NonNullable<Car
 
   let questions: Question[] | undefined;
   let answers: Answer[] | undefined;
+  // The run takes minutes; the human may skip / mark the item sent meanwhile: only a still-QUEUED row changes.
+  const keepQueued = (detail: string) => ctx.store.updateApplicationStatus(id, Status.QUEUED, detail, Status.QUEUED);
+  const recordSend = (status: Status, detail: string) => {
+    stats.record(status, vacancy);
+    // A submitted form is a fact, whatever the row says now.
+    if (status === Status.SENT) return ctx.store.updateApplicationStatus(id, status, detail);
+    // A failed send stays in the queue with the reason: retry, apply by hand («Отправил вручную») or skip.
+    // Leaving the queue would let discovery re-tailor it and, after FAILED_NO_CONFIRMATION, apply twice.
+    const failed = status.startsWith("FAILED_");
+    if (!ctx.store.updateApplicationStatus(id, failed ? Status.QUEUED : status, failed ? `send failed: ${status}${detail ? ` · ${detail}` : ""}` : detail, Status.QUEUED))
+      ctx.log.warn("apply", `application ${id} changed during the send, ${status} not recorded`);
+  };
   try {
     const s = await ctx.browser.open(user);
     const r = await career.apply(s, {
@@ -374,20 +400,14 @@ async function reviewQueued(ctx: RunContext, u: UserRun, review: NonNullable<Car
     const as = r.answers ?? answers;
     ctx.store.deleteQuestionnaireAnswers(id);
     if (qs?.length && as?.length) ctx.store.insertQuestionnaireAnswers(id, qs, as);
-    if (inspect) ctx.store.updateApplicationStatus(id, Status.QUEUED, `form checked: ${qs?.length ?? 0} question(s)${r.status === Status.SKIP_DRY_RUN ? "" : ` · ${r.status}`}${r.reasonDetail ? ` · ${r.reasonDetail}` : ""}`);
-    else {
-      ctx.store.updateApplicationStatus(id, r.status, r.reasonDetail);
-      stats.record(r.status, vacancy);
-    }
+    if (inspect) keepQueued(`form checked: ${qs?.length ?? 0} question(s)${r.status === Status.SKIP_DRY_RUN ? "" : ` · ${r.status}`}${r.reasonDetail ? ` · ${r.reasonDetail}` : ""}`);
+    else recordSend(r.status, r.reasonDetail);
     if (r.learnedHints && !ctx.req.dryRun) site = ctx.store.upsertCareerSite({ ...site, profile: { ...site.profile, apply_hints: r.learnedHints } });
     ctx.log.info("apply", `${vacancy.title} @ ${vacancy.company}: ${inspect ? "form checked" : r.status}${r.reasonDetail ? ` (${r.reasonDetail})` : ""}`, { vacancy_id: vacancy.id, status: r.status });
   } catch (e) {
     if (e instanceof RunAbortError || isStop(e)) throw e;
-    if (inspect) ctx.store.updateApplicationStatus(id, Status.QUEUED, `form check failed: ${errMessage(e)}`);
-    else {
-      ctx.store.updateApplicationStatus(id, Status.FAILED_UI, errMessage(e));
-      stats.record(Status.FAILED_UI, vacancy);
-    }
+    if (inspect) keepQueued(`form check failed: ${errMessage(e)}`);
+    else recordSend(Status.FAILED_UI, errMessage(e));
     ctx.log.error("apply", `${vacancy.title}: ${errMessage(e)}`, { vacancy_id: vacancy.id });
   }
 }
@@ -417,7 +437,11 @@ async function forceQueue(ctx: RunContext, u: UserRun, id: number): Promise<void
   const was = `forced by user (was ${app.status}${app.reasonDetail ? `: ${app.reasonDetail}` : ""})`;
   const decision: Decision = { ...(app.llmDecision ?? { vacancy_id: vacancy.id, resume_id: "", cover_letter: "", direction: "", seniority: "", red_flags: [] }), apply: true, reason: was };
   ctx.log.info("apply", `${vacancy.title} @ ${vacancy.company}: ${was}`, { vacancy_id: vacancy.id, application_id: id });
-  await queueVacancy(ctx, u, vacancy, "", decision);
+  if (await queueVacancy(ctx, u, vacancy, "", decision)) return;
+  // Failed (CV validation, latex...): the FAILED_* row would hide the item from Filtered, so it goes back there to retry.
+  const failure = ctx.store.lastApplication(user.id, vacancy.id);
+  const why = failure && failure.id !== app.id && failure.status.startsWith("FAILED_") ? `${failure.status}: ${failure.reasonDetail}` : "see run log";
+  ctx.store.insertApplication({ ...newApp(ctx, user.id, vacancy.id, app.status, `force failed (${why}); was: ${app.reasonDetail}`), llmDecision: app.llmDecision });
 }
 
 /** Stage retailor:<id>: a fresh tailored CV + letter for a QUEUED item. The old row is retired only once the
@@ -428,7 +452,10 @@ async function retailorQueued(ctx: RunContext, u: UserRun, id: number): Promise<
   if (row.application.status !== Status.QUEUED) return ctx.log.warn("apply", `application ${id} is ${row.application.status}, not queued`);
   ctx.log.info("apply", `${row.vacancy.title} @ ${row.vacancy.company}: rebuilding CV and letter`, { application_id: id });
   const q = await queueVacancy(ctx, u, row.vacancy, "", row.application.llmDecision ?? null);
-  if (q?.status === Status.QUEUED) ctx.store.updateApplicationStatus(id, Status.SKIP_DEDUP, "пересобрано: новая версия в очереди");
+  if (q?.status !== Status.QUEUED) return;
+  // Skipped / marked sent while rebuilding: that decision stands, the fresh copy is dropped.
+  if (!ctx.store.updateApplicationStatus(id, Status.SKIP_DEDUP, "пересобрано: новая версия в очереди", Status.QUEUED))
+    ctx.store.updateApplicationStatus(q.id, Status.SKIP_DEDUP, `пересборка отменена: старая версия уже ${ctx.store.getApplication(id)?.application.status ?? "удалена"}`);
 }
 
 /** Prefer `wantDirection` (the company's persona lock) if a matching base CV exists; else the profile's own order. */

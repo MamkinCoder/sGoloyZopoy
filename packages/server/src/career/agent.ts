@@ -1,6 +1,6 @@
 // Universal career-site agent: ATS JSON when we know the platform, otherwise natural-language
 // act/extract guided by SiteProfile hints that onboarding writes for itself.
-import { canonicalUrl } from "@sgz/shared";
+import { canonicalUrl, Status } from "@sgz/shared";
 import type { ATSKind, BrowserSession, CareerAgent, CareerApplyRequest, CareerApplyResult, CareerSite, Discovered, LLMClient, SiteProfile } from "@sgz/shared";
 import { applyViaAgent } from "./agent-apply.js";
 import { atsClientFor, atsClientImpls, type ATSClientImpl } from "./ats/index.js";
@@ -20,6 +20,12 @@ const PAGE_TEXT_MAX = 8000;
 const LINKS_MAX = 300;
 
 const COLLECT_LINKS_JS = `Array.from(document.querySelectorAll("a[href]")).slice(0, 2000).map(a => ({ href: a.href, text: (a.innerText || a.textContent || "").trim().replace(/\\s+/g, " ").slice(0, 120) }))`;
+
+/** Job boards without apply() (Habr Career needs the seeker's own login): the human applies by hand. */
+export function manualApplyOnly(ats: string): boolean {
+  const c = ats !== "custom" ? atsClientFor(ats as ATSKind) : undefined;
+  return !!c?.aggregator && !c.apply;
+}
 
 export function createCareerAgent(llm: LLMClient, opts: CareerAgentOptions = {}): CareerAgent {
   const clients = opts.clients ?? atsClientImpls;
@@ -188,13 +194,17 @@ export function createCareerAgent(llm: LLMClient, opts: CareerAgentOptions = {})
 
   async function apply(s: BrowserSession, req: CareerApplyRequest): Promise<CareerApplyResult> {
     const client = req.site.ats !== "custom" ? clientFor(req.site.ats) : undefined;
+    if (client?.aggregator && !client.apply) return { status: Status.FAILED_UI, reasonDetail: "откликнуться можно только вручную на сайте (нужен ваш логин)" };
     if (req.site.profile.apply_mode === "ats_api" && client?.apply && req.site.profile.ats_board_token) {
       try {
         const r = await client.apply(req.site.profile.ats_board_token, req);
         if (r) return r;
         log(`apply ${req.site.slug}: ats api declined, falling back to agent`);
       } catch (err) {
-        log(`apply ${req.site.slug}: ats api error ${err instanceof Error ? err.message : String(err)}, falling back to agent`);
+        // The POST may already have reached the employer: a browser retry could apply twice. The human checks.
+        const msg = err instanceof Error ? err.message : String(err);
+        log(`apply ${req.site.slug}: ats api error ${msg}`);
+        return { status: Status.FAILED_NO_CONFIRMATION, reasonDetail: `ats api error: ${msg}` };
       }
     }
     return applyViaAgent(s, req);
