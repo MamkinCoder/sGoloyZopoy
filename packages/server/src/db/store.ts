@@ -6,6 +6,7 @@ import type { Store } from "@sgz/shared";
 import { applicationsRepo } from "./applications.js";
 import { careerRepo } from "./career.js";
 import { chatsRepo } from "./chats.js";
+import { intelRepo } from "./intel.js";
 import { applyMigrations } from "./migrate.js";
 import { resumesRepo } from "./resumes.js";
 import { runsRepo } from "./runs.js";
@@ -43,5 +44,6 @@ export function openStore(path: string): SqliteStore {
     ...runsRepo(s),
     ...statsRepo(s),
     ...settingsRepo(s),
+    ...intelRepo(s),
   };
 }

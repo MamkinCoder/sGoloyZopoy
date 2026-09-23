@@ -17,6 +17,8 @@ every other route requires it (401 otherwise). Times are RFC3339 UTC. `slug` is 
 | PUT | /users/:slug/profile | `Profile` | `Profile` |
 | GET | /users/:slug/stats?range=today\|7d\|30d\|all | | `{sent, skipped, failed, by_status:{}, invitations, rejections, chat_replies, runs_count}` |
 | GET | /users/:slug/analytics?range=today\|7d\|30d\|all | | `AnalyticsDTO` (see below) |
+| GET | /users/:slug/lessons | | `{lessons: string[], at}` letter lessons learned from outcomes (`at` = last refresh attempt, `""` = never) |
+| DELETE | /users/:slug/lessons | | `{lessons: [], at: now}` clears them; the next rebuild waits a week from `at` |
 
 ## Applications
 | GET | /users/:slug/applications?status=&source=&since=&until=&page=&page_size= | | `{items:[{application, vacancy, resume_title}], total}` |
@@ -216,7 +218,18 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       user: today's sent / queued / skipped / errors, chat replies / invitations / rejections, the review
       queue with items older than 5 days, chats in `needs_human`. Last sent day: setting `digest_last_day`.
     - Bot commands, answered only in `TG_CHAT_ID` or a user's `tgChatId`: `/status` (runner state +
-      the digest), `/queue` (queued items, oldest first); anything else starting with `/` gets the help line.
+      the digest), `/queue` (queued items, oldest first), `/company <name>` (per active user: sends,
+      replies / invites, rejections, median time to the first employer message for that company key);
+      anything else starting with `/` gets the help line.
+  - Outcome learning (`runner/learn.ts`, advisory only, never a reason to reject):
+    - decide (hh and career) gets `company_history` for batch employers with 3+ SENT applications,
+      `resume_stats` for pool resumes with 10+ SENT hh applications in 30 days (tie-breaker within one
+      direction), and the letter lessons below.
+    - `letter_lessons:<user id>` (internal, JSON `{lessons, at}`): checked hourly by the serve tick, rebuilt
+      at most weekly with one `fast` call (`prompts/learn_letters.md`) once there are 5+ invited and 15+
+      not invited hh letters (rejected, or no invite 14 days after SENT). Lessons are style-only: sentences
+      with links or unverified / never-claim tech are dropped. They feed `_letter_craft.md`, so both the
+      decide letter and `cover_letter_career` see them. Read / reset in Settings → Профиль → «Уроки писем».
   - Reliability: `run_max_min` = watchdog limit per run in minutes, `"0"` (default) = built-in caps
     (20 for `chats`/`touch`, 30 for `rotate` and `send:|inspect:|retailor:|force:`, 150 otherwise). On
     timeout the run is aborted, the browser closed and a Telegram alert sent; the run ends with

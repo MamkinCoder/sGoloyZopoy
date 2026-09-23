@@ -9,6 +9,7 @@ import { manualApplyOnly } from "../career/agent.js";
 import type { RunContext } from "./context.js";
 import { classify, titleScore, companyLimitSettings, createRunCompanyTracker, dedupWindowDays, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
 import { newApp } from "./hh.js";
+import { decideExtras, readLessons } from "./learn.js";
 import { dayInTz } from "../scheduler/tz.js";
 import { formatQueueCard, queueButtons } from "./queue-cards.js";
 import type { UserRun } from "./user.js";
@@ -216,7 +217,8 @@ async function runSite(ctx: RunContext, u: UserRun, site: CareerSite, budget: nu
 
   // Same gate as hh before spending a tailored CV: Claude decides by level, stack and role.
   await ctx.memoryGuard("decide");
-  const decisions = await ctx.llm.decide({ profile, resumes: ctx.store.listHHResumes(user.id), vacancies: fetched.map((f) => f.vacancy) });
+  const vacancies = fetched.map((f) => f.vacancy);
+  const decisions = await ctx.llm.decide({ profile, resumes: ctx.store.listHHResumes(user.id), vacancies, ...decideExtras(ctx.store, user.id, vacancies, ctx.now()) });
   stats.llmCall(Math.ceil(fetched.length / 10));
   const verdict = new Map(decisions.map((d) => [d.vacancy_id, d]));
   const approved = fetched.filter((f) => {
@@ -313,7 +315,7 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
     pdfPath = built.pdfPath;
     generatedId = ctx.store.insertGeneratedResume({ userId: user.id, vacancyId: vacancy.id, texPath: built.texPath, pdfPath, model: tier }).id;
     ctx.log.info("build", `${vacancy.title}: pdf ready`, { vacancy_id: vacancy.id, pdf: pdfPath });
-    coverLetter = await ctx.llm.coverLetterCareer(profile, cv, vacancy);
+    coverLetter = await ctx.llm.coverLetterCareer(profile, cv, vacancy, readLessons(ctx.store, user.id).lessons);
     stats.llmCall();
     ctx.checkAbort();
   } catch (e) {

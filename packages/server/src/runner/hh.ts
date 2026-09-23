@@ -5,6 +5,7 @@ import { dailyBudget } from "./budget.js";
 import type { RunContext } from "./context.js";
 import { classify, companyLimitSettings, createRunCompanyTracker, dedupWindowDays, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
 import { expandPool, syncPool, syncIsStale } from "./pool.js";
+import { decideExtras, readLessons } from "./learn.js";
 import { askSkill, skillCallback, threadWaiting } from "./skills.js";
 import { followupChats, sendInterviewPrep } from "./interview.js";
 import { mapNegotiationState } from "../hh/state.js";
@@ -179,7 +180,7 @@ async function decideStage(ctx: RunContext, u: UserRun, fetched: Fetched[], pool
   ctx.checkAbort();
   const vacancies = fetched.map((f) => f.vacancy);
   ctx.log.info("decide", `asking LLM about ${vacancies.length} vacancies with ${pool.length} resumes`);
-  const decisions = await ctx.llm.decide({ profile, resumes: pool, vacancies });
+  const decisions = await ctx.llm.decide({ profile, resumes: pool, vacancies, ...decideExtras(ctx.store, user.id, vacancies, ctx.now()) });
   stats.llmCall(Math.ceil(vacancies.length / 10));
   const byId = new Map(decisions.map((d) => [d.vacancy_id, d]));
   const approved: Approved[] = [];
@@ -302,7 +303,7 @@ async function forceApply(ctx: RunContext, u: UserRun, id: number, pool: HHResum
   }
   await ctx.browser.close();
   await ctx.memoryGuard("decide");
-  const [d] = await ctx.llm.decide({ profile, resumes: pool, vacancies: [vacancy] });
+  const [d] = await ctx.llm.decide({ profile, resumes: pool, vacancies: [vacancy], lessons: readLessons(ctx.store, user.id).lessons });
   stats.llmCall();
   const was = `forced by user (was ${row.application.status}${row.application.reasonDetail ? `: ${row.application.reasonDetail}` : ""})`;
   const decision: Decision = { ...(d ?? { resume_id: "", cover_letter: "", direction: "", seniority: "", red_flags: [] }), vacancy_id: vacancy.id, apply: true, reason: `${was}${d?.reason ? `; LLM: ${d.reason}` : ""}` };

@@ -1,4 +1,5 @@
 // LLMClient over `claude -p`: template → claude → zod → deterministic guards. One process at a time.
+import { companyKey } from "@sgz/shared";
 import type {
   Answer,
   CV,
@@ -131,7 +132,7 @@ function makeClient(ctx: Ctx): LLMClient {
       const worker = async () => {
         while (next < batches.length) {
           const i = next++;
-          results[i] = await decideBatch(ctx, input.profile, input.resumes, batches[i]!);
+          results[i] = await decideBatch(ctx, input, batches[i]!);
         }
       };
       await Promise.all(Array.from({ length: Math.min(DECIDE_PARALLEL, batches.length) }, worker));
@@ -212,8 +213,9 @@ function makeClient(ctx: Ctx): LLMClient {
       return { cv, changes };
     },
 
-    async coverLetterCareer(profile: Profile, cv: CV, vacancy: Vacancy): Promise<string> {
+    async coverLetterCareer(profile: Profile, cv: CV, vacancy: Vacancy, lessons?: string[]): Promise<string> {
       const prompt = renderPrompt("cover_letter_career", {
+        lessons: bullets(lessons),
         never_claim: neverClaimList(profile),
         profile: profileForLLM(profile),
         cv: { ...cv, contacts: undefined }, // no email/phone/github for the model to copy into the letter
@@ -264,14 +266,20 @@ function makeClient(ctx: Ctx): LLMClient {
   };
 }
 
-async function decideBatch(ctx: Ctx, profile: Profile, resumes: HHResume[], vacancies: Vacancy[]): Promise<Decision[]> {
+async function decideBatch(ctx: Ctx, input: DecideInput, vacancies: Vacancy[]): Promise<Decision[]> {
+  const { profile, resumes } = input;
   if (!vacancies.length) return [];
+  // Only the employers of this batch; the map already holds just the ones past the min-N gate.
+  const history = [...new Set(vacancies.map((v) => input.companyHistory?.[companyKey(v.company)]).filter(Boolean))];
   const prompt = renderPrompt("decide_hh", {
     never_claim: neverClaimList(profile),
     profile: profileForLLM(profile),
     resumes: renderResumes(resumes),
     vacancies: renderVacancies(vacancies),
     count: vacancies.length,
+    company_history: bullets(history),
+    resume_stats: bullets(input.resumeStats),
+    lessons: bullets(input.lessons),
   });
   let decisions: Decision[] = [];
   try {
@@ -282,6 +290,8 @@ async function decideBatch(ctx: Ctx, profile: Profile, resumes: HHResume[], vaca
   }
   return ensureDecisions(vacancies, decisions, resumes, blockedTech(profile)).map((d) => guardTailored(profile, d));
 }
+
+const bullets = (xs: (string | undefined)[] = []): string => xs.filter(Boolean).map((x) => `- ${x}`).join("\n");
 
 /** `tailored` survives only for an approved poor fit with a usable title; skills ⊆ verified_skills. */
 function guardTailored(profile: Profile, d: Decision): Decision {

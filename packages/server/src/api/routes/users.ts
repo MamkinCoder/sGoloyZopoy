@@ -4,6 +4,7 @@ import type { ApiDeps } from "../deps.js";
 import { badRequest } from "../errors.js";
 import { parseBody, ProfileSchema, UserPatchSchema } from "../validate.js";
 import { userOr404 } from "./common.js";
+import { readLessons, writeLessons } from "../../runner/learn.js";
 
 const EMPTY_PROFILE: ProfileDTO = ProfileSchema.parse({});
 
@@ -81,6 +82,15 @@ export function userRoutes({ store }: ApiDeps): Hono {
   r.get("/users/:slug/analytics", (c) => {
     const u = userOr404(store, c.req.param("slug"));
     return c.json(store.userAnalytics(u.id, sinceFor(c.req.query("range"))));
+  });
+
+  // Letter lessons learned from outcomes (runner/learn.ts); reset keeps the timestamp so they wait a week.
+  r.get("/users/:slug/lessons", (c) => c.json(readLessons(store, userOr404(store, c.req.param("slug")).id)));
+  r.delete("/users/:slug/lessons", (c) => {
+    const u = userOr404(store, c.req.param("slug"));
+    const v = { lessons: [], at: new Date().toISOString() };
+    writeLessons(store, u.id, v);
+    return c.json(v);
   });
 
   return r;

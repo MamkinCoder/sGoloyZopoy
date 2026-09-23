@@ -327,6 +327,15 @@ export class FakeStore implements Store {
   }
   insertLLMCall() {}
   backup() {}
+  companyIntel() {
+    return {};
+  }
+  resumeStats() {
+    return [];
+  }
+  letterOutcomes() {
+    return [];
+  }
 }
 
 /** subscribe() yields two live events (appended to the store) then marks the run done and ends. */

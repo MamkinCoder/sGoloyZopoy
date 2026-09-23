@@ -8,6 +8,12 @@ export interface DecideInput {
   profile: Profile;
   resumes: HHResume[];
   vacancies: Vacancy[]; // batched ≤10 per call by the implementation
+  /** Advisory reply history per companyKey(v.company), only employers past the min-N gate. */
+  companyHistory?: Record<string, string>;
+  /** Advisory conversion lines per pool resume (tie-breaker within one direction). */
+  resumeStats?: string[];
+  /** Letter style lessons learned from past outcomes (settings letter_lessons:<userId>). */
+  lessons?: string[];
 }
 
 export interface PoolVariant {
@@ -36,7 +42,7 @@ export interface LLMClient {
   summarizeResume(resumeText: string): Promise<ResumeSummary>;
   proposePoolVariants(profile: Profile, existing: HHResume[], max: number): Promise<PoolVariant[]>;
   tailorCV(profile: Profile, base: CV, vacancy: Vacancy, tier?: Tier): Promise<{ cv: CV; changes: string[] }>;
-  coverLetterCareer(profile: Profile, cv: CV, vacancy: Vacancy): Promise<string>;
+  coverLetterCareer(profile: Profile, cv: CV, vacancy: Vacancy, lessons?: string[]): Promise<string>;
   /** Prep brief for the seeker on an invitation; `invitation` is the employer's last message. */
   interviewPrep(profile: Profile, vacancy: Vacancy, invitation: string): Promise<InterviewPrep>;
   /** Free-form JSON task used by the browser layer's agent flows (career onboarding etc.). */
