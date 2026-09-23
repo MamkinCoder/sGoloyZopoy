@@ -12,18 +12,13 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf, postJson } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://www.pochta.ru";
 const LIST_API = `${ORIGIN}/api/jobs/api/v2/vacancies/filter`;
 const DETAIL_API = `${ORIGIN}/api/jobs/api/v2/vacancies`;
 const PAGE_SIZE = 100;
 const COMPANY = "Почта России";
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:russian-post" is itself
-// two colon-segments, so peel our own known prefix instead (same fix as sites/rzd.ts, beeline.ts).
-const KIND_PREFIX = "site:russian-post:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 const SCHEDULE_LABELS: Record<string, string> = {
   FULL_DAY: "Полный день",
@@ -83,7 +78,7 @@ function descriptionOf(v: RPVacancy): string {
 }
 
 async function fetchJob(_token: string, d: Discovered) {
-  const v = await getJson<RPVacancy>(`${DETAIL_API}/${localId(d.externalId)}`);
+  const v = await getJson<RPVacancy>(`${DETAIL_API}/${rawId(d.externalId)}`);
   return makeVacancy({
     source: "site:russian-post",
     externalId: d.externalId,

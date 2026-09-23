@@ -14,16 +14,12 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://x5.tech";
 const API = "https://prod-lkk-back.x5.ru/api/v2/x5-tech/vacancies/";
 const COMPANY = "X5 Tech";
 const PAGE_SIZE = 50;
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:x5-tech" is itself two
-// segments, so it would leave "x5-tech:<uuid>" behind. Take everything after the last colon instead.
-const rawIdOf = (externalId: string): string => externalId.slice(externalId.lastIndexOf(":") + 1);
 
 interface X5VacancyData {
   main_responsibilities?: string | null;
@@ -95,7 +91,7 @@ function descriptionOf(d: X5VacancyData): string {
 }
 
 async function fetchJob(_token: string, d: Discovered) {
-  const v = await getJson<X5VacancyItem>(`${API}${rawIdOf(d.externalId)}/`);
+  const v = await getJson<X5VacancyItem>(`${API}${rawId(d.externalId)}/`);
   return makeVacancy({
     source: "site:x5-tech",
     externalId: d.externalId,

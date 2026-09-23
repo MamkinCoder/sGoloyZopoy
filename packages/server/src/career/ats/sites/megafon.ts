@@ -16,16 +16,11 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://job.megafon.ru";
 const API = `${ORIGIN}/api/v1/vacancies`;
 const COMPANY = "МегаФон";
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:megafon" is itself two
-// colon-segments, so we peel our own known prefix instead (same issue as sites/mts-bank.ts).
-const KIND_PREFIX = "site:megafon:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 interface MFCity {
   id: number;
@@ -105,7 +100,7 @@ const descriptionOf = (d: MFDetail): string =>
 async function fetchJob(_token: string, d: Discovered) {
   const cached = d.raw as MFListItem | undefined;
   const cityId = cached?.city.id ?? "";
-  const detail = await getJson<MFDetail>(`${API}/${localId(d.externalId)}?cityId=${cityId}`);
+  const detail = await getJson<MFDetail>(`${API}/${rawId(d.externalId)}?cityId=${cityId}`);
   return makeVacancy({
     source: "site:megafon",
     externalId: d.externalId,

@@ -25,14 +25,10 @@
 import type { Discovered } from "@sgz/shared";
 import { getText, hostOf } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://hr.tochka.com";
 const COMPANY = "Tochka";
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:tochka" is itself two
-// colon-segments, so we peel our own known prefix instead (same fix as sites/mts-bank.ts).
-const KIND_PREFIX = "site:tochka:";
-const localSlug = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 const CATEGORIES = [
   "it",
   "finance",
@@ -189,12 +185,12 @@ function descriptionOf(v: TochkaVacancyDetail): string {
 }
 
 async function fetchJob(_token: string, d: Discovered) {
-  const html = await getText(vacancyUrl(localSlug(d.externalId)));
+  const html = await getText(vacancyUrl(rawId(d.externalId)));
   const flight = resolveRefs(flightText(html));
   const raw = sliceBalanced(flight, '"vacancy":{', "{", "}");
   const v: TochkaVacancyDetail = raw
     ? (JSON.parse(raw) as TochkaVacancyDetail)
-    : ((d.raw as TochkaListItem | undefined) ?? { mainCategory: { title: "", slug: "" }, title: d.title, slug: localSlug(d.externalId) });
+    : ((d.raw as TochkaListItem | undefined) ?? { mainCategory: { title: "", slug: "" }, title: d.title, slug: rawId(d.externalId) });
   return makeVacancy({
     source: "site:tochka",
     externalId: d.externalId,

@@ -11,18 +11,13 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const SITE_ORIGIN = "https://career.mvideoeldorado.ru";
 const API_ORIGIN = "https://career-site-api.mvideoeldorado.ru";
 const LIST_API = `${API_ORIGIN}/v1/vacancies/search`;
 const DETAIL_API = `${API_ORIGIN}/v1/vacancy`;
 const COMPANY = "М.Видео-Эльдорадо";
-
-// rawId() from ../types.ts strips one "[a-z_]+:" segment, but our kind "site:mvideoeldorado" is
-// itself two colon-segments, so we peel our own known prefix instead (same issue as sites/rostelecom.ts).
-const KIND_PREFIX = "site:mvideoeldorado:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 export interface MVEListItem {
   external_id: string;
@@ -101,7 +96,7 @@ function descriptionOf(v: MVEVacancy): string {
 }
 
 async function fetchJob(_token: string, d: Discovered) {
-  const res = await getJson<MVEDetailResponse>(`${DETAIL_API}/${localId(d.externalId)}`);
+  const res = await getJson<MVEDetailResponse>(`${DETAIL_API}/${rawId(d.externalId)}`);
   const v = res.vacancy;
   return makeVacancy({
     source: "site:mvideoeldorado",

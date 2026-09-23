@@ -11,17 +11,12 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://job.rt.ru";
 const LIST_API = `${ORIGIN}/backend/api/vacancies`;
 const PAGE_SIZE = 100;
 const COMPANY = "Rostelecom";
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:rostelecom" is itself
-// two colon-segments, so we peel our own known prefix instead (same issue as sites/megafon.ts).
-const KIND_PREFIX = "site:rostelecom:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 export interface RTVacancy {
   id: number;
@@ -82,7 +77,7 @@ function descriptionOf(v: RTVacancy): string {
 // shape), so fetchJob only re-fetches by id when that cache is missing.
 async function fetchJob(_token: string, d: Discovered) {
   const cached = d.raw as RTVacancy | undefined;
-  const v = cached ?? (await getJson<RTVacancy>(`${LIST_API}/${localId(d.externalId)}`));
+  const v = cached ?? (await getJson<RTVacancy>(`${LIST_API}/${rawId(d.externalId)}`));
   return makeVacancy({
     source: "site:rostelecom",
     externalId: d.externalId,

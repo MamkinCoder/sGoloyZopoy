@@ -13,16 +13,11 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://career.samolet.ru";
 const LIST_API = `${ORIGIN}/api/integrations/skillaz/vacancies/`;
 const PAGE_SIZE = 100;
-const KIND_PREFIX = /^site:samolet:/;
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:samolet" is itself two
-// segments, so it would only strip "site:" and leave "samolet:53404" - use our own full-prefix strip.
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 interface SamoletDictItem {
   id: number;
@@ -93,7 +88,7 @@ async function fetchJob(_token: string, d: Discovered): Promise<ReturnType<typeo
   const v =
     cached ??
     (await getJson<SamoletListPage>(`${LIST_API}?limit=${PAGE_SIZE}&page=1`)).results.find(
-      (r) => String(r.id) === localId(d.externalId),
+      (r) => String(r.id) === rawId(d.externalId),
     );
   if (!v) throw new Error(`site:samolet: vacancy ${d.externalId} not found`);
   return makeVacancy({

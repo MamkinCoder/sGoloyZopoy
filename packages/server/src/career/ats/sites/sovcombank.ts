@@ -14,7 +14,7 @@
 import type { Discovered } from "@sgz/shared";
 import { decodeEntities, getJson, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://people.sovcombank.ru";
 const LIST_API = `${ORIGIN}/api/v1/vacancies`;
@@ -59,11 +59,6 @@ function detect(baseUrl: string, html: string): { token: string } | null {
 
 const vacancyUrl = (id: number | string): string => `${ORIGIN}/vacancies/${id}`;
 
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:sovcombank" is itself
-// two colon-segments, so we peel our own known prefix instead.
-const KIND_PREFIX = "site:sovcombank:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
-
 const cityOf = (v: SCVacancyListItem): string => v.cities?.[0]?.name ?? "";
 
 const toDiscovered = (v: SCVacancyListItem): Discovered => ({
@@ -98,7 +93,7 @@ function descriptionOf(v: SCVacancyDetail): string {
 const workFormatOf = (v: SCVacancyDetail): string => v.employment?.map((e) => e.name).join(", ") ?? "";
 
 async function fetchJob(_token: string, d: Discovered): Promise<ReturnType<typeof makeVacancy>> {
-  const res = await getJson<SCDetailResponse>(`${LIST_API}/${localId(d.externalId)}/show`);
+  const res = await getJson<SCDetailResponse>(`${LIST_API}/${rawId(d.externalId)}/show`);
   const v = res.data;
   return makeVacancy({
     source: "site:sovcombank",

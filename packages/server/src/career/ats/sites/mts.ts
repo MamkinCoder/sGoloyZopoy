@@ -15,17 +15,12 @@
 import type { Discovered } from "@sgz/shared";
 import { getJson, hostOf } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
-import { atsId, type ATSClientImpl } from "../types.js";
+import { atsId, rawId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://job.mts.ru";
 const API = `${ORIGIN}/api/v2/vacancies`;
 const PAGE_SIZE = 100;
 const COMPANY_FALLBACK = "МТС";
-
-// rawId() from types.ts strips one "[a-z_]+:" segment, but our kind "site:mts" is itself two
-// colon-segments, so we peel our own known prefix instead (same trick as sites/mts-bank.ts).
-const KIND_PREFIX = "site:mts:";
-const localId = (externalId: string): string => externalId.replace(KIND_PREFIX, "");
 
 interface MTSTitled {
   title?: string | null;
@@ -111,12 +106,12 @@ function descriptionOf(v: MTSVacancyDetail): string {
 }
 
 async function fetchJob(_token: string, d: Discovered): Promise<ReturnType<typeof makeVacancy>> {
-  const res = await getJson<MTSDetailResponse>(`${API}/${localId(d.externalId)}`);
+  const res = await getJson<MTSDetailResponse>(`${API}/${rawId(d.externalId)}`);
   const v = res.data;
   return makeVacancy({
     source: "site:mts",
     externalId: d.externalId,
-    url: vacancyUrl(v.slug ?? localId(d.externalId)),
+    url: vacancyUrl(v.slug ?? rawId(d.externalId)),
     title: v.title?.trim() || d.title,
     company: companyOf(v.organization) || d.company,
     descriptionText: descriptionOf(v),
