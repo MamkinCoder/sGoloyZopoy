@@ -130,6 +130,9 @@ export function companyLimitSettings(store: Store): CompanyLimitSettings {
   };
 }
 
+/** Window for "same company+title applied recently". */
+export const dedupWindowDays = (store: Store, fallback: number): number => settingInt(store, "dedup_window_days", fallback);
+
 /** How long an LLM rejection of a specific vacancy blocks re-asking about it. Same window as dedup by default. */
 export function rejectWindowDays(store: Store, fallback: number): number {
   return settingInt(store, "reject_window_days", fallback);

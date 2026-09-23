@@ -35,7 +35,7 @@ export function zonedParts(date: Date, tz: string): Parts {
 }
 
 /** Offset (ms) such that wallClockAsUTC = utc + offset. */
-export function tzOffsetMs(date: Date, tz: string): number {
+function tzOffsetMs(date: Date, tz: string): number {
   const p = zonedParts(date, tz);
   const asUtc = Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s);
   return asUtc - Math.floor(date.getTime() / 1000) * 1000;

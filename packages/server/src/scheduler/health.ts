@@ -4,7 +4,7 @@
 import type { Notifier, Store } from "@sgz/shared";
 import { shortStamp } from "./tz.js";
 
-export const HEARTBEAT_STALE_MS = 26 * 3600_000;
+const HEARTBEAT_STALE_MS = 26 * 3600_000;
 const KEY = "alert_open:heartbeat";
 
 /** `bootAt` is the baseline only when no run ever finished, so a fresh install gets a full window. */

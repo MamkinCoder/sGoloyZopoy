@@ -49,9 +49,3 @@ export function mergeStats(parts: RunStats[], dryRun: boolean): RunStats {
   out.top_vacancies = top.sort((a, b) => b.salary_from - a.salary_from).slice(0, 3);
   return out;
 }
-
-export const sentCount = (s: RunStats): number => s.by_status.SENT ?? 0;
-export const skippedCount = (s: RunStats): number =>
-  Object.entries(s.by_status).reduce((acc, [k, v]) => (k.startsWith("SKIP_") ? acc + (v ?? 0) : acc), 0);
-export const failedCount = (s: RunStats): number =>
-  Object.entries(s.by_status).reduce((acc, [k, v]) => (k.startsWith("FAILED_") ? acc + (v ?? 0) : acc), 0);

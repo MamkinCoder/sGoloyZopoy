@@ -66,7 +66,7 @@ export function planCareer(source: string, stage: string | undefined): CareerPla
   return null;
 }
 
-export function resolveUsers(ctx: RunContext): User[] {
+function resolveUsers(ctx: RunContext): User[] {
   if (ctx.req.userSlug === "all") return ctx.store.listUsers(true);
   const u = ctx.store.getUserBySlug(ctx.req.userSlug);
   if (!u) throw new Error(`unknown user "${ctx.req.userSlug}"`);

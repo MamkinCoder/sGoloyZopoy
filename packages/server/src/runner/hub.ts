@@ -42,14 +42,8 @@ export class EventHub {
     for (const s of ch.subs) s.wake?.();
   }
 
-  isOpen(runId: number): boolean {
-    const ch = this.channels.get(runId);
-    return !!ch && !ch.closed;
-  }
-
   subscribe(runId: number): AsyncIterable<RunEvent> {
     const ch = this.channels.get(runId);
-    const self = this;
     return {
       [Symbol.asyncIterator]() {
         if (!ch) return (async function* () {})();
@@ -71,7 +65,6 @@ export class EventHub {
             ch.subs.delete(sub);
           }
         })();
-        void self;
         return gen;
       },
     };

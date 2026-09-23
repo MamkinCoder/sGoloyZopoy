@@ -3,14 +3,14 @@
 import { RunAbortError, Status, type Answer, type Card, type ChatMessage, type BrowserSession, type Decision, type HHResume, type Question, type Vacancy } from "@sgz/shared";
 import { dailyBudget } from "./budget.js";
 import type { RunContext } from "./context.js";
-import { classify, companyLimitSettings, createRunCompanyTracker, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
+import { classify, companyLimitSettings, createRunCompanyTracker, dedupWindowDays, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
 import { expandPool, syncPool, syncIsStale } from "./pool.js";
 import { askSkill, skillCallback, threadWaiting } from "./skills.js";
 import { followupChats, sendInterviewPrep } from "./interview.js";
 import { mapNegotiationState } from "../hh/state.js";
 import { dayInTz, shortStamp } from "../scheduler/tz.js";
 import type { UserRun } from "./user.js";
-import { errMessage, parseSalary } from "./util.js";
+import { errMessage, isStop, parseSalary } from "./util.js";
 
 export interface HHPlan {
   poolSync: "auto" | "force" | "off";
@@ -40,7 +40,7 @@ interface Approved {
 }
 
 export async function runHHUser(ctx: RunContext, u: UserRun, plan: HHPlan): Promise<void> {
-  const { user, profile, stats } = u;
+  const { user } = u;
   const day = dayInTz(ctx.now(), ctx.cfg.tz);
   let budget = dailyBudget(ctx.store, user, ["hh"], user.dailyLimitHH, ctx.req.limit, ctx.now(), ctx.cfg.tz);
   ctx.log.info("session", `hh: user ${user.slug}, budget ${budget}, dry_run=${ctx.req.dryRun}`, { budget, day });
@@ -70,7 +70,6 @@ export async function runHHUser(ctx: RunContext, u: UserRun, plan: HHPlan): Prom
   if (plan.chats) await chatsStage(ctx, u);
   if (plan.touch) await touchStage(ctx, u, pool.length ? pool : ctx.store.listHHResumes(user.id));
   if (plan.poolExpand) await expandPool(ctx, u, pool.length ? pool : ctx.store.listHHResumes(user.id));
-  void stats;
 }
 
 async function searchStage(ctx: RunContext, u: UserRun, budget: number, companyTracker: RunCompanyTracker): Promise<Candidate[]> {
@@ -80,7 +79,7 @@ async function searchStage(ctx: RunContext, u: UserRun, budget: number, companyT
   const want = Math.max(budget * 3, 15);
   const seen = new Set<string>();
   const candidates: Candidate[] = [];
-  const dedupSince = isoDaysAgo(ctx.now(), dedupWindowDays(ctx, 30));
+  const dedupSince = isoDaysAgo(ctx.now(), dedupWindowDays(ctx.store, 30));
   const rejectSince = isoDaysAgo(ctx.now(), rejectWindowDays(ctx.store, 30));
   const company = companyLimitSettings(ctx.store);
   const companySince = isoDaysAgo(ctx.now(), company.windowDays);
@@ -571,9 +570,9 @@ async function touchStage(ctx: RunContext, u: UserRun, pool: HHResume[]): Promis
 /** hh professional roles searched (IT category): developer, DevOps, QA, data scientist, systems engineer.
  * Without it short queries like «go» return couriers and marketers that only burn fetch + decide time.
  * ponytail: one list for every user; move to profile when a non-developer user appears. */
-export const IT_ROLES = ["96", "160", "124", "165", "114"];
+const IT_ROLES = ["96", "160", "124", "165", "114"];
 
-export const CHAT_TRACK_SINCE_DEFAULT = "2026-09-23";
+const CHAT_TRACK_SINCE_DEFAULT = "2026-09-23";
 
 export const FEEDBACK_REQUEST =
   "Здравствуйте. Спасибо за ответ. Подскажите, пожалуйста, что именно в опыте или навыках не подошло под эту роль? Подробная обратная связь поможет мне прицельнее готовиться, буду благодарен за любые детали.";
@@ -603,13 +602,6 @@ const unstored = <M extends Pick<ChatMessage, "hhMessageId" | "direction" | "tex
 /** Every incoming message not handled yet (questions or not: handled = looked at by the bot). */
 const unansweredQuestionIds = (msgs: ChatMessage[]): number[] => msgs.filter((m) => m.direction === "in" && !m.answered).map((m) => m.id);
 
-function dedupWindowDays(ctx: RunContext, fallback: number): number {
-  const n = Number(ctx.store.getSetting("dedup_window_days"));
-  return Number.isFinite(n) && n >= 0 ? n : fallback;
-}
-
 export function newApp(ctx: RunContext, userId: number, vacancyId: number, status: Status, detail: string) {
   return { userId, vacancyId, hhResumeId: null, generatedResumeId: null, runId: ctx.run.id, status, reasonDetail: detail, coverLetter: "", llmDecision: null, direction: "" };
 }
-
-export const isStop = (e: unknown): boolean => e instanceof Error && e.name === "RunStoppedError";

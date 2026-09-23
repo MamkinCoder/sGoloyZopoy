@@ -1,5 +1,6 @@
 // Daily trigger: fires `at` (HH:MM in tz) ± a deterministic per-day jitter and starts a full run.
 import { RunBusyError, type RunService } from "@sgz/shared";
+import { errMessage } from "../runner/util.js";
 import { addDays, zonedParts, zonedToUtc } from "./tz.js";
 
 export interface SchedulerOptions {
@@ -24,7 +25,7 @@ export interface Scheduler {
 const MAX_TIMEOUT = 2 ** 31 - 1;
 
 /** FNV-1a over the day string → uniform [0,1). Same day → same jitter across restarts. */
-export function dayJitterFraction(dayKey: string): number {
+function dayJitterFraction(dayKey: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < dayKey.length; i++) {
     h ^= dayKey.charCodeAt(i);
@@ -102,7 +103,7 @@ export function createScheduler(svc: RunService, opts: SchedulerOptions): Schedu
         log("scheduler: a run is already active, retrying in a minute");
         return true;
       }
-      log(`scheduler: start failed: ${e instanceof Error ? e.message : String(e)}`);
+      log(`scheduler: start failed: ${errMessage(e)}`);
     }
     return false;
   };

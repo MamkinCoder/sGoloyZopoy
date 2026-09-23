@@ -6,7 +6,6 @@ import type { RunnerDeps } from "./deps.js";
 import { RunStoppedError, errMessage, sleep as defaultSleep } from "./util.js";
 
 export interface BrowserHandle {
-  current(): BrowserSession | null;
   /** Launch (if needed) with the user's persistent profile and verify the hh login. */
   openHH(user: User): Promise<BrowserSession>;
   /** Launch (if needed) without any login check (career sites). */
@@ -30,7 +29,6 @@ export interface RunContext {
   throttle: Throttle;
   browser: BrowserHandle;
   memoryGuard(stage: string): Promise<void>;
-  sleep(ms: number): Promise<void>;
   fileExists(path: string): boolean;
 }
 
@@ -39,7 +37,7 @@ export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: 
   const sleepFn = deps.sleep ?? defaultSleep;
   const random = deps.random ?? Math.random;
   const mem = deps.memAvailableMB ?? readMemAvailableMB;
-  const fileExists = deps.fileExists ?? ((p: string) => defaultFileExists(p));
+  const fileExists = deps.fileExists ?? existsSync;
   const loadCookies = deps.loadCookies ?? defaultLoadCookies;
 
   const checkAbort = () => {
@@ -81,7 +79,6 @@ export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: 
   };
 
   const browser: BrowserHandle = {
-    current: () => session,
     open: launch,
     async openHH(user) {
       const wasOpen = !!session && sessionSlug === user.slug;
@@ -118,17 +115,8 @@ export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: 
     throttle: createThrottle(deps.cfg, sleepFn, random, signal),
     browser,
     memoryGuard: (stage) => guardMemory(stage, { cfg: deps.cfg, memAvailableMB: mem, sleep: (ms) => sleepFn(ms, signal), closeBrowser: close, log }),
-    sleep: (ms) => sleepFn(ms, signal),
     fileExists,
   };
-}
-
-function defaultFileExists(p: string): boolean {
-  try {
-    return existsSync(p);
-  } catch {
-    return false;
-  }
 }
 
 function defaultLoadCookies(p: string): Cookie[] | null {

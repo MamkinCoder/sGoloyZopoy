@@ -7,20 +7,20 @@ import { dailyBudget } from "./budget.js";
 import { atsClientFor } from "../career/ats/index.js";
 import { manualApplyOnly } from "../career/agent.js";
 import type { RunContext } from "./context.js";
-import { classify, titleScore, companyLimitSettings, createRunCompanyTracker, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
-import { isStop, newApp } from "./hh.js";
+import { classify, titleScore, companyLimitSettings, createRunCompanyTracker, dedupWindowDays, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
+import { newApp } from "./hh.js";
 import { dayInTz } from "../scheduler/tz.js";
 import { formatQueueCard, queueButtons } from "./queue-cards.js";
 import type { UserRun } from "./user.js";
 
 /** Title keywords for sites without their own `profile.filters`: dev roles only, so a 3000-job board
  * doesn't feed sales or warehouse postings into tailoring. */
-export const DEFAULT_CAREER_KEYWORDS = ["разработчик", "developer", "программист", "engineer", "go", "golang", "backend", "бэкенд", "бекенд", "back-end", "frontend", "фронтенд", "front-end", "fullstack", "full-stack", "фулстек", "фуллстек", "node.js", "nodejs", "node", "react", "vue", "typescript", "javascript", "python",
+const DEFAULT_CAREER_KEYWORDS = ["разработчик", "developer", "программист", "engineer", "go", "golang", "backend", "бэкенд", "бекенд", "back-end", "frontend", "фронтенд", "front-end", "fullstack", "full-stack", "фулстек", "фуллстек", "node.js", "nodejs", "node", "react", "vue", "typescript", "javascript", "python",
   // wider "any interview" roles
   "devops", "sre", "mlops", "ml", "data", "platform", "qa", "автоматизации тестирования", "автотестов", "автотестирования", "инфраструктуры", "инфраструктурный",
   // transliterated slugs (sitemap-based clients)
   "razrabotchik", "programmist"];
-import { errMessage } from "./util.js";
+import { errMessage, isStop } from "./util.js";
 
 export interface CareerPlan {
   /** Only onboard this site id (stage `onboard:<id>`); null = normal flow. */
@@ -37,7 +37,7 @@ export interface CareerPlan {
 
 const DAY_MS = 24 * 3600 * 1000;
 /** Consecutive onboarding/discovery failures per site id (settings key), reset on the next clean visit. */
-export const siteFailKey = (id: number) => `site_fail:${id}`;
+const siteFailKey = (id: number) => `site_fail:${id}`;
 export const siteFails = (store: RunContext["store"], id: number) => Number(store.getSetting(siteFailKey(id))) || 0;
 export const YIELD_DAYS = 30;
 
@@ -170,8 +170,7 @@ async function runSite(ctx: RunContext, u: UserRun, site: CareerSite, budget: nu
   stats.found(discovered.length);
   ctx.log.info("discover", `${site.name}: ${discovered.length} vacancies`, { site_id: site.id, found: discovered.length });
 
-  const rawDedupDays = Number(ctx.store.getSetting("dedup_window_days"));
-  const dedupSince = isoDaysAgo(ctx.now(), Number.isFinite(rawDedupDays) && rawDedupDays >= 0 ? rawDedupDays : 60);
+  const dedupSince = isoDaysAgo(ctx.now(), dedupWindowDays(ctx.store, 60));
   const rejectSince = isoDaysAgo(ctx.now(), rejectWindowDays(ctx.store, 30));
   const company = companyLimitSettings(ctx.store);
   const companySince = isoDaysAgo(ctx.now(), company.windowDays);
@@ -228,15 +227,14 @@ async function runSite(ctx: RunContext, u: UserRun, site: CareerSite, budget: nu
     return false;
   });
   ctx.log.info("decide", `${site.name}: ${approved.length} approved of ${fetched.length}`, { approved: approved.length, fetched: fetched.length });
-  fetched.splice(0, fetched.length, ...approved);
-  if (!fetched.length) return budget;
+  if (!approved.length) return budget;
 
   if (!ctx.deps.resume) {
     ctx.log.warn("tailor", "resume toolchain not available, cannot apply to career sites");
     return budget;
   }
 
-  for (const { vacancy, companyKey, lockedDirection } of fetched) {
+  for (const { vacancy, companyKey, lockedDirection } of approved) {
     ctx.checkAbort();
     if (budget <= 0) {
       stats.record(Status.SKIP_LIMIT);

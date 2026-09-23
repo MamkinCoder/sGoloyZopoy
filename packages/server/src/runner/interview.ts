@@ -6,17 +6,17 @@ import { HH_ORIGIN } from "../hh/urls.js";
 import { shortStamp } from "../scheduler/tz.js";
 import type { RunContext } from "./context.js";
 import type { UserRun } from "./user.js";
-import { errMessage } from "./util.js";
+import { errMessage, isStop } from "./util.js";
 
 type ThreadSummary = Awaited<ReturnType<HHClient["listThreads"]>>[number];
 
 export const FOLLOW_UP =
   "Здравствуйте! Хотел уточнить, актуальна ли ещё вакансия? С удовольствием расскажу подробнее о своём опыте и готов созвониться в удобное время.";
 /** Keeps follow-ups low-volume: at most this many per chat poll. */
-export const FOLLOWUP_PER_POLL = 3;
+const FOLLOWUP_PER_POLL = 3;
 export const FOLLOWUP_DAYS_DEFAULT = "7";
 /** Reminder lead time before an interview. */
-export const REMIND_BEFORE_MS = 2 * 3600_000;
+const REMIND_BEFORE_MS = 2 * 3600_000;
 
 /** A still-pending thread (new/viewed on both sides) silent for `days`, never followed up, nothing waiting on us. */
 export function followupDue(prev: ChatThread | undefined, t: Pick<ThreadSummary, "state" | "lastModified">, history: ChatMessage[], now: Date, days: number): boolean {
@@ -65,7 +65,7 @@ export async function followupChats(ctx: RunContext, u: UserRun, s: BrowserSessi
       ctx.log.info("chats", `${employer}: silent ${days}+ days, sent a follow-up`, { thread_id: prev.id });
       await ctx.throttle.afterMutation();
     } catch (e) {
-      if (e instanceof RunAbortError || (e instanceof Error && e.name === "RunStoppedError")) throw e;
+      if (e instanceof RunAbortError || isStop(e)) throw e;
       ctx.log.warn("chats", `${employer}: follow-up failed: ${errMessage(e)}`, { thread_id: prev.id });
     }
   }

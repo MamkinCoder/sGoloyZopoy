@@ -1,5 +1,6 @@
 import type { Logger, RunEvent, Store } from "@sgz/shared";
 import type { EventHub } from "./hub.js";
+import { errMessage } from "./util.js";
 
 export function createRunLogger(store: Store, hub: EventHub, runId: number, stderr: (line: string) => void = console.error): Logger {
   const emit = (level: RunEvent["level"], stage: string, message: string, data?: Record<string, unknown>) => {
@@ -8,7 +9,7 @@ export function createRunLogger(store: Store, hub: EventHub, runId: number, stde
       ev = store.appendRunEvent({ runId, level, stage, message, data });
     } catch (e) {
       ev = { id: 0, runId, ts: new Date().toISOString(), level, stage, message, data };
-      stderr(`[run ${runId}] [logger] appendRunEvent failed: ${e instanceof Error ? e.message : String(e)}`);
+      stderr(`[run ${runId}] [logger] appendRunEvent failed: ${errMessage(e)}`);
     }
     hub.publish(runId, ev);
     const suffix = data && Object.keys(data).length ? ` ${JSON.stringify(data)}` : "";

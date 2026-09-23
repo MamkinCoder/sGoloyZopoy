@@ -4,7 +4,7 @@
 import type { Store } from "@sgz/shared";
 
 /** Short, callback-safe key (Telegram callback_data is capped at 64 bytes). */
-export const skillKey = (skill: string): string =>
+const skillKey = (skill: string): string =>
   skill.trim().toLowerCase().replace(/[^a-z0-9а-яё+#.]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 24);
 
 const pendingKey = (userId: number, key: string) => `skill_pending:${userId}:${key}`;

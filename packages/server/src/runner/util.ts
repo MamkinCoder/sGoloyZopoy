@@ -5,6 +5,8 @@ export class RunStoppedError extends Error {
   }
 }
 
+export const isStop = (e: unknown): boolean => e instanceof Error && e.name === "RunStoppedError";
+
 /** setTimeout-based sleep that resolves early when the signal aborts. */
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
