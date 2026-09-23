@@ -214,3 +214,19 @@ export interface HealthDTO {
 export interface ApiError {
   error: string;
 }
+
+/** GET /users/:slug/retro: last 7 days vs the 7 before. The route answers null when the week is too small. */
+export interface RetroDTO {
+  since: string;
+  sent: number;
+  response_rate: number | null;
+  invite_rate: number | null;
+  /** The previous 7 days, null when it had too few sends to compare against. */
+  prev: { sent: number; response_rate: number | null; invite_rate: number | null } | null;
+  /** Over the last 14 days (answers lag sends), hh sends only, each gated by a minimum sample. */
+  best: { key: string; hh: number; resp: number; inv: number } | null;
+  mismatch: { key: string; hh: number } | null;
+  /** Review-queue items older than 3 days. */
+  stale_queue: number;
+  interviews: { employer: string; at: string; state: string }[];
+}

@@ -103,3 +103,7 @@ export function unwrapArray(v: unknown): unknown {
   }
   return v;
 }
+
+/** Mock interview in Telegram (runner/mock.ts): feedback on one answer, then the closing summary. */
+export const MockFeedbackSchema = z.object({ feedback: z.string().min(1), follow_up: z.string().nullable().catch(null).default(null) });
+export const MockSummarySchema = z.object({ tighten: z.array(z.string()).default([]) });

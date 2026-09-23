@@ -445,6 +445,8 @@ const KNOWN: { key: string; label: string; kind: "text" | "number"; hint?: strin
   { key: "tz", label: "Часовой пояс", kind: "text", hint: "например Europe/Moscow" },
   { key: "digest_at", label: "Итоги дня в Telegram", kind: "text", hint: "HH:MM; пусто — выключено" },
   { key: "queue_tg_cards", label: "Карточки очереди в Telegram", kind: "text", hint: "1 — кнопки «Отправить / Пропустить», 0 — выкл" },
+  { key: "retro_day", label: "Итоги недели: день", kind: "text", hint: "mon…sun; пусто — выключено" },
+  { key: "retro_at", label: "Итоги недели: время", kind: "text", hint: "HH:MM" },
 ];
 
 function ScheduleEditor() {

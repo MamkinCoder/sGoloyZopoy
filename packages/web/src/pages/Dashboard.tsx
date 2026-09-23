@@ -2,6 +2,7 @@ import type { AnalyticsCount, AnalyticsDTO, AnalyticsEvent, RunDTO, Status } fro
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAnalytics, useHealth, useRuns, type StatsRange } from "../api/hooks";
+import { useRetro } from "../api/hooks";
 import { ColumnChart, Funnel, type Series } from "../components/Charts";
 import { DataTable, type Column } from "../components/DataTable";
 import { StatTile } from "../components/StatTile";
@@ -140,6 +141,8 @@ export function DashboardPage() {
       </div>
 
       {a ? <Kpis k={a.kpi} /> : an.isError ? <Empty>Не удалось загрузить аналитику</Empty> : <Spinner />}
+
+      <WeekCard slug={slug} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Отклики по дням">{a ? daily.length ? <ColumnChart rows={daily} series={APP_SERIES} /> : <Empty /> : <Spinner />}</Section>
@@ -322,5 +325,55 @@ export function DashboardPage() {
         )}
       </Section>
     </div>
+  );
+}
+
+/** Points change against the week before, "" when there is nothing to compare with. */
+const dPts = (cur: number | null, prev: number | null | undefined) =>
+  cur == null || prev == null ? "" : ` (${cur >= prev ? "+" : ""}${Math.round((cur - prev) * 100)} п.п.)`;
+
+function WeekCard({ slug }: { slug: string }) {
+  const q = useRetro(slug);
+  const r = q.data;
+  return (
+    <Section title="Неделя">
+      {q.isLoading ? (
+        <Spinner />
+      ) : !r ? (
+        <Empty>Мало данных: за 7 дней меньше 10 откликов</Empty>
+      ) : (
+        <ul className="grid gap-1.5 text-[13px]">
+          <li>
+            Отправлено <b>{fmtInt(r.sent)}</b>
+            {r.prev && <span className="muted"> (было {fmtInt(r.prev.sent)})</span>} · ответы <b>{pct(r.response_rate)}</b>
+            <span className="muted">{dPts(r.response_rate, r.prev?.response_rate)}</span> · приглашения <b>{pct(r.invite_rate)}</b>
+            <span className="muted">{dPts(r.invite_rate, r.prev?.invite_rate)}</span>
+            {!r.prev && <span className="faint"> · прошлая неделя слишком мала для сравнения</span>}
+          </li>
+          {r.best && (
+            <li>
+              <span className="text-[var(--ok)]">Заходит:</span> {r.best.key}
+              <span className="muted"> - приглашения {r.best.inv}, ответы {r.best.resp} из {r.best.hh} за 2 недели</span>
+            </li>
+          )}
+          {r.mismatch && (
+            <li>
+              <span className="text-[var(--warn)]">Не заходит:</span> {r.mismatch.key}
+              <span className="muted"> - {r.mismatch.hh} откликов за 2 недели без ответа</span>
+            </li>
+          )}
+          {r.stale_queue > 0 && (
+            <li>
+              В очереди дольше 3 дней: <Link to={`/u/${slug}/queue`}>{r.stale_queue}</Link>
+            </li>
+          )}
+          {r.interviews.map((i) => (
+            <li key={`${i.employer}${i.at}`}>
+              Собеседование: {i.employer} <span className="muted">· {fmtDateTime(i.at)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
   );
 }

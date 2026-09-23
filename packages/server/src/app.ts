@@ -1,5 +1,5 @@
 // Composition root: config, store, LLM, browser, hh, career, resume, notifier, runner, scheduler.
-import type { Config, Notifier, Store } from "@sgz/shared";
+import type { Config, LLMClient, Notifier, Store } from "@sgz/shared";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { paths } from "@sgz/shared";
@@ -25,6 +25,7 @@ export interface AppContext {
   scheduler: Scheduler | null;
   version: string;
   startedAt: Date;
+  llm: LLMClient;
   close(): Promise<void>;
 }
 
@@ -90,6 +91,7 @@ export async function createAppContext(opts: { withScheduler?: boolean } = {}): 
     scheduler,
     version: process.env.SGZ_VERSION ?? "dev",
     startedAt: new Date(),
+    llm,
     async close(this: AppContext) {
       this.scheduler?.stop();
       const a = runner.active();

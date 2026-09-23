@@ -31,4 +31,37 @@ describe("telegram commands", () => {
     expect(seen).toEqual(["/status"]);
     expect(sent[0]).toMatchObject({ chat_id: 42, text: "итоги" });
   });
+
+  it("passes command args and hands plain text to onText, allowed chats only", async () => {
+    const sent: { chat_id: number; text: string }[] = [];
+    let polls = 0;
+    const fakeFetch = (async (url: string, init: { body: string }) => {
+      const method = url.split("/").at(-1);
+      const body = JSON.parse(init.body) as { chat_id: number; text: string };
+      if (method === "getUpdates") {
+        if (polls++) return new Promise(() => undefined);
+        const result = [
+          { update_id: 1, message: { chat: { id: 666 }, message_id: 1, text: "чужой" } },
+          { update_id: 2, message: { chat: { id: 42 }, message_id: 2, text: "/mock Рога и Копыта" } },
+          { update_id: 3, message: { chat: { id: 42 }, message_id: 3, text: "мой ответ" } },
+        ];
+        return new Response(JSON.stringify({ ok: true, result }));
+      }
+      if (method === "sendMessage") sent.push(body);
+      return new Response(JSON.stringify({ ok: true, result: true }));
+    }) as unknown as typeof fetch;
+    const texts: string[] = [];
+    const stop = startTelegramCallbacks("t", async () => "", {
+      fetch: fakeFetch,
+      commands: {
+        chatIds: ["42"],
+        onCommand: async (cmd, args, chatId) => `${cmd}|${args}|${chatId}`,
+        onText: async (chatId, text) => (texts.push(`${chatId}:${text}`), "разбор"),
+      },
+    });
+    await vi.waitFor(() => expect(sent).toHaveLength(2));
+    stop();
+    expect(texts).toEqual(["42:мой ответ"]);
+    expect(sent.map((s) => s.text)).toEqual(["/mock|Рога и Копыта|42", "разбор"]);
+  });
 });

@@ -4,6 +4,7 @@ import type { ApiDeps } from "../deps.js";
 import { badRequest } from "../errors.js";
 import { parseBody, ProfileSchema, UserPatchSchema } from "../validate.js";
 import { userOr404 } from "./common.js";
+import { weeklyRetro } from "../../notify/retro.js";
 
 const EMPTY_PROFILE: ProfileDTO = ProfileSchema.parse({});
 
@@ -82,6 +83,8 @@ export function userRoutes({ store }: ApiDeps): Hono {
     const u = userOr404(store, c.req.param("slug"));
     return c.json(store.userAnalytics(u.id, sinceFor(c.req.query("range"))));
   });
+
+  r.get("/users/:slug/retro", (c) => c.json(weeklyRetro(store, userOr404(store, c.req.param("slug")), new Date())));
 
   return r;
 }
