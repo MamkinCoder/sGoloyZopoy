@@ -22,3 +22,8 @@ node_modules/
 packages/*/dist/
 packages/server/spa/
 *.tsbuildinfo
+.claude/settings.local.json
+
+# local tool state
+.claude/worktrees/
+.serena/

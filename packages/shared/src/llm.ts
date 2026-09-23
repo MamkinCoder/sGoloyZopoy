@@ -22,12 +22,15 @@ export interface ChatReply {
   reply: string; // "" → do not send
   needs_human: boolean;
   reason: string;
+  /** Skills the employer asked about that the profile neither has nor rules out: ask the human first. */
+  unknown_skills?: string[];
 }
 
 export interface LLMClient {
   decide(input: DecideInput): Promise<Decision[]>;
   answerQuestionnaire(profile: Profile, vacancy: Vacancy | null, qs: Question[]): Promise<Answer[]>;
-  answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[]): Promise<ChatReply>;
+  /** `choices`: quick-reply buttons on the employer's last message; the reply must be exactly one of them. */
+  answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[]): Promise<ChatReply>;
   summarizeResume(resumeText: string): Promise<ResumeSummary>;
   proposePoolVariants(profile: Profile, existing: HHResume[], max: number): Promise<PoolVariant[]>;
   tailorCV(profile: Profile, base: CV, vacancy: Vacancy, tier?: Tier): Promise<{ cv: CV; changes: string[] }>;

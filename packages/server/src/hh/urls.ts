@@ -11,6 +11,7 @@ export const searchUrl = (p: SearchParams): string => {
   q.set("items_on_page", String(p.itemsOnPage ?? 50));
   q.set("page", String(p.page ?? 0));
   if (p.area) q.set("area", p.area);
+  for (const r of p.roles ?? []) q.append("professional_role", r);
   return `${HH_ORIGIN}/search/vacancy?${q.toString()}`;
 };
 
@@ -27,8 +28,12 @@ export const vacancyIdFrom = (idOrUrl: string): string | null => {
   return m?.[1] ?? null;
 };
 
-export const negotiationsUrl = (opts?: { onlyUnread?: boolean }): string =>
-  `${HH_ORIGIN}/applicant/negotiations${opts?.onlyUnread ? "?filter=unread" : ""}`;
+export const negotiationsUrl = (opts?: { onlyUnread?: boolean; page?: number }): string => {
+  const q = new URLSearchParams();
+  if (opts?.onlyUnread) q.set("filter", "unread");
+  if (opts?.page) q.set("page", String(opts.page));
+  return `${HH_ORIGIN}/applicant/negotiations${q.size ? `?${q}` : ""}`;
+};
 
 export const resumesUrl = (): string => `${HH_ORIGIN}/applicant/resumes`;
 export const loginUrl = (): string => `${HH_ORIGIN}/account/login?role=applicant`;

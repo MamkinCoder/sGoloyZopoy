@@ -67,6 +67,8 @@ export interface RunService {
 export interface Notifier {
   report(user: User, run: Run): Promise<void>;
   alert(title: string, body: string): Promise<void>;
+  /** Message with inline buttons; `data` comes back through the callback poller. Optional (tests, no token). */
+  ask?(text: string, buttons: { text: string; data: string }[]): Promise<void>;
 }
 
 export interface Logger {

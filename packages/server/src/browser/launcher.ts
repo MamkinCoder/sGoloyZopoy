@@ -26,7 +26,12 @@ export const CHROMIUM_ARGS: readonly string[] = [
   "--no-default-browser-check",
   "--disable-background-networking",
   "--disable-sync",
+  // The Pi's service env carries HTTPS_PROXY/ALL_PROXY (a foreign VPN exit, for Claude and Telegram);
+  // Linux Chromium would honor it and hh.ru answers 451 to that exit. Browsing always goes direct.
+  "--no-proxy-server",
   "--renderer-process-limit=2",
+  // Nothing we parse or click needs pixels (Stagehand reads the DOM/a11y tree); images only cost the Pi time.
+  "--blink-settings=imagesEnabled=false",
   "--lang=ru-RU",
   `--window-size=${VIEWPORT.width},${VIEWPORT.height}`,
 ];

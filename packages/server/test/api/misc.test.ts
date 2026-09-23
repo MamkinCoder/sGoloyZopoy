@@ -61,15 +61,29 @@ describe("system", () => {
       mem_available_mb: 900,
       active_run_id: null,
       scheduler_next: "2026-09-24T09:00:00Z",
-      users: [{ slug: "yaroslav", hh_login_ok: true, cookies_age_h: 3 }],
+      users: [{ slug: "yaroslav", hh_login_ok: true, cookies_age_h: 3, career: { sites_enabled: 0, sites_left_today: 0, queue_left: expect.any(Number), daily_limit: expect.any(Number) } }],
       tools: { chromium: "130", claude: "2.0", xelatex: null },
+      touch_last_at: null,
     });
     expect(body.mem_rss_mb).toBeGreaterThan(0);
   });
 
   it("settings fall back to config, PUT only allows the allowlist", async () => {
     const h = await harness();
-    expect(await (await h.get("/api/settings")).json()).toEqual({ schedule_at: "12:00", schedule_jitter_min: "20", dedup_window_days: "60", tz: "Europe/Moscow" });
+    expect(await (await h.get("/api/settings")).json()).toEqual({
+      schedule_at: "12:00",
+      schedule_jitter_min: "20",
+      dedup_window_days: "60",
+      tz: "Europe/Moscow",
+      company_limit_max: "10",
+      company_limit_window_days: "30",
+      company_limit_persona_lock: "1",
+      feedback_request: "1",
+      chat_track_since: "2026-09-23",
+      career_per_site: "3",
+      career_sites_per_run: "1",
+      career_autopilot: "1",
+    });
     const put = await h.json("PUT", "/api/settings", { schedule_at: "09:30", dedup_window_days: 45 });
     expect(await put.json()).toMatchObject({ schedule_at: "09:30", dedup_window_days: "45" });
     expect(h.store.settings.get("dedup_window_days")).toBe("45");

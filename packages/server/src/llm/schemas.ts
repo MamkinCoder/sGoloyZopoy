@@ -10,6 +10,8 @@ export const DecisionSchema = z.object({
   direction: z.string().default(""),
   seniority: z.string().default(""),
   red_flags: z.array(z.string()).default([]),
+  resume_fit: z.enum(["good", "poor"]).catch("good"),
+  tailored: z.object({ title: z.string(), about: z.string().default(""), key_skills: z.array(z.string()).default([]) }).optional().catch(undefined),
 });
 export const DecisionsSchema = z.array(DecisionSchema);
 
@@ -27,6 +29,7 @@ export const ChatReplySchema = z.object({
   reply: z.string(),
   needs_human: z.boolean().default(false),
   reason: z.string().default(""),
+  unknown_skills: z.array(z.string()).default([]),
 });
 
 export const ResumeSummarySchema = z.object({

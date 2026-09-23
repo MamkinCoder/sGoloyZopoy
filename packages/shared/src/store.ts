@@ -17,6 +17,7 @@ import type {
   User,
   Vacancy,
 } from "./model.js";
+import type { AnalyticsDTO } from "./api.js";
 
 export interface ApplicationFilter {
   userId?: number;
@@ -26,6 +27,8 @@ export interface ApplicationFilter {
   since?: string; // ISO
   until?: string;
   q?: string; // title/company substring
+  /** Only the newest row of each (user, vacancy): e.g. a filtered vacancy later sent/queued drops out. */
+  latestPerVacancy?: boolean;
   page?: number; // 1-based
   pageSize?: number; // default 50, max 200
 }
@@ -87,15 +90,29 @@ export interface Store {
   findVacancyByExternal(source: Source, externalId: string): Vacancy | null;
   hasRecentApplicationByDedup(userId: number, dedupHash: string, sinceISO: string): boolean;
 
+  // per-company spam limiter (cross-source: hh + career)
+  /** Count of SENT applications to `companyKey` since `sinceISO`, across all sources. */
+  countRecentApplicationsByCompany(userId: number, companyKey: string, sinceISO: string): number;
+  /** CV direction of the earliest SENT application to `companyKey` since `sinceISO`, or "" if none/unknown. */
+  companyLockDirection(userId: number, companyKey: string, sinceISO: string): string;
+
   // applications (one row per attempt; unique SENT per user+vacancy)
+  /** True when the vacancy is SENT, QUEUED for review or skipped by a human: never process it again. */
   hasSentApplication(userId: number, vacancyId: number): boolean;
+  /** True when the LLM already rejected this exact vacancy (SKIP_LLM_REJECT) since sinceISO. */
+  hasRecentRejection(userId: number, vacancyId: number, sinceISO: string): boolean;
+  /** Newest application row of this user for this vacancy, any status. */
+  lastApplication(userId: number, vacancyId: number): Application | null;
   insertApplication(a: NewApplication): Application;
   getApplication(id: number): ApplicationRow | null;
   updateApplicationStatus(id: number, status: Status, detail: string): void;
+  updateApplicationCoverLetter(id: number, text: string): void;
   listApplications(f: ApplicationFilter): { items: ApplicationRow[]; total: number };
+  /** SENT + QUEUED + SKIP_MANUAL created that day: for career sites the daily limit counts queued items. */
   countSentToday(userId: number, source: Source, dayISO: string): number;
   insertQuestionnaireAnswers(applicationId: number, qs: Question[], as: Answer[]): void;
   listQuestionnaireAnswers(applicationId: number): QuestionnaireAnswer[];
+  deleteQuestionnaireAnswers(applicationId: number): void;
 
   // chats
   upsertChatThread(t: Omit<ChatThread, "id"> & { id?: number }): ChatThread;
@@ -126,6 +143,7 @@ export interface Store {
 
   // stats / settings / llm
   userStats(userId: number, sinceISO: string | null): Stats;
+  userAnalytics(userId: number, sinceISO: string | null): AnalyticsDTO;
   getSetting(key: string): string | null;
   setSetting(key: string, value: string): void;
   insertLLMCall(c: LLMCall): void;

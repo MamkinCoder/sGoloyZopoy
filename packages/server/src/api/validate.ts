@@ -106,7 +106,12 @@ export const StartRunSchema = z.object({
   stage: z.string().optional(),
 });
 
+export const CoverLetterSchema = z.object({ text: z.string().trim().min(1).max(5000) });
+
 export const ExpandSchema = z.object({ max: z.number().int().min(0).optional() });
+
+/** Per-company clients in career/ats/sites/ use kind "site:<slug>". */
+const siteKind = z.custom<`site:${string}`>((v) => typeof v === "string" && /^site:[a-z0-9-]+$/.test(v), "expected site:<slug>");
 
 export const ATS_KINDS = [
   "greenhouse",
@@ -117,6 +122,10 @@ export const ATS_KINDS = [
   "smartrecruiters",
   "huntflow",
   "potok",
+  "wb",
+  "vk",
+  "avito",
+  "tbank",
   "hh_hosted",
   "custom",
 ] as const;
@@ -141,15 +150,29 @@ export const CareerSiteSchema = z.object({
   slug: z.string().optional(),
   base_url: z.string().url().optional(),
   baseUrl: z.string().url().optional(),
-  adapter: z.enum(ATS_KINDS).optional(),
-  ats: z.enum(ATS_KINDS).optional(),
+  adapter: z.union([z.enum(ATS_KINDS), siteKind]).optional(),
+  ats: z.union([z.enum(ATS_KINDS), siteKind]).optional(),
   config: SiteProfileSchema.optional(),
   profile: SiteProfileSchema.optional(),
   enabled: z.boolean().optional(),
 });
 
-export const SETTING_KEYS = ["schedule_at", "schedule_jitter_min", "dedup_window_days", "tz"] as const;
+export const SETTING_KEYS = [
+  "schedule_at",
+  "schedule_jitter_min",
+  "dedup_window_days",
+  "tz",
+  "company_limit_max",
+  "company_limit_window_days",
+  "company_limit_persona_lock",
+  "feedback_request",
+  "chat_track_since",
+  "career_per_site",
+  "career_sites_per_run",
+  "career_autopilot",
+] as const;
 const numish = z.union([z.number().int().min(0), z.string().regex(/^\d+$/)]).transform(String);
+const boolish = z.union([z.literal("0"), z.literal("1")]);
 export const SettingsSchema = z
   .object({
     schedule_at: z.union([z.literal(""), z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM")]),
@@ -158,6 +181,14 @@ export const SettingsSchema = z
     tz: z.string().min(1).refine((tz) => {
       try { new Intl.DateTimeFormat("en", { timeZone: tz }); return true; } catch { return false; }
     }, "invalid timezone"),
+    company_limit_max: numish, // 0 = disabled
+    company_limit_window_days: numish,
+    company_limit_persona_lock: boolish,
+    feedback_request: boolish, // "0" = don't ask for feedback after a rejection
+    career_sites_per_run: numish, // sites per autopilot chunk (between chat polls)
+    career_autopilot: boolish, // "0" = no automatic career gathering between chat polls
+    career_per_site: numish, // max vacancies queued per career site per run (spread wide)
+    chat_track_since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD"), // chats modified since this day are tracked
   })
   .partial()
   .refine((o) => Object.keys(o).length > 0, "no settings given");

@@ -37,7 +37,7 @@ export interface RunnerDeps {
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   random?: () => number;
   /** Reads a cookies file; null when missing. */
-  loadCookies?: (path: string) => Cookie[] | null;
+  loadCookies?: (path: string) => Cookie[] | null | Promise<Cookie[] | null>;
   fileExists?: (path: string) => boolean;
   /** Where log lines go besides the store/hub (default console.error). */
   stderr?: (line: string) => void;

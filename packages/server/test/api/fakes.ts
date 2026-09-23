@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   emptyRunStats,
+  type AnalyticsDTO,
   RunBusyError,
   type Application,
   type ApplicationFilter,
@@ -132,9 +133,21 @@ export class FakeStore implements Store {
   hasRecentApplicationByDedup() {
     return false;
   }
+  hasRecentRejection(userId: number, vacancyId: number, sinceISO: string) {
+    return this.applications.some((a) => a.userId === userId && a.vacancyId === vacancyId && a.status === "SKIP_LLM_REJECT" && a.createdAt >= sinceISO);
+  }
+  lastApplication(userId: number, vacancyId: number) {
+    return this.applications.filter((a) => a.userId === userId && a.vacancyId === vacancyId).at(-1) ?? null;
+  }
+  countRecentApplicationsByCompany() {
+    return 0;
+  }
+  companyLockDirection() {
+    return "";
+  }
 
   hasSentApplication(userId: number, vacancyId: number) {
-    return this.applications.some((a) => a.userId === userId && a.vacancyId === vacancyId && a.status === "SENT");
+    return this.applications.some((a) => a.userId === userId && a.vacancyId === vacancyId && ["SENT", "QUEUED", "SKIP_MANUAL"].includes(a.status));
   }
   insertApplication(a: NewApplication): Application {
     const app: Application = { ...a, id: this.nextId(), attempt: 1, createdAt: nowISO() };
@@ -154,12 +167,17 @@ export class FakeStore implements Store {
     const a = this.applications.find((x) => x.id === id);
     if (a) Object.assign(a, { status, reasonDetail: detail });
   }
+  updateApplicationCoverLetter(id: number, text: string) {
+    const a = this.applications.find((x) => x.id === id);
+    if (a) a.coverLetter = text;
+  }
   listApplications(f: ApplicationFilter) {
     let rows = this.applications.map((a) => this.row(a));
     if (f.userId !== undefined) rows = rows.filter((r) => r.application.userId === f.userId);
     if (f.runId !== undefined) rows = rows.filter((r) => r.application.runId === f.runId);
     if (f.status) rows = rows.filter((r) => f.status!.includes(r.application.status));
-    if (f.source) rows = rows.filter((r) => r.vacancy.source === f.source);
+    if (f.source) rows = rows.filter((r) => (f.source === "career" ? r.vacancy.source !== "hh" : r.vacancy.source === f.source));
+    if (f.latestPerVacancy) rows = rows.filter((r) => !this.applications.some((b) => b.userId === r.application.userId && b.vacancyId === r.application.vacancyId && b.id > r.application.id));
     if (f.since) rows = rows.filter((r) => r.application.createdAt >= f.since!);
     if (f.until) rows = rows.filter((r) => r.application.createdAt <= f.until!);
     if (f.q) {
@@ -179,6 +197,9 @@ export class FakeStore implements Store {
   }
   listQuestionnaireAnswers(applicationId: number) {
     return this.qa.filter((q) => q.applicationId === applicationId);
+  }
+  deleteQuestionnaireAnswers(applicationId: number) {
+    this.qa = this.qa.filter((q) => q.applicationId !== applicationId);
   }
 
   upsertChatThread(t: Omit<ChatThread, "id"> & { id?: number }): ChatThread {
@@ -258,6 +279,18 @@ export class FakeStore implements Store {
 
   userStats(): Stats {
     return { sent: 1, skipped: 2, failed: 0, byStatus: { SENT: 1 }, invitations: 0, rejections: 0, chatReplies: 0, runsCount: 1 };
+  }
+  userAnalytics(_userId: number, since: string | null): AnalyticsDTO {
+    const kpi = Object.fromEntries(
+      ["sent", "skipped", "failed", "negotiations", "responded", "invitations", "rejections", "employer_messages", "bot_replies", "needs_human_open",
+       "resumes_total", "resumes_generated", "llm_calls", "llm_failed", "llm_prompt_chars", "llm_result_chars", "llm_avg_ms", "runs"].map((k) => [k, 0]),
+    ) as Omit<AnalyticsDTO["kpi"], "response_rate">;
+    return {
+      since,
+      kpi: { ...kpi, response_rate: null },
+      daily: [], funnel: [], skip_reasons: [], companies: [], sources: [], resumes: [], directions: [],
+      reject_reasons: [], work_formats: [], areas: [], llm_tasks: [], recent: [],
+    };
   }
   getSetting(key: string) {
     return this.settings.get(key) ?? null;

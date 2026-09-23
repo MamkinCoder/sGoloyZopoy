@@ -16,8 +16,10 @@ dir="${STUB_DIR:?STUB_DIR required}"
 mkdir -p "$dir"
 now() { node -e 'console.log(Date.now())'; }
 echo "start $(now)" >> "$dir/timeline"
+until mkdir "$dir/lock" 2>/dev/null; do sleep 0.01; done # parallel callers: atomic counter
 n=$(( $(cat "$dir/count" 2>/dev/null || echo 0) + 1 ))
 echo "$n" > "$dir/count"
+rmdir "$dir/lock"
 printf '%s\n' "$*" >> "$dir/argv.log"
 cat > "$dir/prompt-$n.txt"
 mode="${STUB_MODE:-valid}"

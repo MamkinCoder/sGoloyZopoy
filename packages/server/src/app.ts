@@ -5,6 +5,7 @@ import type { BrowserLauncher, CareerAgent, Config, Cookie, HHClient, LLMClient,
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { paths } from "@sgz/shared";
+import { telegramFetch } from "./notify/proxy.js";
 import { createTelegram } from "./notify/telegram.js";
 import { createRunner, type Runner } from "./runner/service.js";
 import type { ResumeDeps } from "./runner/deps.js";
@@ -100,7 +101,7 @@ export async function createAppContext(opts: AppOptions = {}): Promise<AppContex
 
   const browserMod = await requireModule("browser", ["./browser/index.js", "./browser/launcher.js"]);
   const launcher = fn<(l: unknown) => BrowserLauncher>(browserMod, "createLauncher", "browser")(llm.stagehand());
-  const loadCookies = typeof browserMod.loadCookies === "function" ? (browserMod.loadCookies as (p: string) => Cookie[] | null) : undefined;
+  const loadCookies = typeof browserMod.loadCookies === "function" ? (browserMod.loadCookies as (p: string) => Promise<Cookie[]>) : undefined;
   const defaultUA = typeof browserMod.defaultUserAgent === "function" ? (browserMod.defaultUserAgent as () => string)() : "";
   if (!cfg.userAgent && defaultUA) cfg.userAgent = defaultUA;
 
@@ -118,7 +119,7 @@ export async function createAppContext(opts: AppOptions = {}): Promise<AppContex
   else missing.resume = "resume/ not available: career applies are skipped";
   for (const [k, v] of Object.entries(missing)) warn(`app: ${k}: ${v}`);
 
-  const notifier = createTelegram(cfg.tgBotToken, cfg.tgChatId, cfg.panelUrl, { tz: cfg.tz, warn });
+  const notifier = createTelegram(cfg.tgBotToken, cfg.tgChatId, cfg.panelUrl, { tz: cfg.tz, warn, fetch: telegramFetch() });
   const runner = createRunner({ cfg, store, launcher, hh, career, llm, notifier, resume, loadCookies });
   const scheduler =
     opts.withScheduler && cfg.scheduleAt && cfg.runnerEnabled ? createScheduler(runner, { at: cfg.scheduleAt, tz: cfg.tz, jitterMin: cfg.scheduleJitterMin, log: warn }) : null;

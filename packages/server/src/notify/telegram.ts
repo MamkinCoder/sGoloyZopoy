@@ -21,7 +21,7 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
   const doFetch = opts.fetch ?? fetch;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
-  async function sendOne(chat: string, text: string): Promise<void> {
+  async function sendOne(chat: string, text: string, extra: Record<string, unknown> = {}): Promise<void> {
     let lastErr = "";
     for (let attempt = 1; attempt <= RETRIES; attempt++) {
       let res: Response;
@@ -29,7 +29,7 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
         res = await doFetch(`${base}/bot${token}/sendMessage`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ chat_id: chat, text, parse_mode: "HTML", disable_web_page_preview: true }),
+          body: JSON.stringify({ chat_id: chat, text, parse_mode: "HTML", disable_web_page_preview: true, ...extra }),
         });
       } catch (e) {
         lastErr = e instanceof Error ? e.message : String(e);
@@ -68,5 +68,47 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
   return {
     report: (user: User, run: Run) => send(user.tgChatId || chatId, formatReport(user, run, panelUrl, opts.tz)),
     alert: (title: string, body: string) => send(chatId, formatAlert(title, body)),
+    ask: (text: string, buttons: { text: string; data: string }[]) =>
+      sendOne(chatId, text, { reply_markup: { inline_keyboard: [buttons.map((b) => ({ text: b.text, callback_data: b.data }))] } }),
+  };
+}
+
+/**
+ * Long-polls getUpdates for inline-button taps and hands each callback's data to `onTap`, whose return
+ * text is appended to the original message. Returns a stop function. One consumer per bot token.
+ */
+export function startTelegramCallbacks(token: string, onTap: (data: string) => Promise<string>, opts: TelegramOptions = {}): () => void {
+  const base = (opts.baseUrl ?? "https://api.telegram.org").replace(/\/+$/, "");
+  const doFetch = opts.fetch ?? fetch;
+  const warn = opts.warn ?? ((m: string) => console.error(m));
+  const api = async <T>(method: string, body: unknown): Promise<T> => {
+    const res = await doFetch(`${base}/bot${token}/${method}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const j = (await res.json()) as { ok: boolean; result: T; description?: string };
+    if (!j.ok) throw new Error(`telegram ${method}: ${j.description ?? res.status}`);
+    return j.result;
+  };
+  let stopped = false;
+  let offset = 0;
+  void (async () => {
+    while (!stopped) {
+      try {
+        type Update = { update_id: number; callback_query?: { id: string; data?: string; message?: { chat: { id: number }; message_id: number; text?: string } } };
+        const updates = await api<Update[]>("getUpdates", { offset, timeout: 50, allowed_updates: ["callback_query"] });
+        for (const u of updates) {
+          offset = u.update_id + 1;
+          const q = u.callback_query;
+          if (!q?.data) continue;
+          const note = await onTap(q.data).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`);
+          await api("answerCallbackQuery", { callback_query_id: q.id, text: note.slice(0, 190) }).catch(() => undefined);
+          if (q.message) await api("editMessageText", { chat_id: q.message.chat.id, message_id: q.message.message_id, text: `${q.message.text ?? ""}\n\n${note}` }).catch(() => undefined);
+        }
+      } catch (e) {
+        warn(`telegram callbacks: ${e instanceof Error ? e.message : String(e)}`);
+        await new Promise((r) => setTimeout(r, 10_000));
+      }
+    }
+  })();
+  return () => {
+    stopped = true;
   };
 }

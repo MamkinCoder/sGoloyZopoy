@@ -20,9 +20,9 @@ import {
   normalizeDedup,
 } from "@sgz/shared";
 import { SEL, TEXT } from "./selectors.js";
-import { extractInitialState, parseChat, parseNegotiations, parseResumes, parseSearch, parseVacancy, type ParsedThread } from "./state.js";
+import { asksQuestion, extractInitialState, get, parseChat, parseChatik, parseNegotiations, parseResumes, parseSearch, parseVacancy, type ParsedThread } from "./state.js";
 import { parseSalary } from "./salary.js";
-import { isCaptchaUrl, isLoginUrl, negotiationsUrl, resumeHashFrom, resumesUrl, searchUrl, vacancyIdFrom, vacancyUrl } from "./urls.js";
+import { HH_ORIGIN, isCaptchaUrl, isLoginUrl, negotiationsUrl, resumeUrl, resumesUrl, searchUrl, vacancyIdFrom, vacancyUrl } from "./urls.js";
 
 export interface HHClientOptions {
   snapshotDir: string;
@@ -87,8 +87,8 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     for (const n of TEXT.antiBot) if (text.includes(n)) throw new RunAbortError(Status.FAILED_ANTI_BOT, `anti-bot text «${n}» at ${url}`);
   };
 
-  const open = async (s: BrowserSession, url: string): Promise<void> => {
-    await s.goto(url);
+  const open = async (s: BrowserSession, url: string, quick = false): Promise<void> => {
+    await s.goto(url, { quick });
     await assertNotBlocked(s);
   };
   const ensureAt = async (s: BrowserSession, url: string): Promise<void> => {
@@ -120,7 +120,7 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
   })()`;
 
   const search = async (s: BrowserSession, p: SearchParams): Promise<Card[]> => {
-    await open(s, searchUrl(p));
+    await open(s, searchUrl(p), true);
     const state = extractInitialState(await s.html());
     const parsed = parseSearch(state);
     let cards = parsed.cards;
@@ -134,8 +134,6 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     }
     const seen = new Set<string>();
     cards = cards.filter((c) => (seen.has(c.externalId) ? false : (seen.add(c.externalId), true)));
-    const words = (p.excludeWords ?? []).map((w) => w.trim().toLowerCase()).filter(Boolean);
-    if (words.length) cards = cards.filter((c) => !words.some((w) => c.title.toLowerCase().includes(w)));
     return cards;
   };
 
@@ -148,7 +146,7 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
 
   const fetchVacancy: HHClient["fetchVacancy"] = async (s, c) => {
     const url = c.url || vacancyUrl(c.externalId);
-    await open(s, url);
+    await open(s, url, true);
     const state = extractInitialState(await s.html());
     const parsed = parseVacancy(state);
     log("hh.vacancy", { id: c.externalId, matchedPath: parsed.matchedPath });
@@ -207,7 +205,23 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
   const isOtherCountryShown = async (s: BrowserSession): Promise<boolean> =>
     (await firstExisting(s, SEL.apply.otherCountryPopup)) !== null || (await textHas(s, TEXT.otherCountry)) !== null;
 
+  // hh questionnaire blocks: [data-qa="task-body"] > [data-qa="task-question"] + inputs named task_<id>[_text].
+  // Tags each block (data-sgz-q) and option label (data-sgz-opt) so fillAnswer can use plain selectors.
+  const DOM_QUESTIONS_JS = `(() => Array.from(document.querySelectorAll('[data-qa="task-body"]')).map((b, idx) => {
+    b.setAttribute("data-sgz-q", String(idx));
+    const q = b.querySelector('[data-qa="task-question"]');
+    const text = ((q && q.innerText) || "").trim();
+    const choice = Array.from(b.querySelectorAll('input[type="radio"], input[type="checkbox"]'));
+    const options = choice.map((i, j) => { const l = i.closest("label") || i.parentElement; l.setAttribute("data-sgz-opt", String(j)); return (l.innerText || "").trim(); });
+    const kind = choice.length ? choice[0].type : b.querySelector("select") ? "select" : "text";
+    return { idx, text, kind, options, required: true };
+  }).filter((q) => q.text))()`;
+
   const detectQuestions = async (s: BrowserSession): Promise<Question[]> => {
+    await s.waitForSelector(SEL.apply.submit[0]!, 5_000).catch(() => false);
+    await s.waitForSelector('[data-qa="task-body"]', 1_500).catch(() => false);
+    const dom = await s.evaluate<Question[]>(DOM_QUESTIONS_JS).catch(() => []);
+    if (Array.isArray(dom) && dom.length) return dom.map((q) => (q.options?.length ? q : { idx: q.idx, text: q.text, kind: q.kind, required: q.required }));
     const hasForm = (await firstExisting(s, SEL.apply.questionnaire)) !== null || (await textHas(s, ["Вопросы от работодателя", "Ответьте на вопросы", "ответьте на вопрос"])) !== null;
     if (!hasForm) return [];
     const res = await s.extract(
@@ -250,6 +264,17 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
       const r = await s.act(`В вопросе «${q.text}» выбери вариант ответа %option%`, { cacheKey: key(`opt${optionIdx}`), variables: { option } });
       if (!r.success) throw new Error(`question ${q.idx}: could not choose option: ${r.message}`);
     };
+    const block = `[data-sgz-q="${q.idx}"]`;
+    if (q.kind !== "select" && (await s.exists(block))) {
+      if (q.kind === "text" || q.kind === "number") {
+        if (a.text || q.required) await s.fill(`${block} textarea, ${block} input[type="text"], ${block} input[type="number"]`, a.text ?? "");
+        return;
+      }
+      if (q.kind === "radio" || q.kind === "checkbox") {
+        for (const i of a.option_idxs ?? (a.option_idx !== undefined ? [a.option_idx] : [])) await s.click(`${block} [data-sgz-opt="${i}"]`);
+        return;
+      }
+    }
     switch (q.kind) {
       case "radio":
       case "select":
@@ -319,6 +344,13 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
 
       if (!(await openResponsePopup(s))) return fail("open-popup", "could not click «Откликнуться»");
       await sleep(settleMs);
+      // Some vacancies navigate to a full-page form (/applicant/vacancy_response) instead of a popup; wait
+      // until the form (or an instant-success marker) is there, tolerating the navigation in between.
+      for (let i = 0; i < 20; i++) {
+        const ready = await firstExisting(s, [...SEL.apply.submit, ...SEL.apply.success]).catch(() => null);
+        if (ready) break;
+        await sleep(500);
+      }
       await assertNotBlocked(s);
 
       if (await isOtherCountryShown(s)) {
@@ -396,7 +428,9 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
   }).filter((r) => r.hhResumeId))()`;
 
   const readResumes = async (s: BrowserSession): Promise<{ hhResumeId: string; title: string; url: string }[]> => {
-    const parsed = parseResumes(extractInitialState(await s.html()));
+    const html = await s.html();
+    let parsed = parseResumes(extractInitialState(html));
+    if (!parsed.resumes.length) parsed = parseResumes(extractInitialState(html, "ResumeProfileFront-InitialState"));
     log("hh.resumes", { matchedPath: parsed.matchedPath, count: parsed.resumes.length });
     if (parsed.resumes.length) return parsed.resumes;
     const dom = await s.evaluate<{ hhResumeId: string; title: string; url: string }[]>(DOM_RESUMES_JS).catch(() => []);
@@ -424,21 +458,54 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     return { created, max: 20 };
   };
 
-  const duplicateResume: HHClient["duplicateResume"] = async (s, baseResumeId, edit) => {
-    const step = async (name: string, instruction: string, variables?: Record<string, string>): Promise<void> => {
+  // Selector first (hh resume editor, 2026-09), LLM act() only when the selector is gone.
+  const resumeStep = async (s: BrowserSession, id: string, name: string, sel: string, instruction: string, variables?: Record<string, string>): Promise<void> => {
+    if (await s.waitForSelector(sel, 8_000)) await s.click(sel); // editors re-render the page after each save
+    else {
       const r = await s.act(instruction, { cacheKey: `hh.resume.${name}`, ...(variables ? { variables } : {}) });
       if (!r.success) {
-        const snap = await s.snapshot(`resume-${baseResumeId}-${name}`).catch(() => "");
-        throw new Error(`duplicateResume step «${name}» failed: ${r.message} (snapshot ${snap})`);
+        const snap = await s.snapshot(`resume-${id}-${name}`).catch(() => "");
+        throw new Error(`resume step «${name}» failed: ${r.message} (snapshot ${snap})`);
       }
-      await sleep(settleMs);
+    }
+    await sleep(settleMs);
+  };
+
+  const editResume: HHClient["editResume"] = async (s, resumeId, edit) => {
+    const step = (name: string, sel: string, instruction: string, variables?: Record<string, string>) => resumeStep(s, resumeId, name, sel, instruction, variables);
+    const fill = async (name: string, sel: string, value: string, instruction: string): Promise<void> => {
+      if (await s.waitForSelector(sel, 5_000)) await s.fill(sel, value);
+      else await step(name, sel, instruction, { value });
     };
+    const R = SEL.resumes;
+    await open(s, resumeUrl(resumeId));
+    await step("edit_title_open", R.editTitle, "Нажми на кнопку редактирования желаемой должности резюме");
+    await fill("edit_title_fill", R.titleInput, edit.title, "Очисти поле желаемой должности и введи %value%");
+    await step("edit_title_save", R.save, "Нажми «Сохранить» в форме редактирования");
+    await step("edit_about_open", R.editAbout, "Нажми на кнопку редактирования раздела «О себе»");
+    await fill("edit_about_fill", R.aboutInput, edit.about, "Очисти поле «О себе» и введи %value%");
+    await step("edit_about_save", R.save, "Нажми «Сохранить» в форме редактирования");
+    await step("edit_skills_open", R.editSkills, "Нажми на кнопку редактирования раздела «Ключевые навыки»");
+    if (await s.waitForSelector(R.skillInput, 5_000)) {
+      for (let i = 0; i < 40 && (await s.exists(R.skillChipDelete)); i++) await s.click(R.skillChipDelete);
+      for (const skill of edit.keySkills) {
+        await s.fill(R.skillInput, skill);
+        await s.pressKey("Enter");
+        await sleep(200);
+      }
+    } else await step("edit_skills_fill", R.skillInput, "Замени список ключевых навыков на следующие, каждый как отдельный навык: %skills%", { skills: edit.keySkills.join(", ") });
+    await step("edit_skills_save", R.save, "Нажми «Сохранить» в форме редактирования");
+  };
+
+  const duplicateResume: HHClient["duplicateResume"] = async (s, baseResumeId, edit) => {
+    const step = (name: string, sel: string, instruction: string, variables?: Record<string, string>) => resumeStep(s, baseResumeId, name, sel, instruction, variables);
+    const R = SEL.resumes;
     await open(s, resumesUrl());
     const before = new Set((await readResumes(s)).map((r) => r.hhResumeId));
     if (!before.has(baseResumeId)) throw new Error(`duplicateResume: base resume ${baseResumeId} not found in the list`);
-    const base = [...before].indexOf(baseResumeId);
-    await step("open_menu", `Открой меню действий (три точки / «Ещё») у резюме, ссылка которого содержит %hash% (порядковый номер в списке: ${base + 1})`, { hash: baseResumeId });
-    await step("duplicate", "Нажми «Дублировать» в открытом меню резюме");
+    await step("open_menu", `[data-qa="resume"]:has([data-qa="resume-card-link-${baseResumeId}"]) ${R.cardMenu}`, "Открой меню действий (три точки / «Ещё») у резюме, ссылка которого содержит %hash%", { hash: baseResumeId });
+    await step("duplicate", R.duplicate[0]!, "Нажми «Дублировать» в открытом меню резюме");
+    await sleep(settleMs * 3);
     await open(s, resumesUrl());
     const after = (await readResumes(s)).map((r) => r.hhResumeId).filter((h) => !before.has(h));
     if (after.length !== 1) {
@@ -446,25 +513,30 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
       throw new Error(`duplicateResume: expected exactly one new resume, found ${after.length}`);
     }
     const newId = after[0]!;
-    const editFail = (e: unknown): never => {
-      throw new Error(`duplicateResume: copy ${newId} created but editing failed, fix it manually: ${e instanceof Error ? e.message : String(e)}`);
-    };
     try {
-      await open(s, `https://hh.ru/resume/${newId}`);
-      await step("edit_title_open", "Нажми на кнопку редактирования названия резюме (желаемой должности)");
-      await step("edit_title_fill", "Очисти поле желаемой должности и введи %title%", { title: edit.title });
-      await step("edit_title_save", "Сохрани изменения названия резюме (кнопка «Сохранить»)");
-      await step("edit_about_open", "Нажми на кнопку редактирования раздела «О себе»");
-      await step("edit_about_fill", "Очисти поле «О себе» и введи %about%", { about: edit.about });
-      await step("edit_about_save", "Сохрани изменения раздела «О себе» (кнопка «Сохранить»)");
-      await step("edit_skills_open", "Нажми на кнопку редактирования раздела «Ключевые навыки»");
-      await step("edit_skills_fill", "Замени список ключевых навыков на следующие, каждый как отдельный навык: %skills%", { skills: edit.keySkills.join(", ") });
-      await step("edit_skills_save", "Сохрани изменения раздела «Ключевые навыки» (кнопка «Сохранить»)");
+      await editResume(s, newId, edit);
     } catch (e) {
-      editFail(e);
+      throw new Error(`duplicateResume: copy ${newId} created but editing failed, fix it manually: ${e instanceof Error ? e.message : String(e)}`);
     }
-    const finalUrl = await s.url();
-    return resumeHashFrom(finalUrl) ?? newId;
+    return newId;
+  };
+  const publishResume: HHClient["publishResume"] = async (s, resumeId) => {
+    const R = SEL.resumes;
+    await open(s, `${HH_ORIGIN}/profile/resume?resume=${resumeId}`);
+    if (await s.waitForSelector(R.wizardSelectJob, 5_000)) {
+      await s.click(R.wizardSelectJob);
+      await sleep(settleMs * 3);
+    }
+    // Every step is pre-filled from the original resume: «Сохранить и продолжить» until hh lands on published=true.
+    for (let step = 0; step < 12; step++) {
+      if (/published=true/.test(await s.url())) return true;
+      if (!(await s.waitForSelector(R.wizardNext, 5_000))) break;
+      await s.click(R.wizardNext);
+      await sleep(settleMs * 5);
+    }
+    if (/published=true/.test(await s.url())) return true;
+    await s.snapshot(`resume-${resumeId}-publish`).catch(() => "");
+    return false;
   };
 
   const touchResume: HHClient["touchResume"] = async (s, url) => {
@@ -489,24 +561,37 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     return { negotiationId: it.getAttribute("data-id") || (idm ? idm[1] : ""), chatUrl: a ? a.href : "", unread: !!it.querySelector(${JSON.stringify(SEL.negotiations.unread)}), employer: "", state: /Приглашение/.test(t) ? "Приглашение" : /Отказ/.test(t) ? "Отказ" : /Не просмотрено/.test(t) ? "Не просмотрено" : /Просмотрено/.test(t) ? "Просмотрено" : "", vacancyExternalId: vm ? vm[1] : null };
   }).filter((x) => x.negotiationId))()`;
 
-  const listThreads: HHClient["listThreads"] = async (s, onlyUnread) => {
-    await open(s, negotiationsUrl({ onlyUnread }));
-    const parsed = parseNegotiations(extractInitialState(await s.html()));
-    log("hh.negotiations", { matchedPath: parsed.matchedPath, count: parsed.threads.length });
-    let threads: Pick<ParsedThread, "negotiationId" | "chatUrl" | "unread" | "employer" | "state" | "vacancyExternalId">[] = parsed.threads;
-    if (!threads.length) {
-      const dom = await s.evaluate<typeof threads>(DOM_THREADS_JS).catch(() => []);
-      if (Array.isArray(dom)) threads = dom;
+  const listThreads: HHClient["listThreads"] = async (s, onlyUnread, since) => {
+    type Row = Pick<ParsedThread, "negotiationId" | "chatUrl" | "unread" | "employer" | "state" | "vacancyExternalId" | "lastModified">;
+    const readPage = async (page: number): Promise<{ rows: Row[]; pageCount: number }> => {
+      await open(s, negotiationsUrl({ onlyUnread: onlyUnread && !since, page }), true);
+      const state = extractInitialState(await s.html());
+      const parsed = parseNegotiations(state);
+      log("hh.negotiations", { page, matchedPath: parsed.matchedPath, count: parsed.threads.length });
+      let rows: Row[] = parsed.threads;
+      if (!rows.length) {
+        const dom = await s.evaluate<Row[]>(DOM_THREADS_JS).catch(() => []);
+        if (Array.isArray(dom)) rows = dom;
+      }
+      const pc = Number(get(state, "applicantNegotiations.pageCount"));
+      return { rows, pageCount: Number.isFinite(pc) && pc > 0 ? pc : 1 };
+    };
+    let { rows: threads, pageCount } = await readPage(0);
+    // hh's order isn't strictly by last change, so with `since` read every page (capped) and let the caller filter.
+    for (let page = 1; since && page < Math.min(pageCount, 10); page++) {
+      await sleep(settleMs);
+      threads = threads.concat((await readPage(page)).rows);
     }
     if (onlyUnread) threads = threads.filter((t) => t.unread);
-    return threads.map((t) => ({ negotiationId: t.negotiationId, chatUrl: t.chatUrl, unread: t.unread, employer: t.employer, state: t.state, vacancyExternalId: t.vacancyExternalId }));
+    return threads.map((t) => ({ negotiationId: t.negotiationId, chatUrl: t.chatUrl, unread: t.unread, employer: t.employer, state: t.state, vacancyExternalId: t.vacancyExternalId, ...(t.lastModified ? { lastModified: t.lastModified } : {}) }));
   };
 
   const negotiationIdFromUrl = (url: string): string => /(?:id|chat|negotiations\/item)[=/](\d+)/.exec(url)?.[1] ?? url;
 
   const readThread: HHClient["readThread"] = async (s, chatUrl) => {
-    await open(s, chatUrl);
-    const parsed = parseChat(extractInitialState(await s.html()));
+    await open(s, chatUrl, true);
+    const html = await s.html();
+    const parsed = parseChatik(extractInitialState(html, "Chatik-InitialState")) ?? parseChat(extractInitialState(html));
     log("hh.chat", { matchedPath: parsed.matchedPath, count: parsed.messages.length });
     let messages = parsed.messages;
     let survey = parsed.survey;
@@ -517,7 +602,7 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
         "Это чат с работодателем на hh.ru. Извлеки все сообщения по порядку (author: employer - работодатель, bot - чат-бот/автоответ, me - соискатель), название работодателя, id вакансии если виден, и если есть виджет опроса с вопросами - список вопросов с вариантами.",
         ChatExtractSchema,
       );
-      messages = ex.messages.map((m) => ({ hhMessageId: null, direction: m.author === "me" ? "out" : "in", author: m.author, text: m.text, isQuestion: m.author !== "me" && /\?/.test(m.text) }));
+      messages = ex.messages.map((m) => ({ hhMessageId: null, direction: m.author === "me" ? "out" : "in", author: m.author, text: m.text, isQuestion: m.author !== "me" && asksQuestion(m.text) }));
       survey = ex.survey.map((q, idx) => {
         const out: Question = { idx, text: q.text, kind: q.kind, required: q.required ?? true };
         if (q.options?.length) out.options = q.options;
@@ -528,16 +613,26 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     }
     const isBot = messages.some((m) => m.author === "bot") || survey.length > 0;
     const detail: ThreadDetail = {
-      thread: { hhNegotiationId: negotiationIdFromUrl(chatUrl), isBot, vacancyId: null, employer, state: "new", lastSeenAt: new Date().toISOString() },
+      thread: { hhNegotiationId: negotiationIdFromUrl(chatUrl), isBot, vacancyId: null, employer, state: parsed.rejected ? "rejected" : "new", lastSeenAt: new Date().toISOString() },
       vacancyExternalId,
       messages: messages.map((m) => ({ hhMessageId: m.hhMessageId, direction: m.direction, author: m.author, text: m.text, isQuestion: m.isQuestion, answered: false })),
       survey,
+      ...(parsed.writable !== undefined ? { writable: parsed.writable } : {}),
+      ...(parsed.choices?.length ? { choices: parsed.choices } : {}),
     };
     return detail;
   };
 
   const sendMessage: HHClient["sendMessage"] = async (s, chatUrl, text) => {
     await ensureAt(s, chatUrl);
+    // A chat-bot question with quick-reply buttons only accepts a button press, not typed text.
+    const pressed = await s
+      .evaluate<boolean>(`(() => { const want = ${JSON.stringify(text.trim())}; const b = Array.from(document.querySelectorAll('[data-qa^="participant-action-message-"]')).find((x) => (x.textContent || "").trim() === want); if (!b) return false; b.click(); return true; })()`)
+      .catch(() => false);
+    if (pressed) {
+      if (!(await s.waitForText(text.trim().slice(0, 60), confirmTimeoutMs))) throw new Error("sendMessage: quick-reply pressed but the answer did not appear");
+      return;
+    }
     const input = await firstExisting(s, SEL.chat.input);
     if (input) await s.fill(input, text);
     else {
@@ -587,5 +682,5 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     }
   };
 
-  return { checkLogin, assertNotBlocked, search, fetchVacancy, apply, syncResumes, resumeText, resumeCapacity, duplicateResume, touchResume, listThreads, readThread, sendMessage, submitSurvey };
+  return { checkLogin, assertNotBlocked, search, fetchVacancy, apply, syncResumes, resumeText, resumeCapacity, duplicateResume, editResume, publishResume, touchResume, listThreads, readThread, sendMessage, submitSurvey };
 };

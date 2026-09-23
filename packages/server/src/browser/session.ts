@@ -58,8 +58,15 @@ export class StagehandSession implements BrowserSession {
     return this.d.opts.actionTimeoutMs ?? DEFAULT_ACTION_TIMEOUT_MS;
   }
 
-  async goto(url: string): Promise<void> {
-    await this.page.goto(url, { waitUntil: "load", timeout: Math.max(this.actionTimeout, 30_000) });
+  async goto(url: string, opts?: { quick?: boolean }): Promise<void> {
+    // DOM ready is all the parsers need (InitialState templates); a hung tracker must not fail the run.
+    await this.page.goto(url, { waitUntil: "domcontentloaded", timeout: Math.max(this.actionTimeout, 30_000) });
+    if (opts?.quick) return;
+    try {
+      await this.page.waitForLoadState("load", 15_000);
+    } catch {
+      // bounded wait only
+    }
     try {
       await this.page.waitForLoadState("networkidle", NETWORK_IDLE_MS);
     } catch {
@@ -215,6 +222,10 @@ export class StagehandSession implements BrowserSession {
 
   async pressEscape(): Promise<void> {
     await this.page.keyPress("Escape");
+  }
+
+  async pressKey(key: string): Promise<void> {
+    await this.page.keyPress(key);
   }
 
   async snapshot(name: string): Promise<string> {

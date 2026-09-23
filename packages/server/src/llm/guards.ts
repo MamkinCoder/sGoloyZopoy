@@ -19,7 +19,8 @@ export function splitSentences(text: string): string[] {
   // Protect dots inside URLs while finding sentence boundaries. Otherwise
   // `https://host/path` leaves fragments such as `com/path` behind.
   const marker = "\uE000";
-  const protectedText = text.replace(/(?:https?:\/\/|www\.|t\.me\/)[^\s]+/gi, (url) => {
+  // Dots inside words and versions ("Node.js", "Go 1.18", "2.5 года") are not sentence ends either.
+  const protectedText = text.replace(/([\p{L}\d])\.(?=[\p{L}\d])/gu, `$1${marker}`).replace(/(?:https?:\/\/|www\.|t\.me\/)[^\s]+/gi, (url) => {
       const core = url.replace(/[.!?,;:]+$/, "");
       return core.replace(/\./g, marker) + url.slice(core.length);
     });
@@ -89,6 +90,19 @@ export function normalizeProse(text: string): string {
 }
 
 /** Everything a letter or chat reply must satisfy, in one call. */
+/** Well-known technologies a letter may only mention when the seeker lists them in verified_skills. */
+export const COMMON_TECH = [
+  "Kubernetes", "k8s", "Kafka", "RabbitMQ", "ClickHouse", "Elasticsearch", "MongoDB", "Cassandra", "Java", "Kotlin", "Scala",
+  "C#", ".NET", "PHP", "Laravel", "Ruby", "Rust", "C++", "Swift", "1C", "Terraform", "Ansible", "AWS", "GCP", "Azure", "gRPC",
+  "Airflow", "Spark", "Hadoop", "Angular", "Svelte", "Flutter", "Unity", "Oracle", "MySQL", "Jenkins", "OpenShift",
+];
+
+/** never_claim plus every common technology the profile doesn't verify: nothing unverified gets claimed in writing. */
+export function blockedTech(p: { verified_skills: string[]; never_claim_skills: string[] }): string[] {
+  const have = new Set(p.verified_skills.map((s) => s.toLowerCase()));
+  return [...p.never_claim_skills, ...COMMON_TECH.filter((t) => !have.has(t.toLowerCase()))];
+}
+
 export function sanitizeLetter(text: string, never: string[], max: number): string {
   const cleaned = stripNeverClaimSentences(stripLinkSentences(normalizeProse(text)), never);
   return enforceMax(cleaned, max);

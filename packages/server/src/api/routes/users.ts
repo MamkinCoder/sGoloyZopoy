@@ -78,5 +78,10 @@ export function userRoutes({ store }: ApiDeps): Hono {
     return c.json(dto);
   });
 
+  r.get("/users/:slug/analytics", (c) => {
+    const u = userOr404(store, c.req.param("slug"));
+    return c.json(store.userAnalytics(u.id, sinceFor(c.req.query("range"))));
+  });
+
   return r;
 }

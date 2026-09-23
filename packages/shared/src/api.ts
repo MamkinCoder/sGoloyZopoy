@@ -30,6 +30,66 @@ export interface StatsDTO {
   runs_count: number;
 }
 
+/** GET /users/:slug/analytics — one payload for the dashboard charts. */
+export interface AnalyticsCount {
+  key: string;
+  n: number;
+}
+
+export interface AnalyticsDay {
+  day: string; // YYYY-MM-DD (UTC)
+  sent: number;
+  skipped: number;
+  failed: number;
+  msgs_in: number; // employer messages
+  bot_out: number; // replies the bot sent (hh_message_id IS NULL)
+  llm_calls: number;
+}
+
+export interface AnalyticsEvent {
+  at: string;
+  kind: "sent" | "employer" | "bot";
+  title: string;
+  detail: string;
+}
+
+export interface AnalyticsDTO {
+  since: string | null;
+  kpi: {
+    sent: number;
+    skipped: number;
+    failed: number;
+    negotiations: number;
+    responded: number; // threads in viewed|invited|rejected
+    response_rate: number | null; // responded / sent
+    invitations: number;
+    rejections: number;
+    employer_messages: number;
+    bot_replies: number;
+    needs_human_open: number;
+    resumes_total: number;
+    resumes_generated: number;
+    llm_calls: number;
+    llm_failed: number;
+    llm_prompt_chars: number;
+    llm_result_chars: number;
+    llm_avg_ms: number;
+    runs: number;
+  };
+  daily: AnalyticsDay[];
+  funnel: AnalyticsCount[]; // found, decided, approved, sent, viewed, invited
+  skip_reasons: AnalyticsCount[];
+  companies: AnalyticsCount[];
+  sources: AnalyticsCount[];
+  resumes: AnalyticsCount[];
+  directions: AnalyticsCount[];
+  reject_reasons: AnalyticsCount[];
+  work_formats: AnalyticsCount[];
+  areas: AnalyticsCount[];
+  llm_tasks: AnalyticsCount[];
+  recent: AnalyticsEvent[];
+}
+
 export interface ApplicationDTO {
   application: Application;
   vacancy: Vacancy;
@@ -65,6 +125,34 @@ export interface ResumesDTO {
   generated: GeneratedResumeDTO[];
   last_synced: string | null;
   capacity: { created: number; max: number } | null;
+}
+
+/** A career application waiting in the review queue (status QUEUED). */
+export interface QueueItemDTO {
+  id: number;
+  created_at: string;
+  vacancy: { id: number; title: string; company: string; url: string; area: string; work_format: string; salary_from: number; salary_to: number; currency: string };
+  site: { name: string; slug: string } | null;
+  pdf_url: string | null;
+  cover_letter: string;
+  /** Claude's decide reason. */
+  reason: string;
+  /** Last send/inspect note (e.g. "form checked: ..."). */
+  detail: string;
+  form: { full_name: string; email: string; phone: string; cv_file_name: string; cover_letter: string };
+  /** Extra questions and the bot's answers, after «Проверить форму». */
+  questionnaire: ApplicationDetailDTO["questionnaire"];
+}
+
+/** A vacancy the pipeline filtered out (newest row per vacancy is a SKIP_* filter status). */
+export interface FilteredItemDTO {
+  id: number;
+  created_at: string;
+  status: Status;
+  /** Filter detail or the LLM's reason. */
+  reason: string;
+  vacancy: { id: number; title: string; company: string; url: string; source: string };
+  site: { name: string; slug: string } | null;
 }
 
 export interface ChatThreadDTO extends ChatThread {
@@ -103,8 +191,16 @@ export interface HealthDTO {
   mem_available_mb: number | null;
   active_run_id: number | null;
   scheduler_next: string | null;
-  users: { slug: string; hh_login_ok: boolean | null; cookies_age_h: number | null }[];
+  users: {
+    slug: string;
+    hh_login_ok: boolean | null;
+    cookies_age_h: number | null;
+    /** Career autopilot today: enabled sites, sites still unvisited, queue slots left of the daily limit. */
+    career: { sites_enabled: number; sites_left_today: number; queue_left: number; daily_limit: number };
+  }[];
   tools: { chromium: string | null; claude: string | null; xelatex: string | null };
+  /** Last hh resume raise ("touch"), ISO or null. */
+  touch_last_at: string | null;
 }
 
 export interface ApiError {

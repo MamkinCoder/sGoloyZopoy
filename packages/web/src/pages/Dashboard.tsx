@@ -1,56 +1,85 @@
-import type { RunDTO, Status } from "@sgz/shared";
-import { useState } from "react";
+import type { AnalyticsCount, AnalyticsDTO, AnalyticsEvent, RunDTO, Status } from "@sgz/shared";
+import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useHealth, useRuns, useStats, type StatsRange } from "../api/hooks";
+import { useAnalytics, useHealth, useRuns, type StatsRange } from "../api/hooks";
+import { ColumnChart, Funnel, type Series } from "../components/Charts";
 import { DataTable, type Column } from "../components/DataTable";
 import { StatTile } from "../components/StatTile";
 import { RunStatusBadge, StatusBadge } from "../components/StatusBadge";
-import { BarList, Section, Spinner } from "../components/Ui";
-import { fmtDateTime, fmtDuration, fmtInt } from "../lib/format";
-import { familyOf, SOURCE_LABEL, TRIGGER_LABEL } from "../lib/status";
+import { BarList, Empty, Section, Spinner } from "../components/Ui";
+import { fmtDateTime, fmtDuration, fmtInt, fmtRel } from "../lib/format";
+import { SOURCE_LABEL, TRIGGER_LABEL } from "../lib/status";
 
 const RANGES: { key: StatsRange; label: string }[] = [
   { key: "today", label: "Сегодня" },
   { key: "7d", label: "7 дней" },
   { key: "30d", label: "30 дней" },
+  { key: "all", label: "Всё время" },
 ];
+
+const APP_SERIES: Series[] = [
+  { key: "sent", name: "Отправлено", color: "var(--s1)" },
+  { key: "skipped", name: "Пропущено", color: "var(--s2)" },
+  { key: "failed", name: "Ошибки", color: "var(--s3)" },
+];
+const CHAT_SERIES: Series[] = [
+  { key: "msgs_in", name: "От работодателей", color: "var(--s1)" },
+  { key: "bot_out", name: "Ответы бота", color: "var(--s2)" },
+];
+const LLM_SERIES: Series[] = [{ key: "llm_calls", name: "Вызовы LLM", color: "var(--s1)" }];
+
+const FUNNEL_LABEL: Record<string, string> = {
+  found: "Найдено",
+  decided: "Оценено LLM",
+  approved: "Одобрено",
+  sent: "Отправлено",
+  viewed: "Ответ / просмотр",
+  invited: "Приглашения",
+};
+const EVENT_LABEL: Record<AnalyticsEvent["kind"], string> = { sent: "Отклик", employer: "Работодатель", bot: "Бот" };
+const EVENT_CLASS: Record<AnalyticsEvent["kind"], string> = {
+  sent: "bg-[var(--ok-soft)] text-[var(--ok)]",
+  employer: "bg-[var(--accent-soft)] text-[var(--accent)]",
+  bot: "bg-[var(--surface-2)] muted",
+};
+
+const compact = (n: number) => new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 1 }).format(n);
+const pct = (r: number | null) => (r == null ? "—" : `${Math.round(r * 100)}%`);
+
+function Bars({ rows, label = (k) => k }: { rows: AnalyticsCount[] | undefined; label?: (key: string) => ReactNode }) {
+  if (!rows) return <Spinner />;
+  return <BarList rows={rows.map((r) => ({ key: r.key, label: label(r.key), value: r.n }))} />;
+}
+
+function Kpis({ k }: { k: AnalyticsDTO["kpi"] }) {
+  const b = (n: number) => <b className="text-[var(--text)]">{fmtInt(n)}</b>;
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <StatTile label="Отправлено" value={fmtInt(k.sent)} tone={k.sent ? "ok" : undefined} sub={<>пропущено {b(k.skipped)}</>} />
+      <StatTile label="Переговоры hh" value={fmtInt(k.negotiations)} sub={<>с ответом {b(k.responded)}</>} />
+      <StatTile label="Доля ответов" value={pct(k.response_rate)} sub="ответы / отправлено" />
+      <StatTile label="Приглашения" value={fmtInt(k.invitations)} tone={k.invitations ? "ok" : undefined} sub={<>отказы {b(k.rejections)}</>} />
+      <StatTile label="Сообщений от работодателей" value={fmtInt(k.employer_messages)} sub={<>ответов бота {b(k.bot_replies)}</>} />
+      <StatTile label="Ждут человека" value={fmtInt(k.needs_human_open)} tone={k.needs_human_open ? "warn" : undefined} sub="чаты сейчас" />
+      <StatTile label="Резюме" value={fmtInt(k.resumes_total)} sub={<>создано ботом {b(k.resumes_generated)}</>} />
+      <StatTile label="Вызовы LLM" value={fmtInt(k.llm_calls)} sub={<>ошибок {b(k.llm_failed)}</>} />
+      <StatTile label="Символы LLM" value={compact(k.llm_prompt_chars)} sub={<>ответы {compact(k.llm_result_chars)}</>} />
+      <StatTile label="Среднее время LLM" value={k.llm_calls ? `${(k.llm_avg_ms / 1000).toFixed(1)} с` : "—"} sub="на вызов" />
+      <StatTile label="Ошибки откликов" value={fmtInt(k.failed)} tone={k.failed ? "bad" : undefined} sub="FAILED_*" />
+      <StatTile label="Запуски" value={fmtInt(k.runs)} sub="за период" />
+    </div>
+  );
+}
 
 export function DashboardPage() {
   const { slug = "" } = useParams();
   const nav = useNavigate();
-  const today = useStats(slug, "today");
-  const week = useStats(slug, "7d");
-  const month = useStats(slug, "30d");
-  const [breakRange, setBreakRange] = useState<StatsRange>("7d");
+  const [range, setRange] = useState<StatsRange>("30d");
+  const an = useAnalytics(slug, range);
   const runs = useRuns(slug, 10);
   const health = useHealth();
-
-  const pick = (k: "sent" | "invitations" | "rejections" | "failed") => ({
-    t: today.data?.[k],
-    w: week.data?.[k],
-    m: month.data?.[k],
-  });
-  const tile = (label: string, k: "sent" | "invitations" | "rejections" | "failed", tone?: "ok" | "bad" | "warn") => {
-    const v = pick(k);
-    return (
-      <StatTile
-        label={label}
-        value={today.isLoading ? "…" : fmtInt(v.t)}
-        tone={v.t ? tone : undefined}
-        sub={
-          <>
-            7д: <b className="text-[var(--text)]">{fmtInt(v.w)}</b> · 30д: <b className="text-[var(--text)]">{fmtInt(v.m)}</b>
-          </>
-        }
-      />
-    );
-  };
-
-  const breakdownSrc = breakRange === "today" ? today.data : breakRange === "7d" ? week.data : month.data;
-  const breakdown = Object.entries(breakdownSrc?.by_status ?? {})
-    .filter(([, n]) => (n ?? 0) > 0)
-    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
-    .map(([s, n]) => ({ key: s, label: <StatusBadge status={s as Status} />, value: n ?? 0, family: familyOf(s) }));
+  const a = an.data;
+  const daily = (a?.daily ?? []).map((d) => ({ label: d.day, values: { ...d } as unknown as Record<string, number> }));
 
   const hh = health.data?.users.find((u) => u.slug === slug);
   const lastRun = runs.data?.find((r) => r.status !== "queued" && r.status !== "running");
@@ -69,44 +98,91 @@ export function DashboardPage() {
 
   return (
     <div className="grid gap-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {tile("Отправлено", "sent", "ok")}
-        {tile("Приглашения", "invitations", "ok")}
-        {tile("Отказы", "rejections", "warn")}
-        {tile("Ошибки", "failed", "bad")}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[15px] font-semibold">Аналитика</h2>
+        <div className="flex gap-1" role="group" aria-label="Период">
+          {RANGES.map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              aria-pressed={range === r.key}
+              onClick={() => setRange(r.key)}
+              className={`btn btn-sm ${range === r.key ? "bg-[var(--surface-2)] font-semibold" : "font-normal"}`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {a ? <Kpis k={a.kpi} /> : an.isError ? <Empty>Не удалось загрузить аналитику</Empty> : <Spinner />}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section title="Отклики по дням">{a ? daily.length ? <ColumnChart rows={daily} series={APP_SERIES} /> : <Empty /> : <Spinner />}</Section>
+        <Section title="Чаты по дням">
+          {a ? daily.length ? <ColumnChart rows={daily} series={CHAT_SERIES} stacked={false} /> : <Empty /> : <Spinner />}
+        </Section>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section title="Воронка">
+          {a ? <Funnel steps={a.funnel.map((f) => ({ key: f.key, label: FUNNEL_LABEL[f.key] ?? f.key, n: f.n }))} /> : <Spinner />}
+          <div className="mt-2 text-[11px] faint">
+            «Найдено» - сумма по запускам; хвост воронки - состояния переговоров hh.
+          </div>
+        </Section>
+        <Section title="Вызовы LLM по дням">{a ? daily.length ? <ColumnChart rows={daily} series={LLM_SERIES} height={150} /> : <Empty /> : <Spinner />}</Section>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <Section title="Причины пропуска">
+          <Bars rows={a?.skip_reasons} label={(k) => <StatusBadge status={k as Status} />} />
+        </Section>
+        <Section title="Почему LLM отклонил">
+          <Bars rows={a?.reject_reasons} />
+        </Section>
+        <Section title="Топ компаний (отправлено)">
+          <Bars rows={a?.companies} />
+        </Section>
+        <Section title="Источник">
+          <Bars rows={a?.sources} label={(k) => SOURCE_LABEL[k] ?? k} />
+        </Section>
+        <Section title="Резюме">
+          <Bars rows={a?.resumes} />
+        </Section>
+        <Section title="Направление">
+          <Bars rows={a?.directions} />
+        </Section>
+        <Section title="Формат работы">
+          <Bars rows={a?.work_formats} />
+        </Section>
+        <Section title="Регион">
+          <Bars rows={a?.areas} />
+        </Section>
+        <Section title="Задачи LLM">
+          <Bars rows={a?.llm_tasks} />
+        </Section>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <Section
-          title="Причины"
-          right={
-            <div className="flex gap-1">
-              {RANGES.map((r) => (
-                <button
-                  key={r.key}
-                  type="button"
-                  onClick={() => setBreakRange(r.key)}
-                  className={`btn btn-sm ${breakRange === r.key ? "bg-[var(--surface-2)] font-semibold" : "font-normal"}`}
-                >
-                  {r.label}
-                </button>
+        <Section title="Последние события">
+          {!a ? (
+            <Spinner />
+          ) : a.recent.length === 0 ? (
+            <Empty />
+          ) : (
+            <ul className="grid gap-1.5 text-[12px]">
+              {a.recent.map((e, i) => (
+                <li key={i} className="grid grid-cols-[76px_92px_minmax(0,1fr)] gap-2 items-baseline">
+                  <span className="faint tabular-nums">{fmtDateTime(e.at)}</span>
+                  <span className={`rounded px-1.5 py-px text-[11px] font-medium text-center ${EVENT_CLASS[e.kind]}`}>{EVENT_LABEL[e.kind]}</span>
+                  <span className="truncate" title={`${e.title} - ${e.detail}`}>
+                    {e.title || "—"}
+                    {e.detail && <span className="muted"> - {e.detail}</span>}
+                  </span>
+                </li>
               ))}
-            </div>
-          }
-        >
-          {breakdownSrc ? <BarList rows={breakdown} /> : <Spinner />}
-          {breakdownSrc && (
-            <div className="mt-3 pt-2 border-t border-[var(--border)] text-[12px] muted flex flex-wrap gap-x-4 gap-y-1">
-              <span>
-                Пропущено: <b>{fmtInt(breakdownSrc.skipped)}</b>
-              </span>
-              <span>
-                Ответов в чатах: <b>{fmtInt(breakdownSrc.chat_replies)}</b>
-              </span>
-              <span>
-                Запусков: <b>{fmtInt(breakdownSrc.runs_count)}</b>
-              </span>
-            </div>
+            </ul>
           )}
         </Section>
 
@@ -125,6 +201,23 @@ export function DashboardPage() {
               )}
               {hh?.cookies_age_h != null && <span className="faint"> · cookies {Math.round(hh.cookies_age_h)} ч</span>}
             </dd>
+            <dt className="muted">Сайты компаний</dt>
+            <dd>
+              {hh?.career ? (
+                <>
+                  сегодня {hh.career.sites_enabled - hh.career.sites_left_today}/{hh.career.sites_enabled}
+                  <span className="faint">
+                    {" "}
+                    · в очередь {hh.career.daily_limit - hh.career.queue_left}/{hh.career.daily_limit}
+                  </span>{" "}
+                  <Link to={`/u/${slug}/queue`}>очередь</Link>
+                </>
+              ) : (
+                <span className="faint">—</span>
+              )}
+            </dd>
+            <dt className="muted">Резюме подняты</dt>
+            <dd>{health.data?.touch_last_at ? fmtRel(health.data.touch_last_at) : <span className="faint">ещё нет</span>}</dd>
             <dt className="muted">Последний отчёт в TG</dt>
             <dd>
               {!lastRun ? (

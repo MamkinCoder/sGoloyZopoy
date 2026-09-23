@@ -155,6 +155,9 @@ export class FakeSession implements BrowserSession {
   async pressEscape(): Promise<void> {
     this.rec("pressEscape");
   }
+  async pressKey(key: string): Promise<void> {
+    this.rec("pressKey", key);
+  }
   async snapshot(name: string): Promise<string> {
     this.rec("snapshot", name);
     this.snapshots.push(name);

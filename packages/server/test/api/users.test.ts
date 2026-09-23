@@ -47,4 +47,14 @@ describe("users & profile", () => {
     expect(s).toEqual({ sent: 1, skipped: 2, failed: 0, by_status: { SENT: 1 }, invitations: 0, rejections: 0, chat_replies: 0, runs_count: 1 });
     expect((await h.get("/api/users/yaroslav/stats?range=yesterday")).status).toBe(400);
   });
+
+  it("analytics passes the range through and validates it", async () => {
+    const h = await harness();
+    const a = await (await h.get("/api/users/yaroslav/analytics?range=all")).json();
+    expect(a.since).toBeNull();
+    expect(a.kpi.response_rate).toBeNull();
+    expect((await h.get("/api/users/yaroslav/analytics?range=7d")).status).toBe(200);
+    expect((await h.get("/api/users/yaroslav/analytics?range=1y")).status).toBe(400);
+    expect((await h.get("/api/users/nobody/analytics")).status).toBe(404);
+  });
 });

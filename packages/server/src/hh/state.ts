@@ -13,6 +13,7 @@ const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !
 
 const decodeEntities = (s: string): string =>
   s
+    .replace(/&nbsp;/g, " ")
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&#x27;|&apos;/g, "'")
     .replace(/&lt;/g, "<")
@@ -21,9 +22,10 @@ const decodeEntities = (s: string): string =>
     .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&amp;/g, "&");
 
-/** Returns the parsed InitialState JSON or null when the template is absent/unparseable. */
-export const extractInitialState = (html: string): State | null => {
-  const m = /<template[^>]*id="HH-Lux-InitialState"[^>]*>([\s\S]*?)<\/template>/i.exec(html);
+/** Returns the parsed InitialState JSON or null when the template is absent/unparseable. `name` is the
+ * template's id or class; the applicant profile page keeps resumes in "ResumeProfileFront-InitialState". */
+export const extractInitialState = (html: string, name = "HH-Lux-InitialState"): State | null => {
+  const m = new RegExp(`<template[^>]*(?:id|class)="${name}"[^>]*>([\\s\\S]*?)<\\/template>`, "i").exec(html);
   if (!m?.[1]) return null;
   const raw = m[1].trim();
   for (const candidate of [raw, decodeEntities(raw)]) {
@@ -322,12 +324,13 @@ export interface ParsedThread {
   vacancyExternalId: string | null;
   vacancyTitle: string;
   isBot: boolean;
+  lastModified?: string; // ISO, from the topic's lastModifiedMillis
 }
 
 /** Maps hh state ids/names (INVITATION, DISCARD, RESPONSE, «Приглашение», «Отказ»…) to ThreadState. */
 export const mapNegotiationState = (raw: string, viewed = false): ThreadState => {
   const s = raw.toLowerCase();
-  if (/invit|приглаш/.test(s)) return "invited";
+  if (/invit|приглаш|interview|собесед|offer|оффер|hired/.test(s)) return "invited";
   if (/discard|reject|отказ/.test(s)) return "rejected";
   if (/archiv|архив/.test(s)) return "archived";
   if (/просмотрено|viewed/.test(s) && !/не просмотрено|not viewed/.test(s)) return "viewed";
@@ -363,6 +366,7 @@ export const parseNegotiations = (state: State | null): { threads: ParsedThread[
       state: stateStr,
       threadState: mapNegotiationState(stateStr, viewed),
       vacancyExternalId: /^\d+$/.test(vacancyId) ? vacancyId : null,
+      ...(typeof o.lastModifiedMillis === "number" ? { lastModified: new Date(o.lastModifiedMillis).toISOString() } : {}),
       vacancyTitle: str(pick(o, "vacancy.name", "vacancyName", "name")),
       isBot: bool(pick(o, "isBot", "hasBot", "chatBot", "vacancy.hasChatBot", "employer.hasChatBot")),
     });
@@ -389,7 +393,17 @@ export interface ParsedChat {
   employer: string;
   vacancyExternalId: string | null;
   matchedPath: string | null;
+  rejected?: boolean;
+  writable?: boolean;
+  choices?: string[];
 }
+
+/** Employer wording that means «not moving forward» (hh often rejects by plain message, not DISCARD). */
+export const isRejection = (text: string): boolean =>
+  /к сожалению|не готовы (сделать|предложить|пригласить)|приняли решение|выбрали другого|другого кандидата|не можем предложить|отказ(ать)? вам|not moving forward|unfortunately/i.test(text);
+
+/** A "?" outside of URLs (bot links like ?start=... are not questions). */
+export const asksQuestion = (text: string): boolean => /\?/.test(text.replace(/https?:\/\/\S+/g, ""));
 
 const messageFrom = (o: Obj): ParsedChatMessage => {
   const author = pick(o, "author", "sender");
@@ -402,7 +416,7 @@ const messageFrom = (o: Obj): ParsedChatMessage => {
     direction: mine ? "out" : "in",
     author: mine ? "me" : isBot ? "bot" : "employer",
     text,
-    isQuestion: !mine && /\?/.test(text),
+    isQuestion: !mine && asksQuestion(text),
   };
 };
 
@@ -437,4 +451,38 @@ export const parseChat = (state: State | null): ParsedChat => {
   const vacancyId = vac ? str(pick(vac.value, "vacancyId", "vacancy.id", "vacancy.vacancyId")) : "";
   const employer = str(pick(state, "chatik.employer.name", "chat.employer.name", "employer.name")) || (vac ? str(pick(vac.value, "employer.name", "vacancy.company.name", "company.name")) : "");
   return { messages, survey, employer, vacancyExternalId: /^\d+$/.test(vacancyId) ? vacancyId : null, matchedPath: hit?.path ?? (surveyObj ? surveyObj.path : null) };
+};
+
+/** Quick-reply buttons (actions.text_buttons) of the last message, when it is the employer's. */
+const lastChoices = (items: Obj[], me: string): string[] => {
+  const last = items.filter((m) => !m.hidden).at(-1);
+  if (!last || (me && str(last.participantId) === me)) return [];
+  const buttons = get(last, "actions.text_buttons");
+  return Array.isArray(buttons) ? buttons.filter(isObj).map((b) => str(b.text).trim()).filter(Boolean) : [];
+};
+
+/** hh.ru/chat/<id> (chatik moved under hh.ru): "Chatik-InitialState" with chatData.chat.messages.items;
+ * a message is mine when its participantId is the page's userId. */
+export const parseChatik = (state: State | null): ParsedChat | null => {
+  const chat = get(state, "chatData.chat");
+  const items = get(chat, "messages.items");
+  if (!isObj(chat) || !Array.isArray(items)) return null;
+  const me = str(get(state, "userId"));
+  const messages: ParsedChatMessage[] = items.filter(isObj).filter((m) => !m.hidden && str(m.text).trim()).map((m) => {
+    const mine = !!me && str(m.participantId) === me;
+    const text = decodeEntities(str(m.text));
+    return { hhMessageId: str(m.id) || null, direction: mine ? "out" : "in", author: mine ? "me" : bool(get(m, "participantDisplay.isBot")) ? "bot" : "employer", text, isQuestion: !mine && asksQuestion(text) };
+  });
+  const vacancyId = str(get(chat, "resources.VACANCY[0]"));
+  const surveyObj = findObjects(get(state, "chatData"), (o) => Array.isArray(pick(o, "questions")) && (pick(o, "questions") as unknown[]).some((q) => isObj(q) && ("options" in q || "answers" in q || "text" in q)), { limit: 1 })[0];
+  return {
+    messages,
+    survey: surveyObj ? questionsFrom(surveyObj.value.questions as unknown[]) : [],
+    employer: str(get(state, `chatData.resources.vacancies.${vacancyId}.company.name`)) || str(get(state, "chatData.display.subtitle")),
+    vacancyExternalId: /^\d+$/.test(vacancyId) ? vacancyId : null,
+    matchedPath: "chatData.chat.messages.items",
+    rejected: items.filter(isObj).some((m) => get(m, "workflowTransition.applicantState") === "DISCARD") || isRejection(messages.filter((m) => m.direction === "in").at(-1)?.text ?? ""),
+    writable: bool(get(state, "chatData.chatStates.writeMessageState.allowed")),
+    choices: lastChoices(items.filter(isObj), me),
+  };
 };

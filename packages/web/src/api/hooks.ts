@@ -1,13 +1,16 @@
 import type {
+  AnalyticsDTO,
   ApplicationDetailDTO,
   ApplicationDTO,
   CareerSiteDTO,
   ChatMessageDTO,
   ChatThreadDTO,
   DedupRowDTO,
+  FilteredItemDTO,
   HealthDTO,
   Paged,
   ProfileDTO,
+  QueueItemDTO,
   ResumesDTO,
   RunDTO,
   RunEventDTO,
@@ -27,6 +30,7 @@ export const keys = {
   users: ["users"] as const,
   profile: (slug: string) => ["profile", slug] as const,
   stats: (slug: string, range: StatsRange) => ["stats", slug, range] as const,
+  analytics: (slug: string, range: StatsRange) => ["analytics", slug, range] as const,
   applications: (slug: string, params: ApplicationsParams) => ["applications", slug, params] as const,
   application: (id: number) => ["application", id] as const,
   resumes: (slug: string) => ["resumes", slug] as const,
@@ -41,6 +45,8 @@ export const keys = {
   adapters: ["adapters"] as const,
   health: ["health"] as const,
   settings: ["settings"] as const,
+  queue: (slug: string) => ["queue", slug] as const,
+  filtered: (slug: string, source: string) => ["filtered", slug, source] as const,
 };
 
 // ---- auth
@@ -97,6 +103,14 @@ export const useStats = (slug: string, range: StatsRange) =>
     refetchInterval: 30_000,
   });
 
+export const useAnalytics = (slug: string, range: StatsRange) =>
+  useQuery({
+    queryKey: keys.analytics(slug, range),
+    queryFn: () => api<AnalyticsDTO>(`/users/${slug}/analytics${qs({ range })}`),
+    refetchInterval: 60_000,
+    placeholderData: (prev) => prev,
+  });
+
 // ---- applications
 export interface ApplicationsParams {
   status?: string; // comma-separated
@@ -121,6 +135,34 @@ export const useApplication = (id: number | null) =>
     queryFn: () => api<ApplicationDetailDTO>(`/applications/${id}`),
     enabled: id != null,
   });
+
+// ---- review queue + filtered-out vacancies
+export const useQueue = (slug: string) =>
+  useQuery({ queryKey: keys.queue(slug), queryFn: () => api<QueueItemDTO[]>(`/users/${slug}/queue`), refetchInterval: 60_000 });
+
+export const useFiltered = (slug: string, source: string) =>
+  useQuery({
+    queryKey: keys.filtered(slug, source),
+    queryFn: () => api<FilteredItemDTO[]>(`/users/${slug}/filtered${qs({ source })}`),
+    placeholderData: (prev) => prev,
+  });
+
+/** send / inspect / force start a run (409 = runner busy); skip and cover-letter act immediately. */
+export function useApplicationAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (arg: { id: number; action: "send" | "inspect" | "retailor" | "skip" | "force" | "cover-letter"; text?: string }) =>
+      arg.action === "cover-letter"
+        ? api<{ run_id?: number; ok?: boolean }>(`/applications/${arg.id}/cover-letter`, { method: "PUT", body: { text: arg.text } })
+        : api<{ run_id?: number; ok?: boolean }>(`/applications/${arg.id}/${arg.action}`, { method: "POST", silent: true }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["queue"] });
+      qc.invalidateQueries({ queryKey: ["filtered"] });
+      qc.invalidateQueries({ queryKey: keys.activeRun });
+      qc.invalidateQueries({ queryKey: ["runs"] });
+    },
+  });
+}
 
 // ---- resumes
 export const useResumes = (slug: string) =>

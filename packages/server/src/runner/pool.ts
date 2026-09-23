@@ -52,7 +52,8 @@ export async function syncPool(ctx: RunContext, u: UserRun): Promise<HHResume[]>
       try {
         const summary = await ctx.llm.summarizeResume(p.text);
         stats.llmCall();
-        ctx.store.upsertHHResume({ ...p.row, summary, direction: summary.direction || p.row.direction });
+        // A tailored copy keeps the direction it was made for; its body text is still the original's history.
+        ctx.store.upsertHHResume({ ...p.row, summary, direction: (p.row.isGenerated && p.row.direction) || summary.direction || p.row.direction });
         ctx.log.info("pool", `${p.row.title}: ${summary.direction} / ${summary.seniority}`);
       } catch (e) {
         ctx.log.warn("pool", `${p.row.title}: summarize failed: ${errMessage(e)}`);
@@ -91,6 +92,7 @@ export async function expandPool(ctx: RunContext, u: UserRun, pool: HHResume[]):
     }
     try {
       const newId = await ctx.hh.duplicateResume(s2, base.hhResumeId, { title: v.title, about: v.about, keySkills: v.key_skills });
+      if (!(await ctx.hh.publishResume(s2, newId))) ctx.log.warn("pool", `"${v.title}" (${newId}) created but not published`);
       ctx.store.upsertHHResume({
         userId: user.id,
         hhResumeId: newId,

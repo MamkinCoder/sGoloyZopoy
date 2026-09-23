@@ -16,8 +16,8 @@ export interface PipelineResult {
 
 export function planHH(source: string, stage: string | undefined): HHPlan | null {
   if (source === "career") return null;
-  const full: HHPlan = { poolSync: "auto", search: true, decide: true, apply: true, chats: true, touch: true, poolExpand: false };
-  const none: HHPlan = { poolSync: "off", search: false, decide: false, apply: false, chats: false, touch: false, poolExpand: false };
+  const full: HHPlan = { poolSync: "auto", search: true, decide: true, apply: true, chats: true, touch: true, poolExpand: true, force: null };
+  const none: HHPlan = { poolSync: "off", search: false, decide: false, apply: false, chats: false, touch: false, poolExpand: false, force: null };
   if (source === "pool") {
     if (!stage || stage === "pool-sync" || stage === "sync") return { ...none, poolSync: "force" };
     if (stage === "pool-expand" || stage === "expand") return { ...none, poolSync: "auto", poolExpand: true };
@@ -25,6 +25,8 @@ export function planHH(source: string, stage: string | undefined): HHPlan | null
     return null;
   }
   if (!stage) return full;
+  const force = /^force:(\d+)$/.exec(stage);
+  if (force) return source === "hh" ? { ...none, poolSync: "auto", force: Number(force[1]) } : null;
   switch (stage) {
     case "search":
     case "fetch":
@@ -48,13 +50,17 @@ export function planHH(source: string, stage: string | undefined): HHPlan | null
 
 export function planCareer(source: string, stage: string | undefined): CareerPlan | null {
   if (source !== "career" && source !== "all") return null;
-  if (!stage) return { onboardOnly: null, discover: true, apply: true };
+  const plan: CareerPlan = { onboardOnly: null, discover: true, apply: true, target: null, rotate: false };
+  if (!stage) return plan;
   if (stage.startsWith("onboard:")) {
     const id = Number(stage.slice("onboard:".length));
-    return Number.isFinite(id) ? { onboardOnly: id, discover: false, apply: false } : null;
+    return Number.isFinite(id) ? { ...plan, onboardOnly: id, discover: false, apply: false } : null;
   }
-  if (stage === "search" || stage === "fetch" || stage === "discover") return { onboardOnly: null, discover: true, apply: false };
-  if (stage === "apply" || stage === "tailor") return { onboardOnly: null, discover: true, apply: true };
+  const target = /^(send|inspect|force|retailor):(\d+)$/.exec(stage);
+  if (target) return { ...plan, discover: false, apply: false, target: { applicationId: Number(target[2]), mode: target[1] as "send" | "inspect" | "force" | "retailor" } };
+  if (stage === "search" || stage === "fetch" || stage === "discover") return { ...plan, apply: false };
+  if (stage === "apply" || stage === "tailor") return plan;
+  if (stage === "rotate") return { ...plan, rotate: true };
   return null;
 }
 

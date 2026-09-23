@@ -42,9 +42,22 @@ export const SEL = {
   resumes: {
     card: '[data-qa="resume"]',
     titleLink: '[data-qa="resume-title-link"]',
-    menu: ['[data-qa="resume-actions-menu"]', '[data-qa="resume-more-actions"]'],
-    duplicate: ['[data-qa="resume-duplicate"]', '[data-qa="resume-action-duplicate"]'],
-    touchButton: ['[data-qa="resume-update-button"]', '[data-qa="resume-update-button_actions"]', 'button[data-qa="resume-update"]'],
+    menu: ['[data-qa="resume-list-action-more"]', '[data-qa="resume-actions-menu"]', '[data-qa="resume-more-actions"]'],
+    cardMenu: '[data-qa="resume-list-action-more"]',
+    duplicate: ['[data-qa="operations-list-duplicate-resume"]', '[data-qa="resume-duplicate"]', '[data-qa="resume-action-duplicate"]'],
+    // data-qa holds several words here ("resume-update-button resume-update-button_actions"), hence ~=
+    touchButton: ['[data-qa~="resume-update-button"]', '[data-qa~="resume-update-button_actions"]', 'button[data-qa="resume-update"]'],
+    editTitle: '[data-qa="edit-position-button"]',
+    titleInput: '[data-qa="resume-edit-title-suggest"]',
+    editAbout: '[data-qa="resume-edit-button-about"]',
+    aboutInput: '[data-qa="resume-editor-about"]',
+    editSkills: '[data-qa="skills-add"]',
+    skillInput: '[data-qa="chips-trigger-input"]',
+    skillChipDelete: '[data-qa^="chips-trigger-chip-"] [data-qa="chip-delete-action"]',
+    save: '[data-qa="resume-partial-edit-save"]',
+    // «Дополнить резюме» wizard (/profile/resume?resume=<hash>): a duplicate stays a draft until it is walked.
+    wizardSelectJob: '[data-qa="resume-profile-card-select-job"]',
+    wizardNext: '[data-qa="resume-profile-next-screen"]',
   },
   negotiations: {
     item: '[data-qa="negotiations-item"]',
@@ -52,8 +65,8 @@ export const SEL = {
     chatLink: 'a[href*="chatik.hh.ru"], a[data-qa="negotiations-item-chat"]',
   },
   chat: {
-    input: ['[data-qa="chatik-new-message-text"]', 'textarea[data-qa="chat-input"]', '[contenteditable="true"][data-qa*="message"]'],
-    send: ['[data-qa="chatik-send-message-button"]', 'button[data-qa="chat-send"]'],
+    input: ['[data-qa="chatik-message-input"] textarea', '[data-qa="chatik-new-message-text"]', 'textarea[data-qa="chat-input"]', '[contenteditable="true"][data-qa*="message"]'],
+    send: ['[data-qa="chatik-do-send-message"]', '[data-qa="chatik-send-message-button"]', 'button[data-qa="chat-send"]'],
     message: '[data-qa="chatik-chat-message"]',
     survey: ['[data-qa="chatik-survey"]', '[data-qa="chat-survey"]'],
   },

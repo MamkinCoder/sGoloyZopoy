@@ -141,6 +141,10 @@ export class FakeSession implements BrowserSession {
     this.record("pressEscape");
   }
 
+  async pressKey(key: string): Promise<void> {
+    this.record("pressKey", key);
+  }
+
   async snapshot(name: string): Promise<string> {
     this.record("snapshot", name);
     mkdirSync(this.snapshotDir, { recursive: true });

@@ -7,9 +7,19 @@ export function splitName(full: string): { first: string; last: string } {
   const parts = full.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return { first: "", last: "" };
   if (parts.length === 1) return { first: parts[0] ?? "", last: "" };
-  // Russian profiles are usually written "Фамилия Имя [Отчество]"; latin ones "First Last".
+  // Russian names come both ways ("Петров Иван" / "Иван Петров"): whichever token has a surname
+  // ending is the last name. Without a clue: Cyrillic "Фамилия Имя", latin "First Last".
+  const surname = /(ов|ев|ёв|ин|ын|ский|цкий|ская|цкая|ова|ева|ёва|ина|ына|ко|ук|юк|ич|ян|дзе|швили)$/i;
   const cyrillic = /[Ѐ-ӿ]/.test(full);
-  if (cyrillic && parts.length >= 2) return { first: parts[1] ?? "", last: parts[0] ?? "" };
+  if (cyrillic) {
+    const [a = "", b = ""] = parts;
+    // First names that look like surnames by ending ("Алина", "Марина"...).
+    const names = /^(алина|марина|ирина|екатерина|кристина|полина|галина|карина|арина|регина|нина|валентина|ангелина|анжелина|зарина|дарина|ярослав|станислав|владислав|вячеслав|мирослав)$/i;
+    if (names.test(a) && !names.test(b)) return { first: a, last: b };
+    if (names.test(b) && !names.test(a)) return { first: b, last: a };
+    if (surname.test(b) && !surname.test(a)) return { first: a, last: b };
+    return { first: b, last: a };
+  }
   return { first: parts[0] ?? "", last: parts.slice(1).join(" ") };
 }
 

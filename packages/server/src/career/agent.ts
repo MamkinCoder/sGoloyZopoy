@@ -15,7 +15,7 @@ export interface CareerAgentOptions {
 }
 
 export const DISCOVER_MAX_PAGES = 5;
-export const DISCOVER_CAP = 100;
+export const DISCOVER_CAP = 400; // after the keyword filter; the runner ranks by title before fetching
 const PAGE_TEXT_MAX = 8000;
 const LINKS_MAX = 300;
 
@@ -43,10 +43,16 @@ export function createCareerAgent(llm: LLMClient, opts: CareerAgentOptions = {})
   };
 
   async function onboard(s: BrowserSession, baseUrl: string, hints?: string): Promise<{ ats: ATSKind; profile: SiteProfile }> {
-    await s.goto(baseUrl);
-    const currentUrl = (await s.url().catch(() => baseUrl)) || baseUrl;
-    const html = await s.html();
-    const det = detect(baseUrl, html) ?? detect(currentUrl, html);
+    // Most clients detect by host alone: skip the page load (and its antibot/timeouts) when they do.
+    let det = detect(baseUrl, "");
+    let currentUrl = baseUrl;
+    let html = "";
+    if (!det) {
+      await s.goto(baseUrl);
+      currentUrl = (await s.url().catch(() => baseUrl)) || baseUrl;
+      html = await s.html();
+      det = detect(baseUrl, html) ?? detect(currentUrl, html);
+    }
     if (det) {
       const client = clientFor(det.kind);
       const profile: SiteProfile = {
@@ -259,10 +265,9 @@ export function resolveUrl(raw: string, base: string): string | null {
 export function filterByKeywords(items: Discovered[], keywords: string[]): Discovered[] {
   const kws = keywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
   if (!kws.length) return items;
-  return items.filter((d) => {
-    const t = d.title.toLowerCase();
-    return kws.some((k) => t.includes(k));
-  });
+  // Whole-word match ("go" must not hit "Google" or "cargo"); a keyword may still be part of a hyphenated title.
+  const res = kws.map((k) => new RegExp(`(^|[^\\p{L}\\d])${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}\\d])`, "iu"));
+  return items.filter((d) => res.some((re) => re.test(d.title)));
 }
 
 /** "от 200 000 до 300 000 ₽" → {from: 200000, to: 300000, currency: "RUB"}; best effort, 0 when unknown. */

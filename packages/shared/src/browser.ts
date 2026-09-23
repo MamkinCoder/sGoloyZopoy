@@ -44,7 +44,8 @@ export interface ActResult {
  * All instructions are Russian or English natural language.
  */
 export interface BrowserSession {
-  goto(url: string): Promise<void>;
+  /** `quick`: DOM ready only (pages we just parse); default also waits for load + a short network idle. */
+  goto(url: string, opts?: { quick?: boolean }): Promise<void>;
   url(): Promise<string>;
   html(): Promise<string>;
   /** Visible text of the page (innerText), capped. */
@@ -70,6 +71,7 @@ export interface BrowserSession {
   waitForSelector(selector: string, timeoutMs: number): Promise<boolean>;
   evaluate<T = unknown>(js: string): Promise<T>;
   pressEscape(): Promise<void>;
+  pressKey(key: string): Promise<void>;
 
   /** Writes <dir>/<name>.html, .png, .url; returns the html path. */
   snapshot(name: string): Promise<string>;

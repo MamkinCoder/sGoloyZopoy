@@ -36,6 +36,7 @@ export const mapApplication = (r: Row): Application => ({
   reasonDetail: str(r.reason_detail),
   coverLetter: str(r.cover_letter),
   llmDecision: jsonObjOrNull<Decision>(r.llm_decision_json),
+  direction: str(r.direction),
   createdAt: str(r.created_at),
 });
 
@@ -60,13 +61,17 @@ export function sourceClause(alias: string, source: string): { sql: string; para
 type ApplicationsRepo = Pick<
   Store,
   | "hasSentApplication"
+  | "hasRecentRejection"
+  | "lastApplication"
   | "insertApplication"
   | "getApplication"
   | "updateApplicationStatus"
+  | "updateApplicationCoverLetter"
   | "listApplications"
   | "countSentToday"
   | "insertQuestionnaireAnswers"
   | "listQuestionnaireAnswers"
+  | "deleteQuestionnaireAnswers"
 >;
 
 export function applicationsRepo(s: Sql): ApplicationsRepo {
@@ -74,21 +79,36 @@ export function applicationsRepo(s: Sql): ApplicationsRepo {
     hasSentApplication(userId, vacancyId) {
       return (
         s.get(
-          "SELECT 1 AS x FROM applications WHERE user_id = ? AND vacancy_id = ? AND status = 'SENT' LIMIT 1",
+          "SELECT 1 AS x FROM applications WHERE user_id = ? AND vacancy_id = ? AND status IN ('SENT','QUEUED','SKIP_MANUAL') LIMIT 1",
           userId,
           vacancyId,
         ) !== undefined
       );
+    },
+    hasRecentRejection(userId, vacancyId, sinceISO) {
+      return (
+        s.get(
+          `SELECT 1 AS x FROM applications
+           WHERE user_id = ? AND vacancy_id = ? AND status = 'SKIP_LLM_REJECT' AND created_at >= ? LIMIT 1`,
+          userId,
+          vacancyId,
+          sinceISO,
+        ) !== undefined
+      );
+    },
+    lastApplication(userId, vacancyId) {
+      const r = s.get("SELECT * FROM applications WHERE user_id = ? AND vacancy_id = ? ORDER BY id DESC LIMIT 1", userId, vacancyId);
+      return r ? mapApplication(r as Row) : null;
     },
     insertApplication(a) {
       // The partial unique index ux_applications_sent rejects a second SENT; that error propagates.
       return s.transaction(() => {
         const r = s.get(
           `INSERT INTO applications (user_id, vacancy_id, hh_resume_id, generated_resume_id, run_id, attempt,
-             status, reason_detail, cover_letter, llm_decision_json, created_at)
+             status, reason_detail, cover_letter, llm_decision_json, direction, created_at)
            VALUES (?,?,?,?,?,
              (SELECT COALESCE(MAX(attempt), 0) + 1 FROM applications WHERE user_id = ? AND vacancy_id = ?),
-             ?,?,?,?,?)
+             ?,?,?,?,?,?)
            RETURNING *`,
           a.userId,
           a.vacancyId,
@@ -101,6 +121,7 @@ export function applicationsRepo(s: Sql): ApplicationsRepo {
           a.reasonDetail,
           a.coverLetter,
           a.llmDecision ? toJson(a.llmDecision) : null,
+          a.direction,
           nowISO(),
         );
         return mapApplication(r as Row);
@@ -112,6 +133,9 @@ export function applicationsRepo(s: Sql): ApplicationsRepo {
     },
     updateApplicationStatus(id, status, detail) {
       s.run("UPDATE applications SET status = ?, reason_detail = ? WHERE id = ?", status, detail, id);
+    },
+    updateApplicationCoverLetter(id, text) {
+      s.run("UPDATE applications SET cover_letter = ? WHERE id = ?", text, id);
     },
     listApplications(f) {
       const where: string[] = [];
@@ -129,6 +153,7 @@ export function applicationsRepo(s: Sql): ApplicationsRepo {
       }
       if (f.since) (where.push("a.created_at >= ?"), params.push(f.since));
       if (f.until) (where.push("a.created_at < ?"), params.push(f.until));
+      if (f.latestPerVacancy) where.push("a.id = (SELECT MAX(b.id) FROM applications b WHERE b.user_id = a.user_id AND b.vacancy_id = a.vacancy_id)");
       if (f.q && f.q.trim()) {
         const like = `%${f.q.trim()}%`;
         where.push("(v.title LIKE ? OR v.company LIKE ?)");
@@ -150,6 +175,7 @@ export function applicationsRepo(s: Sql): ApplicationsRepo {
         .map(mapRow);
       return { items, total };
     },
+    // QUEUED/SKIP_MANUAL only exist for career sites, where the daily limit means "queued per day".
     // created_at is UTC; the runner passes its local date. Day boundaries are compared on the UTC
     // string, which is off by the TZ offset around midnight - acceptable for a daily limit.
     countSentToday(userId, source, dayISO) {
@@ -157,7 +183,7 @@ export function applicationsRepo(s: Sql): ApplicationsRepo {
       const c = sourceClause("v", source);
       const r = s.get(
         `SELECT COUNT(*) AS n FROM applications a JOIN vacancies v ON v.id = a.vacancy_id
-         WHERE a.user_id = ? AND a.status = 'SENT' AND ${c.sql} AND substr(a.created_at, 1, 10) = ?`,
+         WHERE a.user_id = ? AND a.status IN ('SENT','QUEUED','SKIP_MANUAL') AND ${c.sql} AND substr(a.created_at, 1, 10) = ?`,
         userId,
         ...c.params,
         day,
@@ -178,6 +204,9 @@ export function applicationsRepo(s: Sql): ApplicationsRepo {
           );
         });
       });
+    },
+    deleteQuestionnaireAnswers(applicationId) {
+      s.run("DELETE FROM questionnaire_answers WHERE application_id = ?", applicationId);
     },
     listQuestionnaireAnswers(applicationId) {
       return s

@@ -1,24 +1,33 @@
-// Process-wide mutex: the Pi cannot afford two `claude` node processes at once.
+// Process-wide limit on concurrent `claude` processes (~225 MB each). The Pi (1.8 GB) fits two while the
+// browser is closed (decide batches); SGZ_CLAUDE_PARALLEL=1 restores strict one-at-a-time.
 
 export interface Mutex {
   run<T>(fn: () => Promise<T>): Promise<T>;
   readonly pending: number;
 }
 
-export function createMutex(): Mutex {
-  let tail: Promise<unknown> = Promise.resolve();
+/** A counting semaphore: at most `slots` tasks run at once, the rest wait in FIFO order. */
+export function createMutex(slots = 1): Mutex {
+  let running = 0;
   let pending = 0;
+  const waiting: (() => void)[] = [];
   return {
     get pending() {
       return pending;
     },
-    run<T>(fn: () => Promise<T>): Promise<T> {
+    async run<T>(fn: () => Promise<T>): Promise<T> {
       pending++;
-      const next = tail.then(fn, fn).finally(() => pending--);
-      tail = next.catch(() => undefined);
-      return next;
+      if (running >= slots) await new Promise<void>((r) => waiting.push(r));
+      running++;
+      try {
+        return await fn();
+      } finally {
+        running--;
+        pending--;
+        waiting.shift()?.();
+      }
     },
   };
 }
 
-export const claudeMutex: Mutex = createMutex();
+export const claudeMutex: Mutex = createMutex(Math.max(1, Number(process.env.SGZ_CLAUDE_PARALLEL ?? 2) || 1));

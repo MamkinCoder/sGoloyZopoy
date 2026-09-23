@@ -90,6 +90,15 @@ export function chatsRepo(s: Sql): ChatsRepo {
               m.text,
             );
             if (dup) continue;
+          } else if (m.direction === "out") {
+            // Our own reply read back from hh: the bot already stored it (without an hh id, which is what marks
+            // bot replies in analytics), so the hh copy would only show up twice in the panel.
+            const local = s.get(
+              "SELECT 1 AS x FROM chat_messages WHERE thread_id = ? AND direction = 'out' AND hh_message_id IS NULL AND trim(text) = trim(?) LIMIT 1",
+              threadId,
+              m.text,
+            );
+            if (local) continue;
           }
           // ux_chat_messages_hh (thread_id, hh_message_id) makes OR IGNORE skip known hh ids.
           const { changes } = s.run(

@@ -46,7 +46,7 @@ FILES=(
   package.json pnpm-workspace.yaml pnpm-lock.yaml
   CLAUDE.md .claude
   deploy scripts docs
-  packages/server/package.json packages/server/dist packages/server/prompts packages/server/spa
+  packages/server/package.json packages/server/dist packages/server/prompts packages/server/spa packages/server/certs
   packages/server/src/db/migrations
   packages/shared/package.json packages/shared/src packages/shared/tsconfig.json
   packages/web/package.json

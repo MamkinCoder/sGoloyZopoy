@@ -7,7 +7,22 @@
 
 \color{black}
 
+% Russian labels for bot-generated CVs (the class ships English ones; the seeker's own CVs keep them).
+\renewcommand{\roleResponsibilities}[5]{%
+  \vspace{\baselineskip}%
+
+  \setlength{\parindent}{0pt}%
+  \ifthenelse{\isempty{#1}}{}{\textbf{Обязанности: }#1\par\vspace{0.5em}}%
+  \ifthenelse{\isempty{#2}}{}{\textbf{Достижения: }#2\par\vspace{0.5em}}%
+  \ifthenelse{\isempty{#3}}{}{#3\par\vspace{0.5em}}%
+  \ifthenelse{\isempty{#4}}{}{#4\par\vspace{0.5em}}%
+  \ifthenelse{\isempty{#5}}{}{\textbf{Технологии: }#5\par\vspace{0.5em}}%
+}
+
 \begin{document}
+% No first-line indents; stretch spaces rather than let a long word run past the margin.
+\setlength{\parindent}{0pt}
+\setlength{\emergencystretch}{3em}
 
 \setPageColour{white}
 \setHeaderAlignment{left}

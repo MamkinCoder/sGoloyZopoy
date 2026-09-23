@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import { paths } from "@sgz/shared";
 import { ensureDirs, loadConfig, loadProfileYaml } from "../config/index.js";
 import { openStore, seedDefaultUsers } from "../db/index.js";
+import { newUserDefaults } from "../db/users.js";
+import { learnedSkills, withLearnedSkills } from "../runner/skills.js";
 import type { Command } from "./index.js";
 
 const USAGE = `usage: sgz db <migrate|backup [dest]|import-profile --user <slug> [--file <path>]>`;
@@ -53,9 +55,9 @@ export const db: Command = async (args) => {
       const store = openStore(dbPath);
       try {
         seedDefaultUsers(store);
-        const user = store.getUserBySlug(slug);
-        if (!user) throw new Error(`user "${slug}" not found (known: ${store.listUsers().map((u) => u.slug).join(", ")})`);
-        store.saveProfile(user.id, profile);
+        // First-time setup: a new slug gets a user row with default limits, named from the profile.
+        const user = store.getUserBySlug(slug) ?? store.upsertUser(newUserDefaults(slug, profile.full_name.split(" ")[0] || slug));
+        store.saveProfile(user.id, withLearnedSkills(profile, learnedSkills(store, user.id)));
       } finally {
         store.close();
       }

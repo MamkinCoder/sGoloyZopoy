@@ -5,15 +5,19 @@ export type Source = "hh" | string; // "hh" or a career-site slug
 
 export const Status = {
   SENT: "SENT",
+  QUEUED: "QUEUED", // career site: CV + letter ready, waiting for a human to send/skip in the panel
   SKIP_ALREADY_APPLIED: "SKIP_ALREADY_APPLIED", // hh shows «Вы откликнулись»
   SKIP_TEST_REQUIRED: "SKIP_TEST_REQUIRED", // vacancy requires a test; we don't do those
   SKIP_LLM_REJECT: "SKIP_LLM_REJECT", // decide said apply=false
   SKIP_DEDUP: "SKIP_DEDUP", // same company+title applied recently
   SKIP_LIMIT: "SKIP_LIMIT", // daily limit reached
+  SKIP_COMPANY_LIMIT: "SKIP_COMPANY_LIMIT", // company_limit_max sent applications reached in the window
+  SKIP_COMPANY_PERSONA: "SKIP_COMPANY_PERSONA", // company already locked to a different CV direction
   SKIP_DRY_RUN: "SKIP_DRY_RUN",
   SKIP_FILTER: "SKIP_FILTER", // exclude_words / company blacklist / salary floor
   SKIP_ARCHIVED: "SKIP_ARCHIVED",
   SKIP_FOREIGN: "SKIP_FOREIGN", // other-country popup and allow_other_country=false
+  SKIP_MANUAL: "SKIP_MANUAL", // human skipped a QUEUED application in the panel
   FAILED_NO_CONFIRMATION: "FAILED_NO_CONFIRMATION",
   FAILED_UI: "FAILED_UI", // agent could not complete the flow; snapshot saved
   FAILED_ANTI_BOT: "FAILED_ANTI_BOT",
@@ -32,6 +36,16 @@ export const FATAL_STATUSES: readonly Status[] = [
   Status.FAILED_LOGIN_EXPIRED,
   Status.FAILED_LOW_MEMORY,
 ];
+/** Filter / gate outcomes a human may override from the panel (stage force:<id>). */
+export const FILTERED_STATUSES: readonly Status[] = [
+  Status.SKIP_FILTER,
+  Status.SKIP_LLM_REJECT,
+  Status.SKIP_DEDUP,
+  Status.SKIP_LIMIT,
+  Status.SKIP_COMPANY_LIMIT,
+  Status.SKIP_COMPANY_PERSONA,
+];
+
 export const isFatal = (s: Status): boolean => FATAL_STATUSES.includes(s);
 
 /** Errors that abort a whole run. The runner maps them to a fatal Status + Telegram alert. */
@@ -135,6 +149,10 @@ export interface Decision {
   direction: string;
   seniority: string;
   red_flags: string[];
+  /** How well the chosen pool resume fits this vacancy. Missing = "good" (older rows). */
+  resume_fit?: "good" | "poor";
+  /** Sanitized edit for a tailored resume; present only when resume_fit is "poor" and apply is true. */
+  tailored?: { title: string; about: string; key_skills: string[] };
 }
 
 export interface Question {
@@ -164,6 +182,8 @@ export interface Application {
   reasonDetail: string;
   coverLetter: string;
   llmDecision: Decision | null;
+  /** CV direction used, when known (hh: decision.direction; career: the base-CV direction). "" if unset. */
+  direction: string;
   createdAt: string;
 }
 
@@ -232,6 +252,11 @@ export type ATSKind =
   | "smartrecruiters"
   | "huntflow"
   | "potok"
+  | "wb" // career.wb.ru / career.rwb.ru (Wildberries)
+  | "vk" // team.vk.company careers site
+  | "avito" // career.avito.com (Bitrix pages)
+  | "tbank" // tbank.ru/career (pfpjobs papi)
+  | `site:${string}` // one company's own careers site: server/src/career/ats/sites/<slug>.ts
   | "hh_hosted" // company.hh.ru → handled by the hh pipeline
   | "custom"; // Stagehand agent flow
 

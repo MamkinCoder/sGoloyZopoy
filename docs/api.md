@@ -16,6 +16,7 @@ every other route requires it (401 otherwise). Times are RFC3339 UTC. `slug` is 
 | GET | /users/:slug/profile | | `Profile` (see model.Profile json tags) |
 | PUT | /users/:slug/profile | `Profile` | `Profile` |
 | GET | /users/:slug/stats?range=today\|7d\|30d\|all | | `{sent, skipped, failed, by_status:{}, invitations, rejections, chat_replies, runs_count}` |
+| GET | /users/:slug/analytics?range=today\|7d\|30d\|all | | `AnalyticsDTO` (see below) |
 
 ## Applications
 | GET | /users/:slug/applications?status=&source=&since=&until=&page=&page_size= | | `{items:[{application, vacancy, resume_title}], total}` |
@@ -25,6 +26,39 @@ every other route requires it (401 otherwise). Times are RFC3339 UTC. `slug` is 
 `application` fields: `id, user_id, vacancy_id, hh_resume_id, generated_resume_id, run_id, status,
 reason_detail, cover_letter, llm_decision, created_at`. `vacancy`: `id, source, external_id, url, title,
 company, salary_from, salary_to, currency, has_test, requires_letter, area, work_format, published_at`.
+
+## Review queue (career sites)
+Career sites never auto-submit. A career run stops after decide → tailored CV → PDF → cover letter and
+stores the application as `QUEUED`; a human sends or skips it here. hh.ru stays fully automatic.
+
+| GET | /users/:slug/queue | | `[QueueItem]`, newest first |
+| PUT | /applications/:id/cover-letter | `{text}` (1-5000 chars) | `{ok}` — 400 unless `QUEUED` |
+| POST | /applications/:id/send | | `{run_id}` 202 — career run, stage `send:<id>`; 409 if a run is active; 400 unless `QUEUED` |
+| POST | /applications/:id/inspect | | `{run_id}` 202 — stage `inspect:<id>`: fills the form without submitting, stores the extra questions + bot answers, stays `QUEUED` (`reason_detail` "form checked: …") |
+| POST | /applications/:id/retailor | | `{run_id}` 202 — stage `retailor:<id>`: a fresh tailored CV + cover letter for a `QUEUED` item; the new row is `QUEUED`, the old one becomes `SKIP_DEDUP` ("пересобрано") only after the rebuild succeeded |
+| POST | /applications/:id/skip | | `{ok}` — status `SKIP_MANUAL`; 400 unless `QUEUED` |
+
+`QueueItem`: `id, created_at, vacancy:{id, title, company, url, area, work_format, salary_from, salary_to, currency},
+site:{name, slug}|null, pdf_url|null, cover_letter, reason` (Claude's decide reason), `detail` (last send/inspect
+note), `form:{full_name, email, phone, cv_file_name, cover_letter}` (what the bot fills; the CV is uploaded as
+`Фамилия_Имя_CV.pdf`), `questionnaire:[{question, answer}]` (after inspect).
+
+`send` updates that same row to `SENT` / `FAILED_*`. `daily_limit_career` counts applications queued per day
+(`QUEUED` + `SENT` + `SKIP_MANUAL`); a queued or skipped vacancy is never queued again.
+
+## Filtered-out vacancies
+| GET | /users/:slug/filtered?source=hh\|career\|all&days=7&limit=100 | | `[FilteredItem]`, newest first |
+| POST | /applications/:id/force | | `{run_id}` 202 — stage `force:<id>`; 409 if a run is active; 400 unless a filter status |
+
+Lists vacancies whose newest application row is `SKIP_FILTER`, `SKIP_LLM_REJECT`, `SKIP_DEDUP`, `SKIP_LIMIT`,
+`SKIP_COMPANY_LIMIT` or `SKIP_COMPANY_PERSONA` (dry-run, already-applied, archived, test-required and queued
+rows are excluded). `FilteredItem`: `id, created_at, status, reason` (filter detail or LLM reason),
+`vacancy:{id, title, company, url, source}, site:{name, slug}|null`.
+
+`force` ignores filters, limits and the LLM reject. hh vacancy: an `hh` run fetches it if needed, asks decide
+only for the resume + letter (apply forced true) and **sends** through the normal apply path. Career vacancy:
+a `career` run tailors the CV, builds the PDF, writes the letter and puts it in the review queue. The new
+application row replaces the filtered one as the vacancy's newest, so it drops out of the list.
 
 ## Resumes
 | GET | /users/:slug/resumes | | `{hh:[HHResume], generated:[GeneratedResume]}` |
@@ -106,7 +140,19 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   (bool / int ≥ 0). Unknown keys are ignored; wrong types → 400.
 - `PUT /users/:slug/profile`: every field optional; strings default `""`, numbers `0`, arrays `[]`,
   `extra` `{}`. Wrong types → 400 `{error:"field: message; ..."}`.
-- `GET /users/:slug/stats`: `range` defaults to `all`; other values → 400.
+- `GET /users/:slug/stats`: `range` defaults to `all`; other values → 400. `chat_replies` counts only
+  messages the bot sent (`direction='out'` and no `hh_message_id`); history imported from hh is excluded.
+- `GET /users/:slug/analytics`: same `range` rules. One payload for the dashboard (`AnalyticsDTO` in
+  `packages/shared/src/api.ts`): `since`, `kpi:{sent, skipped, failed, negotiations, responded,
+  response_rate (responded/sent or null), invitations, rejections, employer_messages, bot_replies,
+  needs_human_open, resumes_total, resumes_generated, llm_calls, llm_failed, llm_prompt_chars,
+  llm_result_chars, llm_avg_ms, runs}`, `daily:[{day, sent, skipped, failed, msgs_in, bot_out, llm_calls}]`
+  (UTC days, gap-filled up to today), `funnel:[{key:found|decided|approved|sent|viewed|invited, n}]`,
+  top-N `{key, n}` lists `skip_reasons, companies, sources, resumes, directions, reject_reasons,
+  work_formats, areas, llm_tasks` (breakdowns other than skip/reject/llm are over SENT applications),
+  and `recent:[{at, kind:sent|employer|bot, title, detail}]` (last 20). Thread counts use
+  `last_seen_at` in range; `needs_human_open` and resume counts are current totals; LLM calls are tied to
+  the user through `runs.user_id`.
 - `GET /users/:slug/applications`: extra query `q` (title/company substring); `status` is a comma-separated
   list of `Status` values (unknown → 400); `page` ≥ 1 (default 1), `page_size` 1..200 (default 50).
   Response is `Paged<ApplicationDTO>`: `{items, total, page, page_size}`.
@@ -133,9 +179,16 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   adapter names, falling back to the `ATSKind` list.
 - `GET /health` = `HealthDTO` from shared (`mem_available_mb`, `tools:{chromium,claude,xelatex}` in
   addition to the table above); null when the hook is not wired.
-- `/settings`: only `schedule_at` (`"HH:MM"` or `""`), `schedule_jitter_min`, `dedup_window_days`, `tz`
-  are readable/writable; values are returned as strings (they live in the `settings` table as text);
-  GET falls back to config values (`dedup_window_days` → `"60"`). Other keys → 400.
+- `/settings`: an allowlist, values are strings (the `settings` table is text); GET falls back to defaults.
+  Other keys → 400.
+  - Schedule: `schedule_at` (`"HH:MM"` or `""`), `schedule_jitter_min`, `tz`, `dedup_window_days`.
+  - Company limiter: `company_limit_max`, `company_limit_window_days`, `company_limit_persona_lock`.
+  - Chats: `feedback_request` (`"0"` = no feedback request after a rejection), `chat_track_since` (`YYYY-MM-DD`).
+  - Career autopilot (`sgz serve`): between chat polls it runs `career` stage `rotate` chunks.
+    - `career_autopilot`: `"0"` turns the chunks off.
+    - `career_sites_per_run`: sites per chunk, default 1 (keeps chat polls frequent); each chunk takes the least recently visited sites not yet visited today.
+    - `career_per_site`: max vacancies queued per site per run, default 3.
+    - Every ~4h it also runs hh stage `touch` (raise resumes in search).
 - Unknown `/api/*` path → 404 `{error:"not found"}`; malformed JSON body → 400.
 
 ### Files

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, NavLink, Outlet, useParams } from "react-router-dom";
-import { useLogout, useMe, useUsers } from "../api/hooks";
+import { useLogout, useMe, useQueue, useUsers } from "../api/hooks";
 import { HealthChip } from "./HealthChip";
 import { RunDialog } from "./RunDialog";
 import { Spinner } from "./Ui";
@@ -9,6 +9,8 @@ const NAV: { to: string; label: string; end?: boolean }[] = [
   { to: "", label: "Обзор", end: true },
   { to: "runs", label: "Запуски" },
   { to: "applications", label: "Отклики" },
+  { to: "queue", label: "Очередь" },
+  { to: "filtered", label: "Отфильтровано" },
   { to: "resumes", label: "Резюме" },
   { to: "chats", label: "Чаты" },
   { to: "settings", label: "Настройки" },
@@ -21,6 +23,7 @@ export function Layout() {
   const me = useMe();
   const authRequired = me.data?.auth_required !== false;
   const [runOpen, setRunOpen] = useState(false);
+  const queued = useQueue(slug).data?.length ?? 0;
 
   useEffect(() => {
     const u = users?.find((x) => x.slug === slug);
@@ -66,6 +69,7 @@ export function Layout() {
             {NAV.map((n) => (
               <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `tab ${isActive ? "tab-active" : ""}`}>
                 {n.label}
+                {n.to === "queue" && queued > 0 && <span className="ml-1 chip px-1.5 text-[11px]">{queued}</span>}
               </NavLink>
             ))}
           </nav>

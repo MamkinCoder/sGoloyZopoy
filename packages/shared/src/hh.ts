@@ -10,7 +10,8 @@ export interface SearchParams {
   page?: number; // 0-based
   itemsOnPage?: number; // default 50
   area?: string;
-  excludeWords?: string[];
+  /** hh professional_role ids (api.hh.ru/professional_roles); empty = any role. */
+  roles?: string[];
 }
 
 export interface Card {
@@ -44,6 +45,10 @@ export interface ThreadDetail {
   vacancyExternalId: string | null;
   messages: Omit<ChatMessage, "id" | "threadId" | "createdAt">[];
   survey: Question[]; // non-empty if a chat-bot survey widget is present
+  /** hh lets the applicant write in this chat (false after a formal DISCARD). Undefined when unknown. */
+  writable?: boolean;
+  /** Quick-reply buttons under the employer's (chat-bot's) last message; they only accept these exact answers. */
+  choices?: string[];
 }
 
 export interface ResumeEdit {
@@ -66,9 +71,14 @@ export interface HHClient {
   resumeText(s: BrowserSession, resumeUrl: string): Promise<string>;
   resumeCapacity(s: BrowserSession): Promise<{ created: number; max: number }>;
   duplicateResume(s: BrowserSession, baseResumeId: string, edit: ResumeEdit): Promise<string>; // new hh id
+  /** Walks hh's «Дополнить резюме» wizard so a duplicated draft gets published. True once hh reports it published. */
+  publishResume(s: BrowserSession, resumeId: string): Promise<boolean>;
+  /** Rewrite title, «О себе» and key skills of an existing resume in place. */
+  editResume(s: BrowserSession, resumeId: string, edit: ResumeEdit): Promise<void>;
   touchResume(s: BrowserSession, resumeUrl: string): Promise<void>; // «Поднять в поиске»; no-op if unavailable
 
-  listThreads(s: BrowserSession, onlyUnread: boolean): Promise<{ negotiationId: string; chatUrl: string; unread: boolean; employer: string; state: string; vacancyExternalId: string | null }[]>;
+  /** `since` set: read every page (capped at 10) instead of the first; filtering by date is the caller's. */
+  listThreads(s: BrowserSession, onlyUnread: boolean, since?: string): Promise<{ negotiationId: string; chatUrl: string; unread: boolean; employer: string; state: string; vacancyExternalId: string | null; lastModified?: string }[]>;
   readThread(s: BrowserSession, chatUrl: string): Promise<ThreadDetail>;
   sendMessage(s: BrowserSession, chatUrl: string, text: string): Promise<void>;
   submitSurvey(s: BrowserSession, chatUrl: string, answers: Answer[]): Promise<void>;

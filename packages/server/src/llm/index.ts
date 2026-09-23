@@ -21,7 +21,7 @@ import type {
 import { z, type ZodType } from "zod";
 import { ClaudeError, DEFAULT_TIMEOUT_MS, TIER_MODEL, extractJson, runClaude } from "./claude.js";
 import { neverClaimList, profileForLLM, renderHistory, renderQuestions, renderResumes, renderVacancies, renderVacancy } from "./format.js";
-import { LIMITS, ensureDecisions, enforceMax, normalizeProse, sanitizeLetter, stripNeverClaimSentences } from "./guards.js";
+import { LIMITS, blockedTech, ensureDecisions, enforceMax, normalizeProse, sanitizeLetter, stripLinkSentences, stripNeverClaimSentences } from "./guards.js";
 import {
   AnswersSchema,
   ChatReplySchema,
@@ -40,7 +40,8 @@ export { renderPrompt } from "./template.js";
 export { FakeLLM } from "./fake.js";
 export { extractJson } from "./claude.js";
 
-export const DECIDE_BATCH = 10;
+export const DECIDE_BATCH = 5; // smaller batches: faster calls on the Pi, a failed batch loses less
+export const DECIDE_PARALLEL = Math.max(1, Number(process.env.SGZ_DECIDE_PARALLEL ?? 2) || 1);
 export const RESUME_TEXT_MAX = 6000;
 const RETRY_SUFFIX = "\n\nВерни ТОЛЬКО JSON по схеме, без текста до и после.";
 
@@ -117,7 +118,10 @@ async function call<T>(ctx: Ctx, o: CallOpts<T>): Promise<T> {
 
 function toJsonSchema(schema: ZodType): unknown {
   try {
-    return z.toJSONSchema(schema, { io: "output" });
+    // The Pi's claude validates --json-schema with a draft-07 validator that rejects zod's
+    // "$schema": draft/2020-12 tag; the schema body itself is draft-07 compatible.
+    const { $schema: _drop, ...rest } = z.toJSONSchema(schema, { io: "output" }) as Record<string, unknown>;
+    return rest;
   } catch {
     return undefined;
   }
@@ -126,12 +130,19 @@ function toJsonSchema(schema: ZodType): unknown {
 function makeClient(ctx: Ctx): LLMClient {
   const client: LLMClient = {
     async decide(input: DecideInput): Promise<Decision[]> {
-      const out: Decision[] = [];
-      for (let i = 0; i < input.vacancies.length; i += DECIDE_BATCH) {
-        const batch = input.vacancies.slice(i, i + DECIDE_BATCH);
-        out.push(...(await decideBatch(ctx, input.profile, input.resumes, batch)));
-      }
-      return out;
+      const batches: Vacancy[][] = [];
+      for (let i = 0; i < input.vacancies.length; i += DECIDE_BATCH) batches.push(input.vacancies.slice(i, i + DECIDE_BATCH));
+      // A few `claude -p` at once (the browser is closed during decide); order of results is kept.
+      const results: Decision[][] = new Array(batches.length);
+      let next = 0;
+      const worker = async () => {
+        while (next < batches.length) {
+          const i = next++;
+          results[i] = await decideBatch(ctx, input.profile, input.resumes, batches[i]!);
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(DECIDE_PARALLEL, batches.length) }, worker));
+      return results.flat();
     },
 
     async answerQuestionnaire(profile: Profile, vacancy: Vacancy | null, qs: Question[]): Promise<Answer[]> {
@@ -143,19 +154,31 @@ function makeClient(ctx: Ctx): LLMClient {
         questions: renderQuestions(qs),
       });
       const answers = await call(ctx, { task: "answer_questionnaire", tier: "write", prompt, schema: AnswersSchema, array: true });
-      return guardAnswers(qs, answers, profile.never_claim_skills);
+      return guardAnswers(qs, answers, blockedTech(profile));
     },
 
-    async answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[]): Promise<ChatReply> {
+    async answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices: string[] = []): Promise<ChatReply> {
       const prompt = renderPrompt("answer_chat", {
         never_claim: neverClaimList(profile),
         profile: profileForLLM(profile),
         vacancy: vacancy ? renderVacancy(vacancy, 1500) : "",
         history: renderHistory(history),
+        choices: choices.map((c) => `- ${c}`).join("\n"),
       });
       const r = await call(ctx, { task: "answer_chat", tier: "write", prompt, schema: ChatReplySchema, jsonSchema: toJsonSchema(ChatReplySchema) });
-      const reply = r.needs_human ? "" : sanitizeLetter(r.reply, profile.never_claim_skills, LIMITS.chatReply);
-      return { reply, needs_human: r.needs_human, reason: enforceMax(r.reason, LIMITS.reason) };
+      // A reply may go out together with needs_human (e.g. «да, пришлите тестовое» + ping the human);
+      // unknown skills hold the reply until the human answers in Telegram.
+      const unknown_skills = r.unknown_skills.map((s) => s.trim()).filter(Boolean).slice(0, 5);
+      if (choices.length && !unknown_skills.length) {
+        // Quick-reply buttons: only an exact option is accepted by the employer's chat bot.
+        const norm = (s: string) => s.trim().toLowerCase();
+        const picked = choices.find((c) => norm(c) === norm(r.reply)) ?? choices.find((c) => norm(r.reply).includes(norm(c)) || norm(c).includes(norm(r.reply)));
+        return picked
+          ? { reply: picked, needs_human: r.needs_human, reason: enforceMax(r.reason, LIMITS.reason), unknown_skills }
+          : { reply: "", needs_human: true, reason: enforceMax(`не выбрал вариант из кнопок: ${r.reply}`, LIMITS.reason), unknown_skills };
+      }
+      const reply = unknown_skills.length ? "" : sanitizeLetter(r.reply, blockedTech(profile), LIMITS.chatReply);
+      return { reply, needs_human: r.needs_human, reason: enforceMax(r.reason, LIMITS.reason), unknown_skills };
     },
 
     async summarizeResume(resumeText: string): Promise<ResumeSummary> {
@@ -197,7 +220,7 @@ function makeClient(ctx: Ctx): LLMClient {
         vacancy: renderVacancy(vacancy, 6000),
       });
       const r = await call(ctx, { task: "cover_letter_career", tier: "write", prompt, schema: CoverLetterSchema, jsonSchema: toJsonSchema(CoverLetterSchema) });
-      return sanitizeLetter(r.cover_letter, profile.never_claim_skills, LIMITS.coverLetterCareer);
+      return sanitizeLetter(r.cover_letter, blockedTech(profile), LIMITS.coverLetterCareer);
     },
 
     async json<T>(task: string, tier: Tier, prompt: string, schemaDescription: string): Promise<T> {
@@ -231,12 +254,30 @@ async function decideBatch(ctx: Ctx, profile: Profile, resumes: HHResume[], vaca
   });
   let decisions: Decision[] = [];
   try {
-    decisions = await call(ctx, { task: "decide_hh", tier: "fast", prompt, schema: DecisionsSchema, array: true });
+    decisions = await call(ctx, { task: "decide_hh", tier: "write", prompt, schema: DecisionsSchema, array: true });
   } catch (err) {
     if (!(err instanceof Error) || !err.message.includes("invalid output")) throw err;
     // Two garbage answers: rather than failing the whole run, skip this batch with "no decision".
   }
-  return ensureDecisions(vacancies, decisions, resumes, profile.never_claim_skills);
+  return ensureDecisions(vacancies, decisions, resumes, blockedTech(profile)).map((d) => guardTailored(profile, d));
+}
+
+/** `tailored` survives only for an approved poor fit with a usable title; skills ⊆ verified_skills. */
+export function guardTailored(profile: Profile, d: Decision): Decision {
+  const { tailored, ...rest } = d;
+  const fit = d.resume_fit ?? "good";
+  if (!d.apply || fit !== "poor" || !tailored) return { ...rest, resume_fit: fit };
+  const edit = cleanResumeEdit(profile, tailored);
+  return edit.title ? { ...rest, resume_fit: fit, tailored: { ...edit, key_skills: edit.key_skills.slice(0, 15) } } : { ...rest, resume_fit: fit };
+}
+
+function cleanResumeEdit(profile: Profile, e: { title: string; about: string; key_skills: string[] }) {
+  const verified = new Map(profile.verified_skills.map((s) => [s.toLowerCase(), s]));
+  return {
+    title: stripNeverClaimSentences(stripLinkSentences(normalizeProse(e.title)), blockedTech(profile)),
+    about: sanitizeLetter(e.about, blockedTech(profile), LIMITS.about),
+    key_skills: [...new Set(e.key_skills.map((s) => verified.get(s.trim().toLowerCase())).filter((s): s is string => !!s))],
+  };
 }
 
 function guardAnswers(qs: Question[], answers: Answer[], never: string[]): Answer[] {
@@ -261,7 +302,6 @@ function guardAnswers(qs: Question[], answers: Answer[], never: string[]): Answe
 }
 
 function guardVariants(profile: Profile, existing: HHResume[], variants: PoolVariant[], max: number): PoolVariant[] {
-  const verified = new Map(profile.verified_skills.map((s) => [s.toLowerCase(), s]));
   const titles = new Set(existing.map((r) => r.title.trim().toLowerCase()));
   const poolIds = new Set(existing.map((r) => r.hhResumeId));
   const out: PoolVariant[] = [];
@@ -270,9 +310,8 @@ function guardVariants(profile: Profile, existing: HHResume[], variants: PoolVar
     if (!key || titles.has(key)) continue;
     titles.add(key);
     out.push({
+      ...cleanResumeEdit(profile, v),
       title: normalizeProse(v.title),
-      about: sanitizeLetter(v.about, profile.never_claim_skills, LIMITS.about),
-      key_skills: [...new Set(v.key_skills.map((s) => verified.get(s.trim().toLowerCase())).filter((s): s is string => !!s))],
       based_on_resume_id: poolIds.has(v.based_on_resume_id) ? v.based_on_resume_id : (existing[0]?.hhResumeId ?? ""),
       direction: profile.directions.includes(v.direction) ? v.direction : (profile.directions[0] ?? v.direction),
     });

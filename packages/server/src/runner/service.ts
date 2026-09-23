@@ -31,7 +31,13 @@ export function createRunner(deps: RunnerDeps): Runner {
     try {
       const r = await runPipeline(ctx);
       final = { ...run, status: r.status, error: r.error, stats: aggregate(r.users, req.dryRun), finishedAt: ctx.now().toISOString() };
-      final.tgSent = await sendReports(ctx, final, r.users);
+      // Chat polls and autopilot career chunks run all day: report only when something happened.
+      const s = final.stats;
+      const quietPoll =
+        req.trigger === "schedule" &&
+        final.status === "done" &&
+        ((req.stage === "chats" && !s.chat_replies && !s.invitations && !s.rejections) || (req.stage === "rotate" && !s.by_status.QUEUED) || req.stage === "touch");
+      if (!quietPoll) final.tgSent = await sendReports(ctx, final, r.users);
     } catch (e) {
       await ctx.browser.close().catch(() => undefined);
       final = { ...run, status: "failed", error: errMessage(e), finishedAt: ctx.now().toISOString() };

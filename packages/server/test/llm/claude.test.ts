@@ -90,22 +90,22 @@ describe("runClaude", () => {
     expect(Date.now() - t0).toBeLessThan(3000);
   });
 
-  it("serializes concurrent calls through the global mutex", async () => {
+  it("runs at most two claude processes at once (global semaphore)", async () => {
     const dir = stubDir();
     const env = stubEnv(dir, "sleep", "x", { STUB_SLEEP: "0.3" });
-    await Promise.all([runClaude({ ...base, prompt: "a", env }), runClaude({ ...base, prompt: "b", env })]);
+    await Promise.all(["a", "b", "c"].map((prompt) => runClaude({ ...base, prompt, env })));
     const lines = readFileSync(`${dir}/timeline`, "utf8").trim().split("\n");
-    const starts = lines.filter((l) => l.startsWith("start")).map((l) => Number(l.split(" ")[1]));
-    const ends = lines.filter((l) => l.startsWith("end")).map((l) => Number(l.split(" ")[1]));
-    expect(starts).toHaveLength(2);
-    expect(ends).toHaveLength(2);
-    expect(Math.max(...starts)).toBeGreaterThanOrEqual(Math.min(...ends));
+    const starts = lines.filter((l) => l.startsWith("start")).map((l) => Number(l.split(" ")[1])).sort((x, y) => x - y);
+    const ends = lines.filter((l) => l.startsWith("end")).map((l) => Number(l.split(" ")[1])).sort((x, y) => x - y);
+    expect(starts).toHaveLength(3);
+    expect(ends).toHaveLength(3);
+    expect(starts[2]!).toBeGreaterThanOrEqual(ends[0]!); // the third waits for a free slot
   });
 });
 
 describe("mutex", () => {
-  it("runs tasks one after another and survives rejections", async () => {
-    const m = createMutex();
+  it("one slot: runs tasks one after another and survives rejections", async () => {
+    const m = createMutex(1);
     const order: string[] = [];
     const p1 = m.run(async () => {
       order.push("a-start");
@@ -120,5 +120,19 @@ describe("mutex", () => {
     await expect(p1).rejects.toThrow("x");
     expect(await p2).toBe(2);
     expect(order).toEqual(["a-start", "a-end", "b"]);
+  });
+
+  it("two slots: the second runs alongside the first, the third waits", async () => {
+    const m = createMutex(2);
+    let live = 0;
+    let peak = 0;
+    const task = () => m.run(async () => {
+      peak = Math.max(peak, ++live);
+      await new Promise((r) => setTimeout(r, 20));
+      live--;
+    });
+    await Promise.all([task(), task(), task()]);
+    expect(peak).toBe(2);
+    expect(m.pending).toBe(0);
   });
 });

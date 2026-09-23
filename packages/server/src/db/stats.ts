@@ -1,7 +1,9 @@
 import type { Stats, Status, Store } from "@sgz/shared";
+import { userAnalytics } from "./analytics.js";
+import { BOT_OUT } from "./analytics.js";
 import { num, str, type Param, type Row, type Sql } from "./sql.js";
 
-type StatsRepo = Pick<Store, "userStats">;
+type StatsRepo = Pick<Store, "userStats" | "userAnalytics">;
 
 export function statsRepo(s: Sql): StatsRepo {
   const count = (sql: string, ...params: Param[]): number => num((s.get(sql, ...params) as Row).n);
@@ -41,12 +43,13 @@ export function statsRepo(s: Sql): StatsRepo {
         ),
         chatReplies: count(
           `SELECT COUNT(*) AS n FROM chat_messages m JOIN chat_threads t ON t.id = m.thread_id
-           WHERE t.user_id = ? AND m.direction = 'out' AND m.created_at >= ?`,
+           WHERE t.user_id = ? AND ${BOT_OUT} AND m.created_at >= ?`,
           userId,
           since,
         ),
         runsCount: count("SELECT COUNT(*) AS n FROM runs WHERE user_id = ? AND started_at >= ?", userId, since),
       } satisfies Stats;
     },
+    userAnalytics: (userId, sinceISO) => userAnalytics(s, userId, sinceISO),
   };
 }

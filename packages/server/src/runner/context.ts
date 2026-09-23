@@ -89,7 +89,7 @@ export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: 
       if (wasOpen) return s;
       let ok = await deps.hh.checkLogin(s);
       if (!ok) {
-        const cookies = loadCookies(paths.cookies(deps.cfg, user.slug));
+        const cookies = await loadCookies(paths.cookies(deps.cfg, user.slug));
         if (cookies && cookies.length) {
           log.info("session", `not logged in, trying ${cookies.length} saved cookies`);
           await s.setCookies(cookies);

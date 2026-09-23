@@ -3,12 +3,49 @@
 import { Status } from "@sgz/shared";
 import type { Answer, BrowserSession, CareerApplyRequest, CareerApplyResult, Question } from "@sgz/shared";
 import { answerValues, splitName } from "./ats/apply-common.js";
+import { copyFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { truncate } from "./http.js";
 import { confirmSchema, questionsSchema } from "./schemas.js";
 
 export const SUCCESS_PHRASES = ["Спасибо", "Thank you", "received", "отправлен", "успешно", "Thanks for applying"];
 
 const WAIT_PER_PHRASE_MS = 2500;
+
+// Tags name inputs by what they are for (label / placeholder / aria / name), so «Фамилия» gets the last
+// name and «Имя» the first name deterministically; the LLM step alone mixed them up on rabota.sber.ru.
+const TAG_NAME_FIELDS_JS = `(() => {
+  const labelOf = (el) => {
+    const byFor = el.id ? document.querySelector('label[for="' + el.id + '"]') : null;
+    const near = el.parentElement && el.parentElement.textContent.length < 40 ? el.parentElement.textContent : "";
+    return [el.getAttribute("placeholder"), el.getAttribute("aria-label"), el.name, byFor && byFor.textContent, el.closest("label") && el.closest("label").textContent, near].filter(Boolean).join(" ").toLowerCase();
+  };
+  const out = {};
+  for (const el of document.querySelectorAll('input[type="text"], input:not([type])')) {
+    const t = labelOf(el);
+    if (/фамили|surname|last.?name/.test(t)) { el.setAttribute("data-sgz-field", "last"); out.last = true; }
+    else if (/отчеств|patronymic|middle.?name/.test(t)) continue;
+    else if (/(^|[^а-яё])имя([^а-яё]|$)|first.?name|given.?name/.test(t)) { el.setAttribute("data-sgz-field", "first"); out.first = true; }
+  }
+  return out;
+})()`;
+
+// Ticks unchecked consent / personal-data / privacy checkboxes (submit stays disabled without them).
+const TICK_CONSENT_JS = `(() => {
+  let n = 0;
+  for (const cb of document.querySelectorAll('input[type="checkbox"]')) {
+    const box = cb.closest("label") || cb.parentElement;
+    const t = ((box && box.textContent) || "") + " " + ((box && box.parentElement && box.parentElement.textContent) || "");
+    if (!cb.checked && /соглас|персональн|политик|обработк|consent|privacy|agree/i.test(t)) { (cb.closest("label") || cb).click(); n++; }
+  }
+  return n;
+})()`;
+
+/** «Петров_Иван_CV.pdf» instead of the internal «5.pdf» that recruiters would otherwise see. */
+export const cvFileName = (fullName: string): string => {
+  const { first, last } = splitName(fullName);
+  return `${[last, first].filter(Boolean).join("_").replace(/[^\p{L}\d_-]+/gu, "") || "CV"}_CV.pdf`;
+};
 
 export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest): Promise<CareerApplyResult> {
   const snapName = `career-${req.site.slug}-${req.vacancy.externalId.replace(/[^a-z0-9]+/gi, "_").slice(0, 60)}`;
@@ -46,10 +83,18 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
     );
     learned.push(opened.success ? "apply button opens the form" : "no apply button found; form assumed inline");
 
-    const nameRes = await s.act(
-      "Fill the applicant name field with %full_name%. If first and last name are separate fields, fill them with %first_name% and %last_name%.",
-      { cacheKey: "career.apply.name", variables },
-    );
+    const tagged = await s.evaluate<{ first?: boolean; last?: boolean }>(TAG_NAME_FIELDS_JS).catch(() => ({}) as { first?: boolean; last?: boolean });
+    let nameRes: { success: boolean };
+    if (tagged.first && tagged.last) {
+      await s.fill('[data-sgz-field="first"]', first);
+      await s.fill('[data-sgz-field="last"]', last || first);
+      nameRes = { success: true };
+    } else {
+      nameRes = await s.act(
+        "Fill the applicant name field with %full_name%. If first and last name are separate fields, fill them with %first_name% and %last_name%.",
+        { cacheKey: "career.apply.name", variables },
+      );
+    }
     const emailRes = await s.act("Fill the email field with %email%", { cacheKey: "career.apply.email", variables });
     if (!nameRes.success && !emailRes.success) {
       return fail(Status.FAILED_UI, "application form not found: neither name nor email field could be filled");
@@ -69,7 +114,9 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
 
     const fileSelector = await findFileInput(s);
     if (!fileSelector) return fail(Status.FAILED_UI, "no file input for resume upload found");
-    await s.upload(fileSelector, req.resumePdfPath);
+    const named = join(dirname(req.resumePdfPath), cvFileName(req.profile.full_name));
+    copyFileSync(req.resumePdfPath, named);
+    await s.upload(fileSelector, named);
     learned.push(`resume input: ${fileSelector}`);
 
     const questions = await extractQuestions(s);
@@ -91,6 +138,10 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
     } else {
       learned.push("no extra questions");
     }
+
+    const ticked = await s.evaluate<number>(TICK_CONSENT_JS).catch(() => 0);
+    if (ticked) learned.push(`consent checkboxes ticked: ${ticked}`);
+    else await s.act("If there is an unchecked consent / personal data processing / privacy checkbox, check it", { cacheKey: "career.apply.consent" }).catch(() => undefined);
 
     if (req.dryRun) {
       return {

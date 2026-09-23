@@ -226,7 +226,7 @@ function UserEditor({ slug }: { slug: string }) {
 
 // ---------- Career sites
 
-const ATS: ATSKind[] = ["greenhouse", "lever", "ashby", "workable", "teamtailor", "smartrecruiters", "huntflow", "potok", "hh_hosted", "custom"];
+const ATS: ATSKind[] = ["greenhouse", "lever", "ashby", "workable", "teamtailor", "smartrecruiters", "huntflow", "potok", "wb", "vk", "avito", "tbank", "hh_hosted", "custom"];
 const emptySite = (): CareerSiteBody => ({ name: "", baseUrl: "", ats: "custom", profile: {}, enabled: true });
 
 function CareerSites({ slug }: { slug: string }) {

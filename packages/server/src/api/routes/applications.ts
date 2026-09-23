@@ -1,11 +1,12 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { paths, type ApplicationDetailDTO, type ApplicationRow, type Paged, type ApplicationDTO } from "@sgz/shared";
+import { FILTERED_STATUSES, paths, Status, type ApplicationDetailDTO, type ApplicationRow, type FilteredItemDTO, type Paged, type ApplicationDTO, type QueueItemDTO, type RunRequest } from "@sgz/shared";
+import { cvFileName } from "../../career/agent-apply.js";
 import type { ApiDeps } from "../deps.js";
-import { notFound } from "../errors.js";
+import { badRequest, notFound } from "../errors.js";
 import { guardedFile } from "../files.js";
-import { pagination, statusList } from "../validate.js";
+import { CoverLetterSchema, intParam, pagination, parseBody, statusList } from "../validate.js";
 import { idParam, toApplicationDTO, userOr404 } from "./common.js";
 
 /** `${snapshots(run)}/${externalId}*.html` if such a file exists. externalId may be a URL for
@@ -22,7 +23,7 @@ function findSnapshot(deps: ApiDeps, row: ApplicationRow): string | null {
 }
 
 export function applicationRoutes(deps: ApiDeps): Hono {
-  const { store } = deps;
+  const { store, runner } = deps;
   const r = new Hono();
 
   r.get("/users/:slug/applications", (c) => {
@@ -62,6 +63,110 @@ export function applicationRoutes(deps: ApiDeps): Hono {
     const file = findSnapshot(deps, row);
     if (!file) throw notFound("no snapshot");
     return guardedFile(deps.cfg.dataDir, file, "text/html; charset=utf-8");
+  });
+
+  const siteOf = (userId: number, slug: string) => {
+    const site = deps.store.listCareerSites(userId).find((x) => x.slug === slug);
+    return site ? { name: site.name, slug: site.slug } : null;
+  };
+
+  // Review queue: career applications with a ready CV + letter, waiting for «Отправить» / «Пропустить».
+  r.get("/users/:slug/queue", (c) => {
+    const u = userOr404(store, c.req.param("slug"));
+    const profile = store.getProfile(u.id);
+    const rows = store.listApplications({ userId: u.id, status: [Status.QUEUED], page: 1, pageSize: 200 }).items;
+    const items: QueueItemDTO[] = rows.map(({ application: a, vacancy: v }) => ({
+      id: a.id,
+      created_at: a.createdAt,
+      vacancy: { id: v.id, title: v.title, company: v.company, url: v.url, area: v.area, work_format: v.workFormat, salary_from: v.salaryFrom, salary_to: v.salaryTo, currency: v.currency },
+      site: siteOf(u.id, v.source),
+      pdf_url: a.generatedResumeId ? `/api/resumes/${a.generatedResumeId}/pdf` : null,
+      cover_letter: a.coverLetter,
+      reason: a.llmDecision?.reason ?? "",
+      detail: a.reasonDetail,
+      form: {
+        full_name: profile?.full_name ?? "",
+        email: profile?.email ?? "",
+        phone: profile?.phone ?? "",
+        cv_file_name: cvFileName(profile?.full_name ?? ""),
+        cover_letter: a.coverLetter,
+      },
+      questionnaire: store.listQuestionnaireAnswers(a.id).map((qa) => ({ question: qa.question, answer: qa.answer })),
+    }));
+    return c.json(items);
+  });
+
+  // Vacancies whose newest application row is a filter / LLM-gate skip, newest first.
+  r.get("/users/:slug/filtered", (c) => {
+    const u = userOr404(store, c.req.param("slug"));
+    const q = c.req.query();
+    const source = q.source && q.source !== "all" ? q.source : undefined;
+    const days = q.days ? intParam(q.days, "days") : 7;
+    const limit = q.limit ? intParam(q.limit, "limit") : 100;
+    const rows = store.listApplications({
+      userId: u.id,
+      status: [...FILTERED_STATUSES],
+      source,
+      since: new Date(Date.now() - days * 86_400_000).toISOString(),
+      latestPerVacancy: true,
+      page: 1,
+      pageSize: limit,
+    }).items;
+    const items: FilteredItemDTO[] = rows.map(({ application: a, vacancy: v }) => ({
+      id: a.id,
+      created_at: a.createdAt,
+      status: a.status,
+      reason: a.reasonDetail || a.llmDecision?.reason || "",
+      vacancy: { id: v.id, title: v.title, company: v.company, url: v.url, source: v.source },
+      site: v.source === "hh" ? null : siteOf(u.id, v.source),
+    }));
+    return c.json(items);
+  });
+
+  const rowOr404 = (id: number) => {
+    const row = store.getApplication(id);
+    if (!row) throw notFound("application not found");
+    return row;
+  };
+  const queuedOr400 = (id: number) => {
+    const row = rowOr404(id);
+    if (row.application.status !== Status.QUEUED) throw badRequest(`application is ${row.application.status}, not queued`);
+    return row;
+  };
+  const startFor = async (row: ApplicationRow, source: RunRequest["source"], stage: string) => {
+    const slug = store.listUsers().find((u) => u.id === row.application.userId)?.slug;
+    if (!slug) throw notFound("user not found");
+    return runner.start({ userSlug: slug, source, stage, dryRun: false, limit: 0, trigger: "manual" }); // RunBusyError → 409
+  };
+
+  r.put("/applications/:id/cover-letter", async (c) => {
+    const id = idParam(c);
+    queuedOr400(id);
+    const { text } = await parseBody(c, CoverLetterSchema);
+    store.updateApplicationCoverLetter(id, text);
+    return c.json({ ok: true });
+  });
+
+  for (const mode of ["send", "inspect", "retailor"] as const) {
+    r.post(`/applications/:id/${mode}`, async (c) => {
+      const id = idParam(c);
+      return c.json({ run_id: await startFor(queuedOr400(id), "career", `${mode}:${id}`) }, 202);
+    });
+  }
+
+  r.post("/applications/:id/skip", (c) => {
+    const id = idParam(c);
+    queuedOr400(id);
+    store.updateApplicationStatus(id, Status.SKIP_MANUAL, "skipped in panel");
+    return c.json({ ok: true });
+  });
+
+  // «Всё равно откликнуться»: hh applies right away, career sites go through tailoring into the queue.
+  r.post("/applications/:id/force", async (c) => {
+    const id = idParam(c);
+    const row = rowOr404(id);
+    if (!FILTERED_STATUSES.includes(row.application.status)) throw badRequest(`application is ${row.application.status}, not filtered`);
+    return c.json({ run_id: await startFor(row, row.vacancy.source === "hh" ? "hh" : "career", `force:${id}`) }, 202);
   });
 
   return r;

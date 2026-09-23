@@ -101,6 +101,9 @@ const DEFAULT_USERS: Omit<User, "id">[] = [
   opusEnabled: false,
 }));
 
+/** Defaults for a user created by `sgz db import-profile` (first-time setup of a new person). */
+export const newUserDefaults = (slug: string, name: string): Omit<User, "id"> => ({ ...DEFAULT_USERS[0]!, slug, name });
+
 /** Creates the two household users when the users table is empty. Returns the created users. */
 export function seedDefaultUsers(store: Pick<Store, "listUsers" | "upsertUser">): User[] {
   if (store.listUsers().length > 0) return [];

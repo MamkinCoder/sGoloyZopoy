@@ -7,7 +7,7 @@ import { intParam, parseBody, StartRunSchema } from "../validate.js";
 import { idParam, toRunDTO, userOr404 } from "./common.js";
 
 const HEARTBEAT_MS = 15_000;
-const DEDUP_STATUSES: Status[] = [Status.SKIP_DEDUP, Status.SKIP_ALREADY_APPLIED, Status.SKIP_FILTER];
+const DEDUP_STATUSES: Status[] = [Status.SKIP_DEDUP, Status.SKIP_ALREADY_APPLIED, Status.SKIP_FILTER, Status.SKIP_COMPANY_LIMIT];
 
 const isFinished = (r: Run) => r.status !== "queued" && r.status !== "running";
 

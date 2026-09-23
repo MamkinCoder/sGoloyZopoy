@@ -33,7 +33,7 @@ describe("createLLM", () => {
     expect(ds[1]).toMatchObject({ apply: false, red_flags: ["6+ лет"] });
     expect(ds[2]).toMatchObject({ vacancy_id: 3, apply: false, reason: "no decision" });
     expect(store.llmCalls).toHaveLength(1);
-    expect(store.llmCalls[0]).toMatchObject({ runId: 7, task: "decide_hh", model: "haiku", ok: true, attempt: 1, error: "" });
+    expect(store.llmCalls[0]).toMatchObject({ runId: 7, task: "decide_hh", model: "sonnet", ok: true, attempt: 1, error: "" });
     expect(store.llmCalls[0]!.promptChars).toBeGreaterThan(1000);
     const prompt = readFileSync(`${dir}/prompt-1.txt`, "utf8");
     expect(prompt).toContain("Kubernetes, Kafka, RabbitMQ, ClickHouse");
@@ -41,16 +41,35 @@ describe("createLLM", () => {
     expect(prompt).not.toContain("test@example.com");
   });
 
-  it("decide: batches >10 vacancies sequentially in chunks of 10", async () => {
+  it("decide: resume_fit defaults to good; tailored kept only for approved poor fit, skills ⊆ verified", async () => {
+    const dir = stubDir();
+    const tailored = { title: "React-разработчик", about: "Пишу на React и TypeScript. Настраивал Kafka. Код на https://x.dev. Готов.", key_skills: ["react", "TypeScript", "Kafka", "Vue"] };
+    const out = [
+      { ...decision(1), resume_fit: "poor", tailored },
+      { ...decision(2), resume_fit: "weird", tailored },
+      { ...decision(3), resume_fit: "poor" },
+    ];
+    const ds = await createLLM(cfg, null, { env: stubEnv(dir, "valid", out) }).decide({ profile, resumes, vacancies });
+    expect(ds[0]!.resume_fit).toBe("poor");
+    expect(ds[0]!.tailored).toEqual({ title: "React-разработчик", about: "Пишу на React и TypeScript. Готов.", key_skills: ["React", "TypeScript"] });
+    expect(ds[1]).toMatchObject({ resume_fit: "good" });
+    expect(ds[1]!.tailored).toBeUndefined();
+    expect(ds[2]).toMatchObject({ resume_fit: "poor" });
+    expect(ds[2]!.tailored).toBeUndefined();
+  });
+
+  it("decide: batches vacancies in chunks of 5 (two batches in flight), results in order", async () => {
     const dir = stubDir();
     const many = Array.from({ length: 23 }, (_, i) => vacancy(i + 1));
     const llm = createLLM(cfg, null, { env: stubEnv(dir, "valid", []) });
     const ds = await llm.decide({ profile, resumes, vacancies: many });
-    expect(count(dir)).toBe(3);
+    expect(count(dir)).toBe(5);
     expect(ds).toHaveLength(23);
     expect(ds.every((d) => !d.apply && d.reason === "no decision")).toBe(true);
-    expect(readFileSync(`${dir}/prompt-3.txt`, "utf8")).toContain("[id=23]");
-    expect(readFileSync(`${dir}/prompt-3.txt`, "utf8")).not.toContain("[id=20]");
+    expect(ds.map((d) => d.vacancy_id)).toEqual(many.map((v) => v.id));
+    const last = [1, 2, 3, 4, 5].map((n) => readFileSync(`${dir}/prompt-${n}.txt`, "utf8")).find((p) => p.includes("[id=23]"))!;
+    expect(last).toContain("[id=21]");
+    expect(last).not.toContain("[id=20]");
   });
 
   it("retries once on garbage with the JSON-only nudge and logs both attempts", async () => {
@@ -77,13 +96,23 @@ describe("createLLM", () => {
     expect(store.llmCalls.at(-1)!.error).toContain("boom");
   });
 
-  it("answerChat: sanitizes reply, needs_human empties it", async () => {
+  it("answerChat: sanitizes reply, keeps it with needs_human, holds it for unknown skills", async () => {
     const dir = stubDir();
     const llm = createLLM(cfg, null, { env: stubEnv(dir, "valid", { reply: "Да — готов к удалёнке. Kubernetes использовал. Пишите t.me/x.", needs_human: false, reason: "факты из профиля" }) });
     const r = await llm.answerChat(profile, vacancies[0]!, history);
-    expect(r).toEqual({ reply: "Да - готов к удалёнке.", needs_human: false, reason: "факты из профиля" });
-    const llm2 = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "ok", needs_human: true, reason: "собеседование" }) });
-    expect((await llm2.answerChat(profile, null, history)).reply).toBe("");
+    expect(r).toEqual({ reply: "Да - готов к удалёнке.", needs_human: false, reason: "факты из профиля", unknown_skills: [] });
+    const llm2 = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "Да, пришлите тестовое.", needs_human: true, reason: "тестовое" }) });
+    expect((await llm2.answerChat(profile, null, history)).reply).toBe("Да, пришлите тестовое.");
+    const llm3 = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "Да, работал.", needs_human: false, reason: "x", unknown_skills: ["Scala"] }) });
+    expect(await llm3.answerChat(profile, null, history)).toMatchObject({ reply: "", unknown_skills: ["Scala"] });
+  });
+
+  it("answerChat with quick-reply buttons returns exactly one option", async () => {
+    const choices = ["Да, было на последнем месте работы", "Был опыт разработки только веба"];
+    const llm = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "да, было на последнем месте работы.", needs_human: false, reason: "x" }) });
+    expect((await llm.answerChat(profile, null, history, choices)).reply).toBe(choices[0]);
+    const off = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "Конечно!", needs_human: false, reason: "x" }) });
+    expect(await off.answerChat(profile, null, history, choices)).toMatchObject({ reply: "", needs_human: true });
   });
 
   it("answerQuestionnaire: validates option ranges, caps text, drops unknown idx", async () => {

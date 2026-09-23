@@ -4,7 +4,7 @@ import type { Tier } from "@sgz/shared";
 import { claudeMutex } from "./mutex.js";
 
 export const TIER_MODEL: Record<Tier, string> = { fast: "haiku", write: "sonnet", tailor: "opus" };
-export const DEFAULT_TIMEOUT_MS = 180_000;
+export const DEFAULT_TIMEOUT_MS = 300_000; // decide batches with long vacancy texts take >3 min on the Pi
 const STDERR_TAIL = 2000;
 
 export interface RunClaudeOpts {
@@ -78,7 +78,12 @@ export function buildArgs(tier: Tier, f: ClaudeFeatures, schema?: unknown): stri
   if (f.maxTurns) args.push("--max-turns", "1");
   if (f.noSessionPersistence) args.push("--no-session-persistence");
   if (f.tools) args.push("--tools", "");
-  if (f.jsonSchema && schema !== undefined) args.push("--json-schema", JSON.stringify(schema));
+  if (f.jsonSchema && schema !== undefined) {
+    // Some claude builds validate with a draft-07 validator that rejects the draft/2020-12 "$schema" tag
+    // (zod and Stagehand both add it); the schema bodies are draft-07 compatible.
+    const { $schema: _drop, ...body } = (schema ?? {}) as Record<string, unknown>;
+    args.push("--json-schema", JSON.stringify(body));
+  }
   return args;
 }
 

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { Status, emptyRunStats, normalizeDedup, type NewApplication, type Profile } from "@sgz/shared";
+import { Status, companyKey, emptyRunStats, normalizeDedup, type NewApplication, type Profile } from "@sgz/shared";
 import { defaultProfile } from "../config/profile.js";
 import { openStore, seedDefaultUsers, type SqliteStore } from "./index.js";
 
@@ -51,6 +51,7 @@ const appFixture = (userId: number, vacancyId: number, over: Partial<NewApplicat
   runId: 0,
   status: Status.SENT,
   reasonDetail: "",
+  direction: "",
   coverLetter: "Здравствуйте.",
   llmDecision: null,
   ...over,
@@ -73,12 +74,12 @@ describe("migrations", () => {
         .prepare("SELECT name FROM schema_migrations ORDER BY name")
         .all()
         .map((r) => r.name);
-      expect(names).toEqual(["001_init.sql", "002_hh_resumes_created_at.sql"]);
+      expect(names).toEqual(["001_init.sql", "002_hh_resumes_created_at.sql", "003_company_limiter.sql"]);
       expect(a.db.prepare("PRAGMA journal_mode").get()?.journal_mode).toBe("wal");
       a.upsertUser(userFixture("x"));
       a.close();
       const b = openStore(path);
-      expect(b.db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get()?.n).toBe(2);
+      expect(b.db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get()?.n).toBe(3);
       expect(b.listUsers()).toHaveLength(1);
       b.close();
     } finally {
@@ -185,6 +186,27 @@ describe("applications", () => {
     expect(store.countSentToday(u.id, "hh", "2000-01-01")).toBe(1);
   });
 
+  it("review queue: QUEUED/SKIP_MANUAL block reprocessing and count as queued today; latestPerVacancy", () => {
+    const u = store.upsertUser(userFixture("a"));
+    const v1 = store.upsertVacancy(vacancyFixture("https://x.com/j/1", { source: "acme" }));
+    const v2 = store.upsertVacancy(vacancyFixture("https://x.com/j/2", { source: "acme" }));
+    const q = store.insertApplication(appFixture(u.id, v1.id, { status: Status.QUEUED, coverLetter: "a" }));
+    const skip = store.insertApplication(appFixture(u.id, v2.id, { status: Status.SKIP_FILTER }));
+    expect(store.hasSentApplication(u.id, v1.id)).toBe(true);
+    expect(store.countSentToday(u.id, "career", today)).toBe(1);
+    store.updateApplicationCoverLetter(q.id, "b");
+    store.insertQuestionnaireAnswers(q.id, [{ idx: 0, text: "?", kind: "text", required: false }], [{ idx: 0, text: "!" }]);
+    store.deleteQuestionnaireAnswers(q.id);
+    expect(store.listQuestionnaireAnswers(q.id)).toEqual([]);
+    store.updateApplicationStatus(q.id, Status.SKIP_MANUAL, "skipped");
+    expect(store.getApplication(q.id)?.application).toMatchObject({ coverLetter: "b", status: "SKIP_MANUAL" });
+    expect(store.hasSentApplication(u.id, v1.id)).toBe(true);
+    const filtered = () => store.listApplications({ userId: u.id, status: [Status.SKIP_FILTER], latestPerVacancy: true }).items.map((r) => r.application.id);
+    expect(filtered()).toEqual([skip.id]);
+    store.insertApplication(appFixture(u.id, v2.id, { status: Status.QUEUED }));
+    expect(filtered()).toEqual([]);
+  });
+
   it("dedup window uses SENT applications since a date", () => {
     const u = store.upsertUser(userFixture("a"));
     const v = store.upsertVacancy(vacancyFixture("1"));
@@ -197,6 +219,47 @@ describe("applications", () => {
     expect(store.hasRecentApplicationByDedup(u.id, twin.dedupHash, past)).toBe(true);
     expect(store.hasRecentApplicationByDedup(u.id, twin.dedupHash, future)).toBe(false);
     expect(store.hasRecentApplicationByDedup(u.id, "", past)).toBe(false);
+  });
+
+  it("hasRecentRejection is true only for SKIP_LLM_REJECT on that exact vacancy within the window", () => {
+    const u = store.upsertUser(userFixture("a"));
+    const v = store.upsertVacancy(vacancyFixture("1"));
+    const other = store.upsertVacancy(vacancyFixture("2"));
+    expect(store.hasRecentRejection(u.id, v.id, past)).toBe(false);
+    store.insertApplication(appFixture(u.id, v.id, { status: Status.SKIP_FILTER }));
+    expect(store.hasRecentRejection(u.id, v.id, past)).toBe(false);
+    store.insertApplication(appFixture(u.id, v.id, { status: Status.SKIP_LLM_REJECT }));
+    expect(store.hasRecentRejection(u.id, v.id, past)).toBe(true);
+    expect(store.hasRecentRejection(u.id, v.id, future)).toBe(false);
+    expect(store.hasRecentRejection(u.id, other.id, past)).toBe(false);
+  });
+
+  it("company limiter counts SENT across sources, respects the window, and locks the first direction", () => {
+    const u = store.upsertUser(userFixture("a"));
+    const hhVacancy = store.upsertVacancy(vacancyFixture("1", { company: "Ozon" }));
+    const careerVacancy = store.upsertVacancy(vacancyFixture("https://ozon.tech/jobs/2", { source: "ozon-tech", company: "ООО «Озон Технологии»" }));
+    expect(companyKey(hhVacancy.company)).toBe(companyKey(careerVacancy.company));
+    const key = companyKey(hhVacancy.company);
+    expect(store.countRecentApplicationsByCompany(u.id, key, past)).toBe(0);
+    expect(store.companyLockDirection(u.id, key, past)).toBe("");
+
+    store.insertApplication(appFixture(u.id, hhVacancy.id, { status: Status.SKIP_LLM_REJECT, direction: "go-backend" }));
+    expect(store.countRecentApplicationsByCompany(u.id, key, past)).toBe(0); // not SENT, doesn't count
+
+    store.insertApplication(appFixture(u.id, hhVacancy.id, { direction: "go-backend" }));
+    expect(store.countRecentApplicationsByCompany(u.id, key, past)).toBe(1);
+    expect(store.companyLockDirection(u.id, key, past)).toBe("go-backend");
+
+    // A second SENT application from the other source, after the first, still cross-source counts
+    // but does not change the locked direction (first SENT wins).
+    store.insertApplication(appFixture(u.id, careerVacancy.id, { direction: "node-backend" }));
+    expect(store.countRecentApplicationsByCompany(u.id, key, past)).toBe(2);
+    expect(store.companyLockDirection(u.id, key, past)).toBe("go-backend");
+
+    // Window expiry: a `since` after both sends sees nothing.
+    expect(store.countRecentApplicationsByCompany(u.id, key, future)).toBe(0);
+    expect(store.companyLockDirection(u.id, key, future)).toBe("");
+    expect(store.countRecentApplicationsByCompany(u.id, "", past)).toBe(0);
   });
 
   it("listApplications filters and paginates", () => {
@@ -307,6 +370,8 @@ describe("chats", () => {
     ]);
     expect(n).toBe(3);
     expect(store.insertChatMessages(t.id, [{ hhMessageId: "m1", direction: "in", author: "bot", text: "x", isQuestion: false, answered: false }])).toBe(0);
+    // the bot's reply read back from hh with an id is the same message, not a new one
+    expect(store.insertChatMessages(t.id, [{ hhMessageId: "m9", direction: "out", author: "me", text: "A1 ", isQuestion: false, answered: false }])).toBe(0);
     const msgs = store.listChatMessages(t.id);
     expect(msgs.map((m) => m.text)).toEqual(["Q1?", "A1", "A1"]);
     expect(msgs[0]?.hhMessageId).toBe("m1");
@@ -359,6 +424,7 @@ describe("stats / settings / llm / career / backup", () => {
     store.insertChatMessages(t.id, [
       { hhMessageId: null, direction: "in", author: "bot", text: "q", isQuestion: true, answered: true },
       { hhMessageId: null, direction: "out", author: "me", text: "a", isQuestion: false, answered: false },
+      { hhMessageId: "h-1", direction: "out", author: "me", text: "history", isQuestion: false, answered: false },
     ]);
     store.insertRun({ userId: u.id, source: "hh", trigger: "cli", status: "done", stats: emptyRunStats(), tgSent: false, error: "" });
     const s = store.userStats(u.id, null);
@@ -374,6 +440,61 @@ describe("stats / settings / llm / career / backup", () => {
     });
     expect(store.userStats(u.id, future)).toEqual({ sent: 0, skipped: 0, failed: 0, byStatus: {}, invitations: 0, rejections: 0, chatReplies: 0, runsCount: 0 });
     expect(store.userStats(u.id, past).sent).toBe(1);
+  });
+
+  it("userAnalytics: kpis, daily, funnel, breakdowns, bot replies exclude hh history", () => {
+    const u = store.upsertUser(userFixture("a"));
+    const other = store.upsertUser(userFixture("b"));
+    const res = store.upsertHHResume({ userId: u.id, hhResumeId: "r1", title: "Go dev", url: "u", direction: "go", summary: null, isGenerated: true, syncedAt: "" });
+    const v1 = store.upsertVacancy(vacancyFixture("1", { company: "Acme" }));
+    const v2 = store.upsertVacancy(vacancyFixture("2", { company: "Acme", workFormat: "office" }));
+    const v3 = store.upsertVacancy(vacancyFixture("3", { company: "Beta" }));
+    const decision = (apply: boolean, reason = "ok") => ({
+      vacancy_id: 0, apply, reason, resume_id: "r1", cover_letter: "", direction: "go", seniority: "middle", red_flags: [],
+    });
+    store.insertApplication(appFixture(u.id, v1.id, { hhResumeId: res.id, direction: "go", llmDecision: decision(true) }));
+    store.insertApplication(appFixture(u.id, v2.id, { hhResumeId: res.id, llmDecision: decision(true) }));
+    store.insertApplication(appFixture(u.id, v3.id, { status: Status.SKIP_LLM_REJECT, reasonDetail: "Требуется Senior с опытом 6 лет", llmDecision: decision(false) }));
+    store.insertApplication(appFixture(u.id, v3.id, { status: Status.FAILED_UI }));
+    store.insertApplication(appFixture(other.id, v3.id)); // other user: ignored
+    const run = store.insertRun({ userId: u.id, source: "hh", trigger: "cli", status: "done", stats: { ...emptyRunStats(), found: 9 }, tgSent: false, error: "" });
+    store.insertLLMCall({ runId: run.id, task: "decide_hh", model: "m", promptChars: 100, resultChars: 10, durationMs: 200, ok: true, error: "", attempt: 1 });
+    store.insertLLMCall({ runId: run.id, task: "decide_hh", model: "m", promptChars: 50, resultChars: 0, durationMs: 400, ok: false, error: "x", attempt: 2 });
+    store.insertLLMCall({ runId: null, task: "decide_hh", model: "m", promptChars: 1, resultChars: 1, durationMs: 1, ok: true, error: "", attempt: 1 });
+    const t1 = store.upsertChatThread({ userId: u.id, hhNegotiationId: "n1", isBot: false, vacancyId: v1.id, employer: "Acme", state: "invited", lastSeenAt: "" });
+    store.upsertChatThread({ userId: u.id, hhNegotiationId: "n2", isBot: false, vacancyId: v2.id, employer: "Acme", state: "viewed", lastSeenAt: "" });
+    store.upsertChatThread({ userId: u.id, hhNegotiationId: "n3", isBot: false, vacancyId: null, employer: "C", state: "needs_human", lastSeenAt: "" });
+    store.insertChatMessages(t1.id, [
+      { hhMessageId: "m1", direction: "in", author: "employer", text: "Привет", isQuestion: true, answered: true },
+      { hhMessageId: "m2", direction: "out", author: "me", text: "old reply from history", isQuestion: false, answered: false },
+      { hhMessageId: null, direction: "out", author: "bot", text: "bot reply", isQuestion: false, answered: false },
+    ]);
+
+    const a = store.userAnalytics(u.id, null);
+    expect(a.kpi).toMatchObject({
+      sent: 2, skipped: 1, failed: 1, negotiations: 3, responded: 2, response_rate: 1, invitations: 1, rejections: 0,
+      employer_messages: 1, bot_replies: 1, needs_human_open: 1, resumes_total: 1, resumes_generated: 1,
+      llm_calls: 2, llm_failed: 1, llm_prompt_chars: 150, llm_result_chars: 10, llm_avg_ms: 300, runs: 1,
+    });
+    expect(a.daily).toEqual([{ day: today, sent: 2, skipped: 1, failed: 1, msgs_in: 1, bot_out: 1, llm_calls: 2 }]);
+    expect(a.funnel.map((f) => [f.key, f.n])).toEqual([["found", 9], ["decided", 3], ["approved", 2], ["sent", 2], ["viewed", 2], ["invited", 1]]);
+    expect(a.skip_reasons).toEqual([{ key: "SKIP_LLM_REJECT", n: 1 }]);
+    expect(a.reject_reasons).toEqual([{ key: "уровень / опыт", n: 1 }]);
+    expect(a.companies).toEqual([{ key: "Acme", n: 2 }]);
+    expect(a.sources).toEqual([{ key: "hh", n: 2 }]);
+    expect(a.resumes).toEqual([{ key: "Go dev", n: 2 }]);
+    expect(a.directions).toEqual([{ key: "go", n: 2 }]);
+    expect(a.work_formats).toEqual([{ key: "office", n: 1 }, { key: "remote", n: 1 }]);
+    expect(a.llm_tasks).toEqual([{ key: "decide_hh", n: 2 }]);
+    expect(a.recent.map((e) => e.kind).sort()).toEqual(["bot", "employer", "sent", "sent"]);
+
+    const none = store.userAnalytics(u.id, future);
+    expect(none.kpi.sent).toBe(0);
+    expect(none.kpi.response_rate).toBeNull();
+    expect(none.recent).toEqual([]);
+    const week = store.userAnalytics(u.id, new Date(Date.now() - 6 * 864e5).toISOString());
+    expect(week.daily).toHaveLength(7);
+    expect(week.daily.at(-1)?.sent).toBe(2);
   });
 
   it("settings", () => {

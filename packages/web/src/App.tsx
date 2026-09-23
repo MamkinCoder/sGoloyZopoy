@@ -9,7 +9,9 @@ import { Spinner } from "./components/Ui";
 import { ApplicationsPage } from "./pages/Applications";
 import { ChatsPage } from "./pages/Chats";
 import { DashboardPage } from "./pages/Dashboard";
+import { FilteredPage } from "./pages/Filtered";
 import { LoginPage } from "./pages/Login";
+import { QueuePage } from "./pages/Queue";
 import { ResumesPage } from "./pages/Resumes";
 import { RunDetailPage } from "./pages/RunDetail";
 import { RunsPage } from "./pages/Runs";
@@ -59,6 +61,8 @@ const router = createBrowserRouter([
           { path: "runs", element: <RunsPage /> },
           { path: "runs/:id", element: <RunDetailPage /> },
           { path: "applications", element: <ApplicationsPage /> },
+          { path: "queue", element: <QueuePage /> },
+          { path: "filtered", element: <FilteredPage /> },
           { path: "resumes", element: <ResumesPage /> },
           { path: "chats", element: <ChatsPage /> },
           { path: "chats/:id", element: <ChatsPage /> },

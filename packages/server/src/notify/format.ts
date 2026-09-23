@@ -10,10 +10,13 @@ const SKIP_LABELS: Record<string, string> = {
   SKIP_LLM_REJECT: "LLM",
   SKIP_FILTER: "фильтр",
   SKIP_LIMIT: "лимит",
+  SKIP_COMPANY_LIMIT: "лимит компании",
+  SKIP_COMPANY_PERSONA: "другое направление",
   SKIP_ALREADY_APPLIED: "уже откликались",
   SKIP_ARCHIVED: "архив",
   SKIP_FOREIGN: "другая страна",
   SKIP_DRY_RUN: "dry-run",
+  SKIP_MANUAL: "вручную",
 };
 
 export function plural(n: number, forms: [string, string, string]): string {
@@ -43,7 +46,7 @@ export function formatReport(user: User, run: Run, panelUrl: string, tz = "Europ
   }
   const lines: string[] = [];
   lines.push(`<b>${escapeHtml(user.name)} · ${escapeHtml(run.source)}</b> · ${shortStamp(new Date(run.startedAt), tz)}${st.dry_run ? " · dry-run" : ""}`);
-  lines.push(`Отправлено: ${sent} · Пропущено: ${skipped}${skipParts.length ? ` (${skipParts.join(", ")})` : ""} · Ошибок: ${failed}`);
+  lines.push(`Отправлено: ${sent}${by.QUEUED ? ` · В очереди на проверку: ${by.QUEUED}` : ""} · Пропущено: ${skipped}${skipParts.length ? ` (${skipParts.join(", ")})` : ""} · Ошибок: ${failed}`);
   const chat: string[] = [];
   if (st.chat_replies) chat.push(`${st.chat_replies} ${plural(st.chat_replies, ["ответ", "ответа", "ответов"])}`);
   if (st.invitations) chat.push(`${st.invitations} ${plural(st.invitations, ["приглашение", "приглашения", "приглашений"])}`);
@@ -60,6 +63,7 @@ export function formatReport(user: User, run: Run, panelUrl: string, tz = "Europ
       lines.push(`• <a href="${escapeHtml(t.url)}">${escapeHtml(t.title)}</a> · ${escapeHtml(t.company)}${salary}`);
     }
   }
+  if (panelUrl && by.QUEUED) lines.push(`<a href="${escapeHtml(`${panelUrl}/u/${user.slug}/queue`)}">Открыть очередь</a>`);
   if (panelUrl) lines.push(`Панель: ${escapeHtml(panelUrl)}`);
   return lines.join("\n");
 }

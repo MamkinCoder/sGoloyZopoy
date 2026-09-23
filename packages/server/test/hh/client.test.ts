@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Status } from "@sgz/shared";
 import { createHHClient } from "../../src/hh/client.js";
+import { mapNegotiationState } from "../../src/hh/state.js";
 import { FakeSession, fixture } from "./fake-session.js";
 
 const client = createHHClient({ snapshotDir: "/tmp/sgz-hh-test", settleMs: 0, confirmTimeoutMs: 10 });
@@ -42,6 +43,81 @@ describe("hh client offline flows", () => {
     expect(result.alreadyApplied).toBe(false);
     expect(result.vacancy).toMatchObject({ externalId: "111", title: "Go разработчик", company: "ООО Ромашка", requiresLetter: true, hasTest: false, salaryFrom: 130500, salaryTo: 217500, currency: "RUR" });
     expect(result.vacancy.descriptionText).toContain("Go, PostgreSQL");
+  });
+
+  it("reads resumes from the applicant profile page state", async () => {
+    const state = { latestResumeHash: "15be9ee5ff0fafa8950039ed1f5874374f7330", applicantResumes: [{ _attributes: { hash: "15be9ee5ff0fafa8950039ed1f5874374f7330", title: "Fullstack-разработчик" } }] };
+    const html = `<template id="HH-Lux-InitialState">{"topLevelSite":"hh.ru"}</template><template style="display: none" class="ResumeProfileFront-InitialState">${JSON.stringify(state)}</template>`;
+    const s = new FakeSession({ "https://hh.ru/applicant/resumes": { redirect: "https://hh.ru/applicant/profile/me", html } });
+    expect(await client.syncResumes(s)).toMatchObject([{ hhResumeId: "15be9ee5ff0fafa8950039ed1f5874374f7330", title: "Fullstack-разработчик" }]);
+  });
+
+  it("reads a thread from hh.ru/chat (Chatik-InitialState)", async () => {
+    const state = {
+      userId: 162,
+      chats: { chats: { items: [{ id: 9, lastMessage: { text: "чужой чат", participantId: "1" } }] } },
+      chatData: {
+        chat: {
+          id: 5,
+          resources: { VACANCY: ["137"] },
+          messages: {
+            items: [
+              { id: 1, text: "", participantId: "162" },
+              { id: 2, text: "Здравствуйте. Когда&nbsp;готовы выйти?", participantId: "894", participantDisplay: { isBot: false } },
+              { id: 3, text: "Через две недели.", participantId: "162" },
+            ],
+          },
+        },
+        resources: { vacancies: { "137": { company: { name: "НПФ Сбербанка" } } } },
+      },
+    };
+    const html = `<template id="HH-Lux-InitialState">{}</template><template class="Chatik-InitialState">${JSON.stringify(state)}</template>`;
+    const s = new FakeSession({ "https://chatik.hh.ru/chat/5": { redirect: "https://hh.ru/chat/5", html } });
+    const t = await client.readThread(s, "https://chatik.hh.ru/chat/5");
+    expect(t.messages).toMatchObject([
+      { hhMessageId: "2", direction: "in", author: "employer", isQuestion: true, text: "Здравствуйте. Когда готовы выйти?" },
+      { hhMessageId: "3", direction: "out", author: "me" },
+    ]);
+    expect(t.vacancyExternalId).toBe("137");
+    expect(t.thread.employer).toBe("НПФ Сбербанка");
+  });
+
+  it("marks rejections (DISCARD or wording) and whether the chat is writable", async () => {
+    const page = (items: unknown[], allowed: boolean) =>
+      `<template class="Chatik-InitialState">${JSON.stringify({ userId: 1, chatData: { chat: { id: 7, resources: {}, messages: { items } }, chatStates: { writeMessageState: { allowed } } } })}</template>`;
+    const discard = new FakeSession({ "https://hh.ru/chat/7": { html: page([{ id: 1, text: "Спасибо за интерес.", participantId: "2", workflowTransition: { applicantState: "DISCARD" } }], false) } });
+    const d = await client.readThread(discard, "https://hh.ru/chat/7");
+    expect(d.thread.state).toBe("rejected");
+    expect(d.writable).toBe(false);
+    const byText = new FakeSession({ "https://hh.ru/chat/7": { html: page([{ id: 2, text: "К сожалению, на данном этапе мы не готовы пригласить вас.", participantId: "2" }], true) } });
+    const t = await client.readThread(byText, "https://hh.ru/chat/7");
+    expect(t.thread.state).toBe("rejected");
+    expect(t.writable).toBe(true);
+  });
+
+  it("maps hh negotiation states, INTERVIEW counts as an invitation", () => {
+    expect(["INVITATION", "INTERVIEW", "OFFER", "DISCARD", "RESPONSE"].map((x) => mapNegotiationState(x))).toEqual(["invited", "invited", "invited", "rejected", "new"]);
+  });
+
+  it("exposes quick-reply buttons of the chat bot's last question", async () => {
+    const state = { userId: 1, chatData: { chat: { id: 8, resources: {}, messages: { items: [
+      { id: 1, text: "Есть опыт с React Native?", participantId: "9", participantDisplay: { isBot: true }, actions: { text_buttons: [{ text: "Да, было на последнем месте работы" }, { text: "Был опыт разработки только веба" }] } },
+    ] } }, chatStates: { writeMessageState: { allowed: true } } } };
+    const s = new FakeSession({ "https://hh.ru/chat/8": { html: `<template class="Chatik-InitialState">${JSON.stringify(state)}</template>` } });
+    const t = await client.readThread(s, "https://hh.ru/chat/8");
+    expect(t.choices).toEqual(["Да, было на последнем месте работы", "Был опыт разработки только веба"]);
+  });
+
+  it("listThreads with `since` reads every page", async () => {
+    const topic = (id: number, iso: string) => ({ id, chatId: id * 10, lastState: "RESPONSE", lastModifiedMillis: Date.parse(iso), vacancyId: 1, hasNewMessages: false });
+    const page = (topics: unknown[]) => `<template id="HH-Lux-InitialState">${JSON.stringify({ applicantNegotiations: { topicList: topics, pageCount: 3 } })}</template>`;
+    const s = new FakeSession({
+      "https://hh.ru/applicant/negotiations": { html: page([topic(1, "2026-09-25T10:00:00Z"), topic(2, "2026-09-24T10:00:00Z")]) },
+      "https://hh.ru/applicant/negotiations?page=1": { html: page([topic(3, "2026-09-23T10:00:00Z"), topic(4, "2026-09-20T10:00:00Z")]) },
+      "https://hh.ru/applicant/negotiations?page=2": { html: page([topic(5, "2026-09-10T10:00:00Z")]) },
+    });
+    const ts = await client.listThreads(s, false, "2026-09-22T21:00:00.000Z");
+    expect(ts.map((t) => t.negotiationId)).toEqual(["1", "2", "3", "4", "5"]); // all pages; the caller filters by date
   });
 
   it("dry-run opens the response form but never submits or sends chat", async () => {

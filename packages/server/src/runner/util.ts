@@ -21,6 +21,17 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 
 export const errMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+/** Whole-word match (titles): "cto" must not hit "Artifactory", "лид" not "валидация". */
+export function containsWord(haystack: string, needles: string[]): string | null {
+  for (const n of needles) {
+    const w = n.trim().toLowerCase();
+    if (!w) continue;
+    const esc = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`(^|[^\\p{L}\\d])${esc}($|[^\\p{L}\\d])`, "iu").test(haystack)) return n;
+  }
+  return null;
+}
+
 export function containsAny(haystack: string, needles: string[]): string | null {
   const h = haystack.toLowerCase();
   for (const n of needles) {

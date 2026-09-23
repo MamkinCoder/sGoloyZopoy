@@ -100,8 +100,8 @@ export class FakeLLM implements LLMClient {
     this.record("answerQuestionnaire", [profile, vacancy, qs]);
     return this.onAnswerQuestionnaire(profile, vacancy, qs);
   }
-  async answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[]): Promise<ChatReply> {
-    this.record("answerChat", [profile, vacancy, history]);
+  async answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[]): Promise<ChatReply> {
+    this.record("answerChat", [profile, vacancy, history, choices]);
     return this.onAnswerChat(profile, vacancy, history);
   }
   async summarizeResume(resumeText: string): Promise<ResumeSummary> {
