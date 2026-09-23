@@ -92,14 +92,19 @@ function ThreadView({ thread, threadId, slug }: { thread: ChatThreadDTO | null; 
         {thread && <ThreadStateBadge state={thread.state} />}
         {thread?.isBot && <span className="chip">бот</span>}
         {thread && (
-          <a href={`https://hh.ru/applicant/negotiations/item?id=${thread.hhNegotiationId}`} target="_blank" rel="noreferrer" className="text-[12px]">
-            на hh ↗
+          <a
+            href={thread.hhNegotiationId.startsWith("habr:") ? `https://career.habr.com/conversations/${thread.hhNegotiationId.slice(5)}` : `https://hh.ru/applicant/negotiations/item?id=${thread.hhNegotiationId}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[12px]"
+          >
+            {thread.hhNegotiationId.startsWith("habr:") ? "на Хабре ↗" : "на hh ↗"}
           </a>
         )}
       </div>
       {thread?.state === "needs_human" && (
         <div className="px-3 py-2 bg-[var(--human-soft)] text-[var(--human)] text-[13px]">
-          Нужен человек: бот не стал отвечать сам. Ответьте на hh.ru вручную.
+          Нужен человек: бот не стал отвечать сам. Ответьте на сайте вручную.
         </div>
       )}
       {thread && <InterviewBar thread={thread} slug={slug} />}

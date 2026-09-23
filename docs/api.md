@@ -52,7 +52,7 @@ match, `null` on rows decided before it existed), `fit_reason` (short overlap, �
 (`QUEUED` + `SENT` + `SKIP_MANUAL`); a queued or skipped vacancy is never queued again.
 
 ## Filtered-out vacancies
-| GET | /users/:slug/filtered?source=hh\|career\|all&days=7&limit=100 | | `[FilteredItem]`, newest first |
+| GET | /users/:slug/filtered?source=hh\|habr\|career\|all&days=7&limit=100 | | `[FilteredItem]`, newest first |
 | POST | /applications/:id/force | | `{run_id}` 202 — stage `force:<id>`; 409 if a run is active; 400 unless a filter status |
 
 Lists vacancies whose newest application row is `SKIP_FILTER`, `SKIP_LLM_REJECT`, `SKIP_DEDUP`, `SKIP_LIMIT`,
@@ -87,7 +87,7 @@ application row replaces the filtered one as the vacancy's newest, so it drops o
 
 ## Runs
 | GET | /runs?user=slug&limit=50 | | `[Run]` |
-| POST | /runs | `{user: slug\|"all", source: "hh"\|"career"\|"all"\|"pool", dry_run?:bool, limit?:int, stage?:string}` | `{run_id}` — 409 if a run is already active |
+| POST | /runs | `{user: slug\|"all", source: "hh"\|"habr"\|"career"\|"all"\|"pool", dry_run?:bool, limit?:int, stage?:string}` | `{run_id}` — 409 if a run is already active |
 | GET | /runs/:id | | `Run` |
 | POST | /runs/:id/stop | | `{ok}` |
 | GET | /runs/:id/events?after=0 | | `[RunEvent]` |
@@ -212,7 +212,9 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   market line (salary band over postings this user's CV direction was matched to, same rules as
   `analytics.salary`) when there is enough data; the band is for the seeker only and never reaches employers.
 - `POST /runs` answers **202** `{run_id}` (docs table says `{run_id}`; status is 202, not 200).
-  `user` must exist or be `"all"` (404 otherwise); `source` ∉ hh|career|all|pool → 400.
+  `user` must exist or be `"all"` (404 otherwise); `source` ∉ hh|habr|career|all|pool → 400. `habr` = Habr Career auto-apply (stages search / decide /
+  apply / chats / `force:<id>`); `all` = hh, then habr, then career; the chat poll runs `all` + stage `chats`.
+  Vacancies from it have `source: "habr"`; `?source=career` means career sites only (not hh, not habr).
 - `GET /runs?user=all` is the same as omitting `user`. `limit` is capped at 500.
 - `GET /runs/:id/events/stream`: replays `store` events after `?after=` **or** the `Last-Event-ID`
   header, then live events. Each frame is `event: run_event`, `id: <event id>`, `data: RunEvent`.
@@ -234,6 +236,8 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   - Chats: `feedback_request` (`"0"` = no feedback request after a rejection), `chat_track_since` (`YYYY-MM-DD`),
     `chat_followup_days` (default `"7"`, `"0"` = off): one fixed polite follow-up in a new/viewed chat after that
     many days of employer silence, at most 3 chats checked per poll.
+  - Habr Career: `habr_daily_limit` (default `"20"`) applications per day. Internal: `habr_alert_day:<user id>`
+    (a Habr fatal error inside `all` is alerted once a day).
   - Resume viewers: `viewers_enabled` (default `"1"`, `"0"` = off). Every hh run with the apply stage first reads
     «Кто смотрел резюме» (`/applicant/resumes/views?resume=<hash>`) for each pool resume, at most every 6h. A new
     viewer the seeker never applied to gets one employer-only search (`employer_id`, IT roles, 30 days); its vacancies

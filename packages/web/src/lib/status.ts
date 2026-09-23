@@ -87,7 +87,7 @@ export const THREAD_STATE_LABEL: Record<ThreadState, string> = {
   needs_human: "нужен человек",
 };
 
-export const SOURCE_LABEL: Record<string, string> = { hh: "hh.ru", career: "Сайты", all: "Все", pool: "Пул резюме" };
+export const SOURCE_LABEL: Record<string, string> = { hh: "hh.ru", habr: "Хабр Карьера", career: "Сайты", all: "Все", pool: "Пул резюме" };
 export const TRIGGER_LABEL: Record<string, string> = { schedule: "по расписанию", manual: "вручную", cli: "CLI" };
 export const STAGE_LABEL: Record<string, string> = {
   session: "Сессия",

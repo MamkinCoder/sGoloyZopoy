@@ -60,6 +60,7 @@ export function RunDialog({ open, onClose, slug }: Props) {
         <Field label="Источник">
           <select className="input" value={source} onChange={(e) => setSource(e.target.value as RunSource)}>
             <option value="hh">hh.ru</option>
+            <option value="habr">Хабр Карьера</option>
             <option value="career">карьерные сайты</option>
             <option value="all">всё</option>
             <option value="pool">пул резюме</option>

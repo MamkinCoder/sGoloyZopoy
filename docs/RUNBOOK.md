@@ -27,6 +27,15 @@ login from a new IP). `GET /api/health` shows `hh_login_ok:false` and `cookies_a
 If it expires every day: check the egress IP (`curl https://api.ipify.org` on the Pi vs on the Mac); hh.ru drops
 sessions that hop between countries. See "egress" below.
 
+### "Хабр Карьера: FAILED_LOGIN_EXPIRED" / Habr login expired
+
+The runner injects `data/users/<slug>/habr-cookies.json` into the user's one Chrome profile when Habr is not
+logged in. Inside `--source all` a Habr block never stops the hh / career parts; it is alerted once a day.
+
+1. On the Mac: `pnpm sgz habr-login --user <slug>`, log in, close the window.
+2. `make sync-data`, then `ssh rpi-ts sudo systemctl restart sgz`.
+3. `ssh -t rpi-ts sgz run --user <slug> --source habr --dry-run --limit 3`.
+
 ### "captcha" / "too many requests" / 429 / access denied
 
 hh.ru rate-limited or flagged the account/IP. Do not retry immediately.

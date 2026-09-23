@@ -146,6 +146,7 @@ export function ApplicationsPage() {
         <select className="input w-auto" value={source} onChange={(e) => set({ source: e.target.value })}>
           <option value="">Все источники</option>
           <option value="hh">hh.ru</option>
+          <option value="habr">Хабр Карьера</option>
           {sites.data?.map((s) => (
             <option key={s.id} value={s.slug}>
               {s.name}

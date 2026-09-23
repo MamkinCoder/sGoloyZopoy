@@ -1,6 +1,6 @@
 # sGoloyZopoy
 
-Autonomous job-application system for hh.ru and company career sites. Runs daily on a Raspberry Pi,
+Autonomous job-application system for hh.ru, Habr Career and company career sites. Runs daily on a Raspberry Pi,
 picks the best resume from a pool, writes short cover letters, answers screening questionnaires and
 employer chat-bots, builds tailored LaTeX resumes for career sites, reports to Telegram, and shows
 everything in a web panel.
@@ -76,6 +76,29 @@ Use `SGZ_RUNNER=false pnpm dev` to run the panel/API without daily scheduled app
 Career-site setup and resume tools are available through `pnpm sgz site` and `pnpm sgz resume`.
 Start with a supervised dry run before enabling daily applications; browser sessions and Claude login
 must be configured on the machine that runs the service.
+
+## Habr Career
+
+Habr Career (career.habr.com) is an auto-apply source like hh.ru: search → filters → decide → apply with a
+cover letter, no review queue. Company career sites stay review-queue only.
+
+```
+pnpm sgz habr-login --user <slug>                      # log in by hand once; saves data/users/<slug>/habr-cookies.json
+pnpm sgz run --user <slug> --source habr --dry-run --limit 3
+pnpm sgz habr-resume --user <slug>                     # proposal for the ONE Habr profile -> habr-resume.proposal.json
+pnpm sgz habr-resume --user <slug> --apply             # only after the proposal was approved
+```
+
+- Runs inside `--source all` (the daily scheduled run: hh, then Habr, then career sites) and in the chat poll.
+- Daily limit: setting `habr_daily_limit` (default 20). The run stops when Habr's own response allowance
+  (`createResponse.responsesLeft`) drops below 10 and says so in Telegram.
+- Cross-source dedup: the same company + title sent on hh is never sent on Habr and vice versa.
+- A dry run never clicks «Откликнуться»: on Habr that click creates the response at once (the letter is
+  added right after it with «Дополнить отклик»).
+- Chats: employer-started Habr conversations get the same chat rules as hh; conversations the seeker started
+  (e.g. a referral ask) only forward new messages to Telegram. Threads are stored as `habr:<login>`.
+- The old career site `habr-career` (review queue) would apply to the same vacancies twice: disable it
+  (`pnpm sgz site ...` or the panel) once the habr source runs.
 
 ## Deploy to the Pi
 

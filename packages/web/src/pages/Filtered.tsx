@@ -18,7 +18,7 @@ function FilteredRow({ item, slug }: { item: FilteredItemDTO; slug: string }) {
       {
         onSuccess: (r) => {
           if (r.run_id) setRunId(r.run_id);
-          toast.ok(v.source === "hh" ? "Отклик на hh запущен" : "Готовим резюме и письмо, появится в «Очереди»");
+          toast.ok(v.source === "hh" || v.source === "habr" ? `Отклик на ${v.source === "hh" ? "hh" : "Хабре"} запущен` : "Готовим резюме и письмо, появится в «Очереди»");
         },
         onError: runStartError,
       },
@@ -31,7 +31,7 @@ function FilteredRow({ item, slug }: { item: FilteredItemDTO; slug: string }) {
             {v.title}
           </a>
           <div className="text-[12px] muted">
-            {v.company} · {v.source === "hh" ? "hh.ru" : (item.site?.name ?? v.source)} · {fmtDateTime(item.created_at)}
+            {v.company} · {v.source === "hh" ? "hh.ru" : v.source === "habr" ? "Хабр Карьера" : (item.site?.name ?? v.source)} · {fmtDateTime(item.created_at)}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -73,6 +73,7 @@ export function FilteredPage() {
           <select className="input w-auto" value={source} onChange={(e) => setSource(e.target.value)} aria-label="Источник">
             <option value="all">Все</option>
             <option value="hh">hh.ru</option>
+            <option value="habr">Хабр Карьера</option>
             <option value="career">Сайты</option>
           </select>
         </div>
