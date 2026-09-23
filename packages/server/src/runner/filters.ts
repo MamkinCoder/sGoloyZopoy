@@ -117,7 +117,9 @@ export function recordSkip(store: Store, a: NewApplication): void {
 export const isoDaysAgo = (now: Date, days: number): string => new Date(now.getTime() - days * 86_400_000).toISOString();
 
 const settingInt = (store: Store, key: string, fallback: number): number => {
-  const n = Number(store.getSetting(key));
+  const raw = store.getSetting(key);
+  if (raw === null || raw.trim() === "") return fallback; // Number(null) is 0: an unset key must not mean "window 0 / limit off"
+  const n = Number(raw);
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
