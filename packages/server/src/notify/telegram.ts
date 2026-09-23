@@ -73,11 +73,18 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
   };
 }
 
+/** Slash commands (/status, /queue …) accepted only from these chats; the reply is sent as plain text. */
+export interface TelegramCommands {
+  chatIds: string[];
+  onCommand: (command: string) => Promise<string>;
+}
+
 /**
  * Long-polls getUpdates for inline-button taps and hands each callback's data to `onTap`, whose return
- * text is appended to the original message. Returns a stop function. One consumer per bot token.
+ * text is appended to the original message. With `commands`, also answers «/command» messages.
+ * Returns a stop function. One consumer per bot token.
  */
-export function startTelegramCallbacks(token: string, onTap: (data: string) => Promise<string>, opts: TelegramOptions = {}): () => void {
+export function startTelegramCallbacks(token: string, onTap: (data: string) => Promise<string>, opts: TelegramOptions & { commands?: TelegramCommands } = {}): () => void {
   const base = (opts.baseUrl ?? "https://api.telegram.org").replace(/\/+$/, "");
   const doFetch = opts.fetch ?? fetch;
   const warn = opts.warn ?? ((m: string) => console.error(m));
@@ -92,10 +99,19 @@ export function startTelegramCallbacks(token: string, onTap: (data: string) => P
   void (async () => {
     while (!stopped) {
       try {
-        type Update = { update_id: number; callback_query?: { id: string; data?: string; message?: { chat: { id: number }; message_id: number; text?: string } } };
-        const updates = await api<Update[]>("getUpdates", { offset, timeout: 50, allowed_updates: ["callback_query"] });
+        type Msg = { chat: { id: number }; message_id: number; text?: string };
+        type Update = { update_id: number; callback_query?: { id: string; data?: string; message?: Msg }; message?: Msg };
+        const cmds = opts.commands;
+        const updates = await api<Update[]>("getUpdates", { offset, timeout: 50, allowed_updates: cmds ? ["callback_query", "message"] : ["callback_query"] });
         for (const u of updates) {
           offset = u.update_id + 1;
+          const m = u.message;
+          // Strangers can message the bot too: only the configured chats get answers.
+          if (cmds && m?.text?.startsWith("/") && cmds.chatIds.includes(String(m.chat.id))) {
+            const reply = await cmds.onCommand(m.text.split(/[\s@]/)[0]!.toLowerCase()).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`);
+            for (const part of chunkMessage(reply)) await api("sendMessage", { chat_id: m.chat.id, text: part, disable_web_page_preview: true }).catch(() => undefined);
+            continue;
+          }
           const q = u.callback_query;
           if (!q?.data) continue;
           const note = await onTap(q.data).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`);

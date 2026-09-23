@@ -1,5 +1,5 @@
 import type { QueueItemDTO } from "@sgz/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useApplicationAction, useQueue } from "../api/hooks";
 import { RunProgress, runStartError } from "../components/RunProgress";
@@ -45,7 +45,7 @@ function QueueCard({ item, slug }: { item: QueueItemDTO; slug: string }) {
   ];
 
   return (
-    <section className="card p-3 grid gap-3 min-w-0">
+    <section id={`app-${item.id}`} className="card p-3 grid gap-3 min-w-0 scroll-mt-4">
       <div className="min-w-0">
         <a href={v.url} target="_blank" rel="noreferrer" className="text-[15px] font-semibold break-words">
           {v.title}
@@ -145,6 +145,11 @@ function QueueCard({ item, slug }: { item: QueueItemDTO; slug: string }) {
 export function QueuePage() {
   const { slug = "" } = useParams();
   const q = useQueue(slug);
+  // Telegram cards link to /queue#app-<id>: the list loads async, so scroll once it's there.
+  const loaded = Boolean(q.data);
+  useEffect(() => {
+    if (loaded && location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "start" });
+  }, [loaded]);
   if (q.isLoading) return <Spinner />;
   const items = q.data ?? [];
   return (
