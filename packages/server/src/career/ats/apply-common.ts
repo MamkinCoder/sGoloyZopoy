@@ -23,9 +23,9 @@ export function splitName(full: string): { first: string; last: string } {
   return { first: parts[0] ?? "", last: parts.slice(1).join(" ") };
 }
 
-export async function fileFromPath(path: string, type = "application/pdf"): Promise<File> {
+export async function fileFromPath(path: string): Promise<File> {
   const bytes = await readFile(path);
-  return new File([bytes], basename(path), { type });
+  return new File([bytes], basename(path), { type: "application/pdf" });
 }
 
 export const basicAuth = (key: string): string => `Basic ${Buffer.from(`${key}:`).toString("base64")}`;

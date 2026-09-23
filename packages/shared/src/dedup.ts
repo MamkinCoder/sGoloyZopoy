@@ -74,17 +74,12 @@ export function companyKey(company: string): string {
   return COMPANY_ALIASES[key] ?? key;
 }
 
-/** Canonical URL for career-site vacancies: lowercase host, no fragment, no utm, no trailing slash. */
-export function canonicalUrl(raw: string, keepQuery: string[] = []): string {
+/** Canonical URL for career-site vacancies: lowercase host, no fragment, no query, no trailing slash. */
+export function canonicalUrl(raw: string): string {
   const u = new URL(raw);
   u.hash = "";
   u.hostname = u.hostname.toLowerCase();
-  const keep = new URLSearchParams();
-  for (const k of [...keepQuery].sort()) {
-    const v = u.searchParams.get(k);
-    if (v !== null) keep.set(k, v);
-  }
-  u.search = keep.toString() ? `?${keep.toString()}` : "";
+  u.search = "";
   u.pathname = u.pathname.replace(/\/+$/, "") || "/";
   return u.toString();
 }

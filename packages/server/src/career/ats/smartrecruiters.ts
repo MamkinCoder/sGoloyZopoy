@@ -8,7 +8,7 @@ import { atsId, firstMatch, rawId, slugRe, type ATSClientImpl } from "./types.js
 const API = "https://api.smartrecruiters.com/v1/companies";
 const PAGE = 100;
 
-export interface SRPosting {
+interface SRPosting {
   id: string;
   name: string;
   releasedDate?: string;

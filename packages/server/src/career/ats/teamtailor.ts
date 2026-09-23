@@ -27,7 +27,7 @@ interface RssItem {
   location: string;
 }
 
-export function parseRss(xml: string): RssItem[] {
+function parseRss(xml: string): RssItem[] {
   const out: RssItem[] = [];
   for (const m of xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {
     const item = m[1] ?? "";

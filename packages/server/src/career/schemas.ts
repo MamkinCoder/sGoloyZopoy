@@ -9,7 +9,6 @@ export const jobListSchema = z.object({
     }),
   ),
 });
-export type JobList = z.infer<typeof jobListSchema>;
 
 export const vacancyPageSchema = z.object({
   title: z.string(),

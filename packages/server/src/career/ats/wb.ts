@@ -13,7 +13,7 @@ const LIST_API = `${ORIGIN}/hr-crm-api/api/v2/pub/vacancies`;
 const DETAIL_API = `${ORIGIN}/crm-api/api/v1/pub/vacancies`;
 const PAGE_SIZE = 100;
 
-export interface WBListItem {
+interface WBListItem {
   id: number;
   name: string;
   city_title?: string;
@@ -23,7 +23,7 @@ export interface WBListItem {
   employment_types?: { id: number; title: string }[];
 }
 
-export interface WBVacancy {
+interface WBVacancy {
   id: number;
   name: string;
   description?: string;

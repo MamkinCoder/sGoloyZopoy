@@ -6,12 +6,10 @@ export type VacancyDraft = Omit<Vacancy, "id" | "firstSeenAt" | "lastSeenAt">;
 
 export const DESCRIPTION_MAX = 8000;
 
-type Partial = Pick<VacancyDraft, "source" | "externalId" | "url" | "title" | "company"> &
-  Partial2<Omit<VacancyDraft, "source" | "externalId" | "url" | "title" | "company" | "dedupHash">>;
-type Partial2<T> = { [K in keyof T]?: T[K] };
+type RequiredKeys = "source" | "externalId" | "url" | "title" | "company";
 
 /** Fill defaults, cap the description and compute dedupHash from the final company+title. */
-export function makeVacancy(p: Partial): VacancyDraft {
+export function makeVacancy(p: Pick<VacancyDraft, RequiredKeys> & Partial<Omit<VacancyDraft, RequiredKeys | "dedupHash">>): VacancyDraft {
   const title = p.title.trim();
   const company = p.company.trim();
   return {
