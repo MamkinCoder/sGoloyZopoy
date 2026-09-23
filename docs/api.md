@@ -189,6 +189,16 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
     - `career_sites_per_run`: sites per chunk, default 1 (keeps chat polls frequent); each chunk takes the least recently visited sites not yet visited today.
     - `career_per_site`: max vacancies queued per site per run, default 3.
     - Every ~4h it also runs hh stage `touch` (raise resumes in search).
+  - Telegram (`sgz serve` with a bot token):
+    - `queue_tg_cards`: `"1"` (default) sends a card per new review-queue item with «Отправить» (starts
+      career stage `send:<id>`; if a run is active the id is parked in setting `queue_send_pending` and
+      started on the next idle minute) and «Пропустить» (`SKIP_MANUAL`, "skipped in telegram"). The card
+      links to `/u/<slug>/queue#app-<id>`, which the panel scrolls to. `"0"` = no cards.
+    - `digest_at`: `"HH:MM"` (default `"20:00"`, `""` = off) in `tz`: once a day, «Итоги дня» per active
+      user: today's sent / queued / skipped / errors, chat replies / invitations / rejections, the review
+      queue with items older than 5 days, chats in `needs_human`. Last sent day: setting `digest_last_day`.
+    - Bot commands, answered only in `TG_CHAT_ID` or a user's `tgChatId`: `/status` (runner state +
+      the digest), `/queue` (queued items, oldest first); anything else starting with `/` gets the help line.
 - Unknown `/api/*` path → 404 `{error:"not found"}`; malformed JSON body → 400.
 
 ### Files

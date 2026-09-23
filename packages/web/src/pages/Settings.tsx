@@ -414,6 +414,8 @@ const KNOWN: { key: string; label: string; kind: "text" | "number"; hint?: strin
   { key: "schedule_jitter_min", label: "Случайная задержка, мин", kind: "number", hint: "0 и больше" },
   { key: "dedup_window_days", label: "Окно дедупликации, дней", kind: "number", hint: "0 и больше" },
   { key: "tz", label: "Часовой пояс", kind: "text", hint: "например Europe/Moscow" },
+  { key: "digest_at", label: "Итоги дня в Telegram", kind: "text", hint: "HH:MM; пусто — выключено" },
+  { key: "queue_tg_cards", label: "Карточки очереди в Telegram", kind: "text", hint: "1 — кнопки «Отправить / Пропустить», 0 — выкл" },
 ];
 
 function ScheduleEditor() {

@@ -8,6 +8,8 @@ import { createScheduler } from "../scheduler/index.js";
 import { telegramFetch } from "../notify/proxy.js";
 import { startTelegramCallbacks } from "../notify/telegram.js";
 import { parseSkillCallback, resolveSkill } from "../runner/skills.js";
+import { handleQueueTap, parseQueueCallback, startPendingSend } from "../runner/queue-cards.js";
+import { buildDigest, digestDue, queueList } from "../notify/digest.js";
 import { careerRotation } from "../runner/career.js";
 import { nextJob } from "../scheduler/autopilot.js";
 import { errMessage } from "../runner/util.js";
@@ -64,8 +66,10 @@ export async function serve(): Promise<void> {
   };
   // Every minute: one job when the runner is idle (see scheduler/autopilot.ts for the order).
   // Career chunks keep a single-run runner from starving the chat bot for hours.
-  const tick = () => {
+  const tick = async () => {
     if (app.runner.active()) return;
+    // «Отправить» tapped in Telegram while a run was busy: those go first.
+    if (await startPendingSend(app.store, app.runner).catch((e: unknown) => (console.error(`sgz serve: queued send: ${errMessage(e)}`), false))) return;
     const job = nextJob({
       now: Date.now(),
       lastChatPoll,
@@ -84,24 +88,44 @@ export async function serve(): Promise<void> {
       void start({ userSlug: "all", source: "hh", stage: "touch" });
     } else if (job?.kind === "career") void start({ userSlug: job.userSlug, source: "career", stage: "rotate" });
   };
-  // Telegram «есть / нет» answers for unknown skills: update the profile, then answer the waiting chats.
+  // Telegram buttons: queue cards (send / skip) and «есть / нет» answers for unknown skills (update the
+  // profile, then answer the waiting chats). /status and /queue answer from the configured chats.
+  const digestAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
+  const onCommand = async (cmd: string) => {
+    if (cmd === "/status") return `${app.runner.active() ? `Идёт прогон #${app.runner.active()!.id}` : "Бот свободен"}\n\n${digestAll()}`;
+    if (cmd === "/queue") return app.store.listUsers(true).map((u) => queueList(app.store, u, app.cfg.panelUrl)).join("\n\n");
+    return "Команды: /status - итоги дня, /queue - очередь на проверку";
+  };
   const stopCallbacks = app.cfg.tgBotToken
     ? startTelegramCallbacks(app.cfg.tgBotToken, async (data) => {
+        const q = parseQueueCallback(data);
+        if (q) return handleQueueTap(app.store, app.runner, q);
         const cb = parseSkillCallback(data);
         if (!cb) return "неизвестная кнопка";
         const skill = resolveSkill(app.store, cb.userId, cb.key, cb.has);
         if (!skill) return "уже учтено";
         startChatPoll();
         return cb.has ? `✅ ${skill} добавлен в навыки, отвечаю работодателю` : `❌ ${skill} отмечен как «нет», отвечаю работодателю`;
-      }, { fetch: telegramFetch() })
+      }, { fetch: telegramFetch(), commands: { chatIds: [app.cfg.tgChatId, ...app.store.listUsers().map((u) => u.tgChatId)].filter(Boolean), onCommand } })
     : null;
-  const chatPoll = app.cfg.runnerEnabled && chatPollMin > 0 ? setInterval(tick, 60_000) : null;
+  const chatPoll = app.cfg.runnerEnabled && chatPollMin > 0 ? setInterval(() => void tick(), 60_000) : null;
+  // Evening digest: once a day at settings.digest_at ("" = off), independent of the runner.
+  const digestTimer = app.cfg.tgBotToken
+    ? setInterval(() => {
+        const day = digestDue(app.store.getSetting("digest_at") ?? "20:00", app.store.getSetting("digest_last_day") ?? "", new Date(), app.cfg.tz);
+        if (!day) return;
+        app.store.setSetting("digest_last_day", day);
+        for (const u of app.store.listUsers(true))
+          void app.notifier.alert(`Итоги дня · ${u.name}`, buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)).catch((e: unknown) => console.error(`sgz serve: digest: ${errMessage(e)}`));
+      }, 60_000)
+    : null;
 
   let closing = false;
   const shutdown = (sig: string) => {
     if (closing) return;
     closing = true;
     if (chatPoll) clearInterval(chatPoll);
+    if (digestTimer) clearInterval(digestTimer);
     stopCallbacks?.();
     console.error(`sgz serve: ${sig}, shutting down`);
     server.close();

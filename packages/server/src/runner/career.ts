@@ -8,6 +8,7 @@ import type { RunContext } from "./context.js";
 import { classify, titleScore, companyLimitSettings, createRunCompanyTracker, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
 import { isStop, newApp } from "./hh.js";
 import { dayInTz } from "../scheduler/tz.js";
+import { formatQueueCard, queueButtons } from "./queue-cards.js";
 import type { UserRun } from "./user.js";
 
 /** Title keywords for sites without their own `profile.filters`: dev roles only, so a 3000-job board
@@ -281,7 +282,7 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
   // Career sites never auto-submit: the ready CV + letter wait in the panel's review queue
   // (stage send:<id> / inspect:<id> below). A dry run only reports what would be queued.
   const status = ctx.req.dryRun ? Status.SKIP_DRY_RUN : Status.QUEUED;
-  ctx.store.insertApplication({
+  const queued = ctx.store.insertApplication({
     ...newApp(ctx, user.id, vacancy.id, status, ctx.req.dryRun ? "dry run: would queue for review" : ""),
     coverLetter,
     generatedResumeId: generatedId,
@@ -290,6 +291,13 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
   });
   stats.record(status, vacancy);
   ctx.log.info("apply", `${vacancy.title} @ ${vacancy.company}: ${status}`, { vacancy_id: vacancy.id, status });
+  // One-tap review from the phone: «Отправить» / «Пропустить» land in serve's Telegram callback handler.
+  if (status === Status.QUEUED && ctx.store.getSetting("queue_tg_cards") !== "0") {
+    const queueUrl = ctx.cfg.panelUrl ? `${ctx.cfg.panelUrl}/u/${user.slug}/queue#app-${queued.id}` : "";
+    await ctx.deps.notifier
+      ?.ask?.(formatQueueCard(vacancy, decision?.reason ?? "", coverLetter, queueUrl), queueButtons(queued.id))
+      .catch((e: unknown) => ctx.log.warn("apply", `telegram card failed: ${errMessage(e)}`));
+  }
   return { status, direction: picked.direction };
 }
 

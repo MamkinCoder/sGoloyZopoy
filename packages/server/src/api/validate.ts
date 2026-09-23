@@ -170,6 +170,8 @@ export const SETTING_KEYS = [
   "career_per_site",
   "career_sites_per_run",
   "career_autopilot",
+  "digest_at",
+  "queue_tg_cards",
 ] as const;
 const numish = z.union([z.number().int().min(0), z.string().regex(/^\d+$/)]).transform(String);
 const boolish = z.union([z.literal("0"), z.literal("1")]);
@@ -189,6 +191,8 @@ export const SettingsSchema = z
     career_autopilot: boolish, // "0" = no automatic career gathering between chat polls
     career_per_site: numish, // max vacancies queued per career site per run (spread wide)
     chat_track_since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD"), // chats modified since this day are tracked
+    digest_at: z.union([z.literal(""), z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM")]), // evening Telegram digest, "" = off
+    queue_tg_cards: boolish, // "0" = no Telegram card per new review-queue item
   })
   .partial()
   .refine((o) => Object.keys(o).length > 0, "no settings given");
