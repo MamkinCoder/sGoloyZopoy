@@ -8,7 +8,7 @@ import { atsId, type ATSClientImpl } from "./types.js";
 
 const VACANCY_PATH = /\/(vacanc(y|ies)|jobs?|positions?|careers?|openings?|vacancy)\/[^/?#]+/i;
 
-export function extractJobLinks(html: string, pageUrl: string, kind: ATSKind): Discovered[] {
+function extractJobLinks(html: string, pageUrl: string, kind: ATSKind): Discovered[] {
   const origin = originOf(pageUrl);
   const seen = new Set<string>();
   const out: Discovered[] = [];
@@ -22,7 +22,7 @@ export function extractJobLinks(html: string, pageUrl: string, kind: ATSKind): D
   return out;
 }
 
-export function htmlListingClient(kind: ATSKind, hostRe: RegExp, markerRe: RegExp, notes: string): ATSClientImpl {
+function htmlListingClient(kind: ATSKind, hostRe: RegExp, markerRe: RegExp, notes: string): ATSClientImpl {
   return {
     kind,
     verified: false,

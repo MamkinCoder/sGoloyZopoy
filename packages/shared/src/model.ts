@@ -30,12 +30,6 @@ export const Status = {
 } as const;
 export type Status = (typeof Status)[keyof typeof Status];
 
-export const FATAL_STATUSES: readonly Status[] = [
-  Status.FAILED_ANTI_BOT,
-  Status.FAILED_CAPTCHA,
-  Status.FAILED_LOGIN_EXPIRED,
-  Status.FAILED_LOW_MEMORY,
-];
 /** Filter / gate outcomes a human may override from the panel (stage force:<id>). */
 export const FILTERED_STATUSES: readonly Status[] = [
   Status.SKIP_FILTER,
@@ -45,8 +39,6 @@ export const FILTERED_STATUSES: readonly Status[] = [
   Status.SKIP_COMPANY_LIMIT,
   Status.SKIP_COMPANY_PERSONA,
 ];
-
-export const isFatal = (s: Status): boolean => FATAL_STATUSES.includes(s);
 
 /** Errors that abort a whole run. The runner maps them to a fatal Status + Telegram alert. */
 export class RunAbortError extends Error {

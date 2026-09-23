@@ -24,8 +24,6 @@ export interface Config {
 
 export const paths = {
   db: (c: Config) => `${c.dataDir}/sgz.db`,
-  env: (c: Config) => `${c.dataDir}/.env`,
-  userDir: (c: Config, slug: string) => `${c.dataDir}/users/${slug}`,
   profile: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/profile.yaml`,
   cookies: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/hh-cookies.json`,
   chromeProfile: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/chrome-profile`,

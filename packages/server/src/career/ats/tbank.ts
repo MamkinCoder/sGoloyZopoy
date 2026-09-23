@@ -47,23 +47,20 @@ interface TBGetVacancyDescriptionResponse {
   payload: TBVacancyDescription;
 }
 
-const vacancyFilters = () => ({
+const VACANCY_FILTERS = {
   generatedGraphQL: {
     type: "T_CAREER",
     status: "ACTIVE",
     userGroup: { groups: ["Control"], type: "SPECIFIC" },
     or: [{ category: CATEGORY }],
   },
-});
-
-const vacancyUrl = (city: string | undefined, seoSlug: string, urlSlug: string): string =>
-  `https://www.tbank.ru/career/it/vacancy/${city ?? "saint-petersburg"}/${seoSlug}/${urlSlug}/`;
+};
 
 // citySlug is unknown per-listing item (only a Russian display name is given), so URLs use the
 // default HQ slug; the site itself redirects to the right city page from the canonical vacancy id.
 const toDiscovered = (v: TBVacancyListItem): Discovered => ({
   externalId: atsId("tbank", v.urlSlug),
-  url: vacancyUrl(undefined, v.seoSlug, v.urlSlug),
+  url: `https://www.tbank.ru/career/it/vacancy/saint-petersburg/${v.seoSlug}/${v.urlSlug}/`,
   title: v.title,
   company: "T-Bank",
   location: v.subtitle,
@@ -79,7 +76,7 @@ async function listJobs(_token: string): Promise<Discovered[]> {
   const out: Discovered[] = [];
   let offset = 0;
   for (let i = 0; i < 10; i++) {
-    const data = await postJson<TBGetVacanciesResponse>(`${API}/getVacancies`, { filters: vacancyFilters(), pagination: { offset }, limit: PAGE });
+    const data = await postJson<TBGetVacanciesResponse>(`${API}/getVacancies`, { filters: VACANCY_FILTERS, pagination: { offset }, limit: PAGE });
     const { vacancies, nextPagination } = data.payload;
     out.push(...vacancies.map(toDiscovered));
     if (nextPagination.isFinished || vacancies.length === 0) break;

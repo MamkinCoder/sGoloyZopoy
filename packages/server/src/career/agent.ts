@@ -14,8 +14,8 @@ export interface CareerAgentOptions {
   log?: (message: string) => void;
 }
 
-export const DISCOVER_MAX_PAGES = 5;
-export const DISCOVER_CAP = 400; // after the keyword filter; the runner ranks by title before fetching
+const DISCOVER_MAX_PAGES = 5;
+const DISCOVER_CAP = 400; // after the keyword filter; the runner ranks by title before fetching
 const PAGE_TEXT_MAX = 8000;
 const LINKS_MAX = 300;
 
@@ -31,8 +31,7 @@ export function createCareerAgent(llm: LLMClient, opts: CareerAgentOptions = {})
   const clients = opts.clients ?? atsClientImpls;
   const now = opts.now ?? (() => new Date());
   const log = opts.log ?? (() => {});
-  const clientFor = (kind: ATSKind): ATSClientImpl | undefined =>
-    opts.clients ? clients.find((c) => c.kind === kind) : atsClientFor(kind);
+  const clientFor = (kind: ATSKind): ATSClientImpl | undefined => clients.find((c) => c.kind === kind);
 
   const detect = (baseUrl: string, html: string): { kind: ATSKind; token: string } | null => {
     for (const c of clients) {
@@ -98,7 +97,7 @@ export function createCareerAgent(llm: LLMClient, opts: CareerAgentOptions = {})
       listing = listing2;
     }
     log(`onboard ${baseUrl}: custom listing=${listing} postings=${found}`);
-    const profile: SiteProfile = {
+    return {
       listing_url: listing,
       apply_mode: "agent",
       discover_hints: (answer.discover_hints ?? "").trim() || undefined,
@@ -108,7 +107,6 @@ export function createCareerAgent(llm: LLMClient, opts: CareerAgentOptions = {})
         .join("; "),
       last_verified_at: now().toISOString(),
     };
-    return profile;
   }
 
   async function verifyListing(s: BrowserSession, listing: string, discoverHints: string): Promise<number> {
@@ -213,7 +211,7 @@ export function createCareerAgent(llm: LLMClient, opts: CareerAgentOptions = {})
   return { onboard, discover, fetch, apply };
 }
 
-export function discoverInstruction(hints: string): string {
+function discoverInstruction(hints: string): string {
   return (
     "Extract the list of job postings (vacancies) shown on this page: for each give its title, the link URL to the posting, and location if shown. Ignore navigation, blog and non-job links." +
     (hints ? ` Hints: ${hints}` : "")
@@ -260,7 +258,7 @@ function dedupeLinks(links: Link[]): Link[] {
   });
 }
 
-export function resolveUrl(raw: string, base: string): string | null {
+function resolveUrl(raw: string, base: string): string | null {
   const t = raw.trim();
   if (!t) return null;
   try {
@@ -272,7 +270,7 @@ export function resolveUrl(raw: string, base: string): string | null {
 }
 
 /** Case-insensitive keyword filter on the title; empty keyword list keeps everything. */
-export function filterByKeywords(items: Discovered[], keywords: string[]): Discovered[] {
+function filterByKeywords(items: Discovered[], keywords: string[]): Discovered[] {
   const kws = keywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
   if (!kws.length) return items;
   // Whole-word match ("go" must not hit "Google" or "cargo"); a keyword may still be part of a hyphenated title.

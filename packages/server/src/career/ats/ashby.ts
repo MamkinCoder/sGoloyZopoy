@@ -7,7 +7,7 @@ import { atsId, firstMatch, rawId, slugRe, type ATSClientImpl } from "./types.js
 
 const API = "https://api.ashbyhq.com/posting-api/job-board";
 
-export interface AshbyJob {
+interface AshbyJob {
   id: string;
   title: string;
   location?: string;

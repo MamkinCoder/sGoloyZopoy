@@ -4,11 +4,11 @@
 export const USER_AGENT =
   "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 sgz/0.1";
 
-export const HTTP_TIMEOUT_MS = 15_000;
+const HTTP_TIMEOUT_MS = 15_000;
 
-export async function httpFetch(url: string, init: RequestInit = {}, timeoutMs = HTTP_TIMEOUT_MS): Promise<Response> {
+export async function httpFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(new Error(`timeout after ${timeoutMs}ms: ${url}`)), timeoutMs);
+  const timer = setTimeout(() => ctl.abort(new Error(`timeout after ${HTTP_TIMEOUT_MS}ms: ${url}`)), HTTP_TIMEOUT_MS);
   const headers = new Headers(init.headers);
   if (!headers.has("user-agent")) headers.set("user-agent", USER_AGENT);
   if (!headers.has("accept")) headers.set("accept", "application/json, text/html;q=0.8, */*;q=0.5");

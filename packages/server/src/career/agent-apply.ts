@@ -2,13 +2,13 @@
 // guided by SiteProfile.apply_hints. Cache keys are stable so Stagehand replays selectors per host.
 import { Status } from "@sgz/shared";
 import type { Answer, BrowserSession, CareerApplyRequest, CareerApplyResult, Question } from "@sgz/shared";
-import { answerValues, splitName } from "./ats/apply-common.js";
+import { answerValues, byIdx, splitName } from "./ats/apply-common.js";
 import { copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { truncate } from "./http.js";
 import { confirmSchema, questionsSchema } from "./schemas.js";
 
-export const SUCCESS_PHRASES = ["Спасибо", "Thank you", "received", "отправлен", "успешно", "Thanks for applying"];
+const SUCCESS_PHRASES = ["Спасибо", "Thank you", "received", "отправлен", "успешно", "Thanks for applying"];
 
 const WAIT_PER_PHRASE_MS = 2500;
 
@@ -123,10 +123,10 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
     let answers: Answer[] = [];
     if (questions.length) {
       answers = await req.answerQuestions(questions);
-      const byIdx = new Map(answers.map((a) => [a.idx, a]));
+      const answered = byIdx(answers);
       for (const q of questions) {
         if (q.kind === "file") continue;
-        const values = answerValues(q, byIdx.get(q.idx));
+        const values = answerValues(q, answered.get(q.idx));
         if (!values.length) continue;
         const res = await s.act(
           `Answer the form question "${truncate(q.text, 200)}" with: %answer% (choose the matching option(s), check the boxes, or type into the field as appropriate)`,

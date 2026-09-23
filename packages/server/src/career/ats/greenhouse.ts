@@ -10,7 +10,7 @@ import { atsId, firstMatch, rawId, slugRe, type ATSClientImpl } from "./types.js
 
 const API = "https://boards-api.greenhouse.io/v1/boards";
 
-export interface GHJob {
+interface GHJob {
   id: number;
   title: string;
   absolute_url: string;
@@ -22,7 +22,7 @@ export interface GHJob {
   questions?: GHQuestion[];
   location_questions?: GHQuestion[];
 }
-export interface GHQuestion {
+interface GHQuestion {
   label: string;
   required: boolean;
   fields: { name: string; type: string; values?: { label: string; value: string | number }[] }[];
@@ -99,7 +99,7 @@ function kindOf(type: string): Question["kind"] | null {
  * Maps the board's custom questions to our Question[]; returns null when a required question cannot be
  * expressed (unknown type / extra file upload) so the caller falls back to the agent flow.
  */
-export function mapQuestions(job: GHJob): { questions: Question[]; fieldNames: string[] } | null {
+function mapQuestions(job: GHJob): { questions: Question[]; fieldNames: string[] } | null {
   const questions: Question[] = [];
   const fieldNames: string[] = [];
   for (const q of [...(job.questions ?? []), ...(job.location_questions ?? [])]) {

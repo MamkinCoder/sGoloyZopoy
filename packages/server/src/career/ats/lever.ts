@@ -10,7 +10,7 @@ import { atsId, firstMatch, rawId, slugRe, type ATSClientImpl } from "./types.js
 
 const API = "https://api.lever.co/v0/postings";
 
-export interface LeverPosting {
+interface LeverPosting {
   id: string;
   text: string;
   hostedUrl: string;
@@ -52,7 +52,7 @@ async function listJobs(token: string): Promise<Discovered[]> {
   return (Array.isArray(data) ? data : []).map(toDiscovered);
 }
 
-export function leverDescription(p: LeverPosting): string {
+function leverDescription(p: LeverPosting): string {
   const parts = [p.descriptionPlain ?? stripHtml(p.description ?? "")];
   for (const l of p.lists ?? []) parts.push(`${l.text}\n${stripHtml(l.content)}`);
   if (p.additionalPlain) parts.push(p.additionalPlain);

@@ -12,7 +12,7 @@ import { atsId, rawId, type ATSClientImpl } from "./types.js";
 
 const LIMIT = 50;
 
-export interface VKVacancy {
+interface VKVacancy {
   id: number;
   title: string;
   group?: { id: number; name: string } | null;

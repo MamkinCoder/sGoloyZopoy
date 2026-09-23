@@ -7,7 +7,7 @@ import { atsId, firstMatch, rawId, slugRe, type ATSClientImpl } from "./types.js
 
 const BASE = "https://apply.workable.com";
 
-export interface WorkableJob {
+interface WorkableJob {
   id?: string | number;
   shortcode: string;
   title: string;
