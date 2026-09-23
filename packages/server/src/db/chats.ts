@@ -120,7 +120,7 @@ export function chatsRepo(s: Sql): ChatsRepo {
             m.text,
             m.isQuestion,
             m.answered,
-            nowISO(),
+            m.createdAt || nowISO(),
           );
           inserted += changes;
         }

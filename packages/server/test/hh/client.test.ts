@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Status } from "@sgz/shared";
 import { createHHClient } from "../../src/hh/client.js";
-import { mapNegotiationState } from "../../src/hh/state.js";
+import { isRejection, mapNegotiationState } from "../../src/hh/state.js";
 import { FakeSession, fixture } from "./fake-session.js";
 
 const client = createHHClient({ snapshotDir: "/tmp/sgz-hh-test", settleMs: 0, confirmTimeoutMs: 10 });
@@ -93,6 +93,17 @@ describe("hh client offline flows", () => {
     const t = await client.readThread(byText, "https://hh.ru/chat/7");
     expect(t.thread.state).toBe("rejected");
     expect(t.writable).toBe(true);
+  });
+
+  it("invitations and reschedules are not rejections; a missing write flag is unknown; hh's send time is kept", async () => {
+    expect(isRejection("Мы приняли решение пригласить вас на собеседование")).toBe(false);
+    expect(isRejection("К сожалению, в четверг не получится, давайте в пятницу")).toBe(false);
+    expect(isRejection("К сожалению, мы приняли решение в пользу другого кандидата")).toBe(true);
+    const state = { userId: 1, chatData: { chat: { id: 9, resources: {}, messages: { items: [{ id: 1, text: "Завтра в 11?", participantId: "2", creationTime: "2026-09-24T23:50:00+03:00" }] } } } };
+    const s = new FakeSession({ "https://hh.ru/chat/9": { html: `<template class="Chatik-InitialState">${JSON.stringify(state)}</template>` } });
+    const t = await client.readThread(s, "https://hh.ru/chat/9");
+    expect(t.writable).toBeUndefined();
+    expect(t.messages[0]!.createdAt).toBe("2026-09-24T20:50:00.000Z");
   });
 
   it("maps hh negotiation states, INTERVIEW counts as an invitation", () => {

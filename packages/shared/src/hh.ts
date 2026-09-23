@@ -43,7 +43,8 @@ export interface ApplyResult {
 export interface ThreadDetail {
   thread: Omit<ChatThread, "id" | "userId">;
   vacancyExternalId: string | null;
-  messages: Omit<ChatMessage, "id" | "threadId" | "createdAt">[];
+  /** createdAt: hh's send time when the page has it. */
+  messages: (Omit<ChatMessage, "id" | "threadId" | "createdAt"> & { createdAt?: string })[];
   survey: Question[]; // non-empty if a chat-bot survey widget is present
   /** hh lets the applicant write in this chat (false after a formal DISCARD). Undefined when unknown. */
   writable?: boolean;

@@ -67,7 +67,8 @@ export interface LLMCall {
 /** Insert shapes: id/createdAt assigned by the store. */
 export type NewApplication = Omit<Application, "id" | "attempt" | "createdAt">;
 export type NewRunEvent = Omit<RunEvent, "id" | "ts">;
-export type NewChatMessage = Omit<ChatMessage, "id" | "threadId" | "createdAt">;
+/** createdAt: hh's send time when known; the insert time otherwise. */
+export type NewChatMessage = Omit<ChatMessage, "id" | "threadId" | "createdAt"> & { createdAt?: string };
 
 export interface Store {
   close(): void;

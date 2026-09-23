@@ -385,6 +385,8 @@ export interface ParsedChatMessage {
   author: "employer" | "bot" | "me";
   text: string;
   isQuestion: boolean;
+  /** When hh says the message was sent (UTC ISO); relative dates («завтра в 11») resolve against it. */
+  createdAt?: string;
 }
 
 export interface ParsedChat {
@@ -398,9 +400,10 @@ export interface ParsedChat {
   choices?: string[];
 }
 
-/** Employer wording that means «not moving forward» (hh often rejects by plain message, not DISCARD). */
+/** Employer wording that means «not moving forward» (hh often rejects by plain message, not DISCARD).
+ * Bare «к сожалению» / «приняли решение» also open reschedules and invitations, so they need a refusal after them. */
 export const isRejection = (text: string): boolean =>
-  /к сожалению|не готовы (сделать|предложить|пригласить)|приняли решение|выбрали другого|другого кандидата|не можем предложить|отказ(ать)? вам|not moving forward|unfortunately/i.test(text);
+  /к сожалению[\s\S]{0,150}(не готовы|не (можем|сможем) (вам )?(предложить|продолжить|пригласить)|не подходит|не рассматрива|другого кандидата|отказ|вынуждены)|не готовы (сделать|предложить|пригласить)|приняли решение (не |отказать|в пользу)|выбрали другого|другого кандидата|не можем предложить|отказ(ать)? вам|not moving forward|unfortunately[\s\S]{0,150}(not (be )?(moving|proceed)|other candidate|decided)/i.test(text);
 
 /** A "?" outside of URLs (bot links like ?start=... are not questions). */
 export const asksQuestion = (text: string): boolean => /\?/.test(text.replace(/https?:\/\/\S+/g, ""));
@@ -471,9 +474,19 @@ export const parseChatik = (state: State | null): ParsedChat | null => {
   const messages: ParsedChatMessage[] = items.filter(isObj).filter((m) => !m.hidden && str(m.text).trim()).map((m) => {
     const mine = !!me && str(m.participantId) === me;
     const text = decodeEntities(str(m.text));
-    return { hhMessageId: str(m.id) || null, direction: mine ? "out" : "in", author: mine ? "me" : bool(get(m, "participantDisplay.isBot")) ? "bot" : "employer", text, isQuestion: !mine && asksQuestion(text) };
+    const at = pick(m, "creationTime", "createdAt", "creationDate");
+    const sent = typeof at === "number" ? at : Date.parse(str(at));
+    return {
+      hhMessageId: str(m.id) || null,
+      direction: mine ? "out" : "in",
+      author: mine ? "me" : bool(get(m, "participantDisplay.isBot")) ? "bot" : "employer",
+      text,
+      isQuestion: !mine && asksQuestion(text),
+      ...(Number.isFinite(sent) ? { createdAt: new Date(sent).toISOString() } : {}),
+    };
   });
   const vacancyId = str(get(chat, "resources.VACANCY[0]"));
+  const allowed = get(state, "chatData.chatStates.writeMessageState.allowed");
   const surveyObj = findObjects(get(state, "chatData"), (o) => Array.isArray(pick(o, "questions")) && (pick(o, "questions") as unknown[]).some((q) => isObj(q) && ("options" in q || "answers" in q || "text" in q)), { limit: 1 })[0];
   return {
     messages,
@@ -482,7 +495,8 @@ export const parseChatik = (state: State | null): ParsedChat | null => {
     vacancyExternalId: /^\d+$/.test(vacancyId) ? vacancyId : null,
     matchedPath: "chatData.chat.messages.items",
     rejected: items.filter(isObj).some((m) => get(m, "workflowTransition.applicantState") === "DISCARD") || isRejection(messages.filter((m) => m.direction === "in").at(-1)?.text ?? ""),
-    writable: bool(get(state, "chatData.chatStates.writeMessageState.allowed")),
+    // Absent means unknown (another layout), not closed: a missing flag must not silence the bot.
+    ...(allowed === undefined ? {} : { writable: bool(allowed) }),
     choices: lastChoices(items.filter(isObj), me),
   };
 };

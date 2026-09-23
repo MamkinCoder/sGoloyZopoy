@@ -615,7 +615,7 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     const detail: ThreadDetail = {
       thread: { hhNegotiationId: negotiationIdFromUrl(chatUrl), isBot, vacancyId: null, employer, state: parsed.rejected ? "rejected" : "new", lastSeenAt: new Date().toISOString() },
       vacancyExternalId,
-      messages: messages.map((m) => ({ hhMessageId: m.hhMessageId, direction: m.direction, author: m.author, text: m.text, isQuestion: m.isQuestion, answered: false })),
+      messages: messages.map((m) => ({ hhMessageId: m.hhMessageId, direction: m.direction, author: m.author, text: m.text, isQuestion: m.isQuestion, answered: false, ...(m.createdAt ? { createdAt: m.createdAt } : {}) })),
       survey,
       ...(parsed.writable !== undefined ? { writable: parsed.writable } : {}),
       ...(parsed.choices?.length ? { choices: parsed.choices } : {}),

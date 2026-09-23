@@ -401,23 +401,39 @@ async function chatsStage(ctx: RunContext, u: UserRun): Promise<void> {
       const prev = known.get(t.negotiationId);
       const ext = detail.vacancyExternalId ?? t.vacancyExternalId;
       const vacancy = ext ? ctx.store.findVacancyByExternal("hh", ext) : null;
-      const thread = ctx.store.upsertChatThread({
+      const next = {
         ...detail.thread,
         id: prev?.id,
         userId: user.id,
         hhNegotiationId: t.negotiationId,
         vacancyId: vacancy?.id ?? prev?.vacancyId ?? null,
-        // rejected is sticky (later messages are feedback); an invitation outranks a pending human question
-        state: detail.thread.state === "invited" ? "invited" : prev?.state === "needs_human" || prev?.state === "rejected" ? prev.state : detail.thread.state,
+        // rejected is sticky (later messages are feedback) and ends a pending human question; an invitation
+        // outranks a pending human question
+        state:
+          detail.thread.state === "invited" ? "invited"
+          : detail.thread.state === "rejected" || prev?.state === "rejected" ? "rejected"
+          : prev?.state === "needs_human" ? "needs_human"
+          : detail.thread.state,
         lastSeenAt: ctx.now().toISOString(),
-      });
-      const inserted = ctx.store.insertChatMessages(thread.id, detail.messages);
+      } as const;
+      // A dry run must leave the thread (state, messages, seen time) exactly as a real run would find it.
+      const thread = ctx.req.dryRun ? { ...next, id: prev?.id ?? 0, interviewAt: prev?.interviewAt ?? null, prep: prev?.prep ?? null } : ctx.store.upsertChatThread(next);
+      const stored = ctx.store.listChatMessages(thread.id);
+      const pending = ctx.req.dryRun ? unstored(stored, detail.messages) : [];
+      const inserted = ctx.req.dryRun ? pending.length : ctx.store.insertChatMessages(thread.id, detail.messages);
+      const history = ctx.req.dryRun
+        ? [...stored, ...pending.map((m, i) => ({ ...m, id: -1 - i, threadId: thread.id, createdAt: m.createdAt ?? ctx.now().toISOString() }))]
+        : ctx.store.listChatMessages(thread.id);
+      const alert = async (title: string, body: string) => {
+        if (ctx.req.dryRun) ctx.log.info("chats", `[dry-run] would alert: ${title}`, { thread_id: thread.id });
+        else await ctx.deps.notifier.alert(title, body);
+      };
       if (detail.thread.state === "invited" && prev?.state !== "invited") {
         stats.invitation();
         ctx.log.info("chats", `${t.employer}: INVITATION`, { thread_id: thread.id });
         const vtitle = vacancy?.title ? ` (${vacancy.title})` : "";
         const said = [...detail.messages].reverse().find((m) => m.direction === "in" && m.text.trim())?.text.trim().slice(0, 800);
-        await ctx.deps.notifier.alert(`🎉 Приглашение: ${t.employer}${vtitle}`, `${user.name}: работодатель пригласил на следующий этап.\n${said ? `\n«${said}»\n\n` : ""}${t.chatUrl}`).catch(() => undefined);
+        await alert(`🎉 Приглашение: ${t.employer}${vtitle}`, `${user.name}: работодатель пригласил на следующий этап.\n${said ? `\n«${said}»\n\n` : ""}${t.chatUrl}`).catch(() => undefined);
         await sendInterviewPrep(ctx, u, thread.id, t.employer, vacancy, said ?? "");
       }
       if (detail.thread.state === "rejected" && prev?.state !== "rejected") {
@@ -428,19 +444,26 @@ async function chatsStage(ctx: RunContext, u: UserRun): Promise<void> {
       }
       if (prev?.state === "rejected") {
         // Anything the employer writes after a rejection is feedback: forward it, never auto-reply.
-        const fresh = detail.messages.filter((m) => m.direction === "in").slice(-Math.max(inserted, 0));
-        if (inserted > 0 && fresh.length) await ctx.deps.notifier.alert(`Фидбек от ${t.employer}`, `${user.name}: ${fresh.map((m) => m.text).join("\n\n")}\n${t.chatUrl}`);
-        if (!ctx.req.dryRun) ctx.store.markAnswered(unansweredQuestionIds(ctx.store.listChatMessages(thread.id)));
+        // Not forwarded yet = unhandled incoming (our own messages read back from hh don't count).
+        const fresh = history.filter((m) => m.direction === "in" && !m.answered);
+        if (fresh.length) await alert(`Фидбек от ${t.employer}`, `${user.name}: ${fresh.map((m) => m.text).join("\n\n")}\n${t.chatUrl}`);
+        if (!ctx.req.dryRun) ctx.store.markAnswered(unansweredQuestionIds(history));
         continue;
       }
 
-      if (detail.survey.length) {
+      // hh can keep a submitted questionnaire in the chat state: the same questions are answered once.
+      const surveyKey = `survey_done:${thread.id}`;
+      const surveySig = JSON.stringify(detail.survey.map((q) => q.text));
+      if (detail.survey.length && ctx.store.getSetting(surveyKey) !== surveySig) {
         const answers = await ctx.llm.answerQuestionnaire(profile, vacancy, detail.survey);
         stats.llmCall();
-        if (!ctx.req.dryRun) await ctx.hh.submitSurvey(s, t.chatUrl, answers);
         // A dry run must leave the thread eligible for a real run. The generated
         // answers are reported in the run log, but no local message is marked done.
-        if (!ctx.req.dryRun) ctx.store.markAnswered(unansweredQuestionIds(ctx.store.listChatMessages(thread.id)));
+        if (!ctx.req.dryRun) {
+          await ctx.hh.submitSurvey(s, t.chatUrl, answers);
+          ctx.store.setSetting(surveyKey, surveySig);
+          ctx.store.markAnswered(unansweredQuestionIds(history));
+        }
         stats.chatReply();
         replies++;
         ctx.log.info("chats", `${t.employer}: survey answered (${detail.survey.length} questions)${ctx.req.dryRun ? " [dry-run]" : ""}`, { thread_id: thread.id });
@@ -448,7 +471,6 @@ async function chatsStage(ctx: RunContext, u: UserRun): Promise<void> {
         continue;
       }
 
-      const history = ctx.store.listChatMessages(thread.id);
       // Any new employer message gets a look (auto «давайте пообщаемся» often has no "?"); the LLM
       // returns an empty reply when nothing needs saying. Skip when our message is already the last one.
       const last = [...history].reverse().find((m) => m.direction === "in");
@@ -495,11 +517,12 @@ async function chatsStage(ctx: RunContext, u: UserRun): Promise<void> {
       const when = interviewAt ? `📅 Собеседование: ${shortStamp(new Date(interviewAt), ctx.cfg.tz)}\n\n` : "";
       if (reply.needs_human) {
         // A reply can still go out (e.g. «да, пришлите тестовое»); the human is pinged either way.
-        ctx.store.upsertChatThread({ ...thread, state: "needs_human" });
+        // An invitation stays invited: downgrading it would re-announce the invitation on the next poll.
+        if (!ctx.req.dryRun && thread.state !== "invited") ctx.store.upsertChatThread({ ...thread, state: "needs_human" });
         ctx.log.warn("chats", `${t.employer}: needs human (${reply.reason})`, { thread_id: thread.id });
-        await ctx.deps.notifier.alert(`Чат требует внимания: ${t.employer}`, `${user.name}: ${last.text}\n\n${when}${text ? `Ответ бота: ${text}\n\n` : ""}${reply.reason}\n${t.chatUrl}`);
+        await alert(`Чат требует внимания: ${t.employer}`, `${user.name}: ${last.text}\n\n${when}${text ? `Ответ бота: ${text}\n\n` : ""}${reply.reason}\n${t.chatUrl}`);
       } else if (interviewAt && interviewAt !== thread.interviewAt) {
-        await ctx.deps.notifier.alert(`📅 Собеседование: ${t.employer}`, `${user.name}: ${when}${t.chatUrl}`).catch(() => undefined);
+        await alert(`📅 Собеседование: ${t.employer}`, `${user.name}: ${when}${t.chatUrl}`).catch(() => undefined);
       }
       if (!text) {
         if (!ctx.req.dryRun) ctx.store.markAnswered(unansweredQuestionIds(history));
@@ -572,6 +595,10 @@ async function askFeedback(ctx: RunContext, s: BrowserSession, chatUrl: string, 
   ctx.log.info("chats", `${employer}: rejected, asked for feedback`, { thread_id: threadId });
   await ctx.throttle.afterMutation();
 }
+
+/** Dry run: the page's messages the store doesn't have yet (matched like insertChatMessages does). */
+const unstored = <M extends Pick<ChatMessage, "hhMessageId" | "direction" | "text">>(stored: ChatMessage[], msgs: M[]): M[] =>
+  msgs.filter((m) => !stored.some((x) => (m.hhMessageId && x.hhMessageId === m.hhMessageId) || (x.direction === m.direction && x.text.trim() === m.text.trim() && (m.direction === "out" || !m.hhMessageId))));
 
 /** Every incoming message not handled yet (questions or not: handled = looked at by the bot). */
 const unansweredQuestionIds = (msgs: ChatMessage[]): number[] => msgs.filter((m) => m.direction === "in" && !m.answered).map((m) => m.id);
