@@ -1,7 +1,7 @@
 // Unknown-skill approvals. When an employer asks about a skill the profile doesn't list, the chat bot
 // holds its reply and asks the human in Telegram: «есть» adds it to verified_skills, «нет» to
 // never_claim_skills. The next chat poll answers with the updated profile.
-import type { Store } from "@sgz/shared";
+import { companyKey, type Store } from "@sgz/shared";
 
 /** Short, callback-safe key (Telegram callback_data is capped at 64 bytes). */
 const skillKey = (skill: string): string =>
@@ -74,4 +74,20 @@ export const skillCallback = (has: boolean, userId: number, skill: string): stri
 export function parseSkillCallback(data: string): { has: boolean; userId: number; key: string } | null {
   const m = /^sk:([yn]):(\d+):(.+)$/.exec(data);
   return m ? { has: m[1] === "y", userId: Number(m[2]), key: m[3]! } : null;
+}
+
+/** «/know Компания - Имя» from Telegram: remembers a referral contact in the profile of the user who owns
+ *  `chatId` (or the only active user). The bot never contacts anyone; cards just remind the human. */
+export function addKnownCompany(store: Store, chatId: string, text: string): string {
+  const m = /^(.+?)\s+[-–—]\s+(.+)$/.exec(text.replace(/^\/\S+\s*/, "").trim());
+  if (!m) return "Формат: /know Компания - Имя (как вы его знаете)";
+  const [company, contact] = [m[1]!.trim(), m[2]!.trim()];
+  const users = store.listUsers(true);
+  const user = users.find((u) => u.tgChatId === chatId) ?? (users.length === 1 ? users[0] : undefined);
+  const p = user ? store.getProfile(user.id) : null;
+  if (!user || !p) return "Не понял, чей это профиль: напишите из своего чата или добавьте в панели (Настройки, Профиль)";
+  const key = companyKey(company);
+  const rest = p.known_companies.filter((l) => companyKey(l.split(" - ")[0]!) !== key);
+  store.saveProfile(user.id, { ...p, known_companies: [...rest, `${company} - ${contact}`] });
+  return `Запомнил для ${user.name}: ${company} - ${contact}. Карточки этой компании напомнят про рекомендацию.`;
 }

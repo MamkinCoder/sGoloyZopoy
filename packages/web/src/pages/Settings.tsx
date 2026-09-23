@@ -132,6 +132,7 @@ function ProfileEditor({ slug }: { slug: string }) {
           <div className="grid gap-3 sm:grid-cols-2">{text("hh_area", "Регион hh (area id)", "пусто — без фильтра")}</div>
           {chips("exclude_words", "Стоп-слова в заголовке")}
           {chips("company_blacklist", "Чёрный список компаний")}
+          {chips("known_companies", "Знакомые в компаниях", "«Компания - Имя»: карточки этой компании напомнят попросить рекомендацию. В LLM не передаётся")}
         </div>
       </Section>
       <Section

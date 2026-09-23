@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useApplicationAction, useQueue } from "../api/hooks";
 import { RunProgress, runStartError } from "../components/RunProgress";
+import { FitBadge, KnownBadge } from "../components/StatusBadge";
 import { Empty, Section, Spinner } from "../components/Ui";
 import { fmtRel, fmtSalary } from "../lib/format";
 import { toast } from "../lib/toast";
@@ -16,7 +17,7 @@ function answerText(q: { options?: string[] }, raw: unknown): string {
   return a.text ?? "—";
 }
 
-function QueueCard({ item, slug }: { item: QueueItemDTO; slug: string }) {
+function QueueCard({ item, slug, active }: { item: QueueItemDTO; slug: string; active: boolean }) {
   const act = useApplicationAction();
   const [letter, setLetter] = useState(item.cover_letter);
   const [runId, setRunId] = useState<number | null>(null);
@@ -46,7 +47,7 @@ function QueueCard({ item, slug }: { item: QueueItemDTO; slug: string }) {
   ];
 
   return (
-    <section id={`app-${item.id}`} className="card p-3 grid gap-3 min-w-0 scroll-mt-4">
+    <section id={`app-${item.id}`} className={`card p-3 grid gap-3 min-w-0 scroll-mt-4 ${active ? "outline-2 outline-[var(--accent)]" : ""}`}>
       <div className="min-w-0">
         <a href={v.url} target="_blank" rel="noreferrer" className="text-[15px] font-semibold break-words">
           {v.title}
@@ -58,8 +59,12 @@ function QueueCard({ item, slug }: { item: QueueItemDTO; slug: string }) {
           {v.work_format && <span>· {v.work_format}</span>}
           {(v.salary_from > 0 || v.salary_to > 0) && <span>· {fmtSalary(v.salary_from, v.salary_to, v.currency)}</span>}
           <span className="faint">· {fmtRel(item.created_at)}</span>
+          <FitBadge score={item.fit_score} reason={item.fit_reason} />
+          <KnownBadge contact={item.known_contact} />
         </div>
         {item.reason && <div className="text-[13px] mt-1">Claude: {item.reason}</div>}
+        {item.fit_reason && <div className="text-[12px] muted mt-0.5">Совпадение: {item.fit_reason}</div>}
+        {item.known_contact && <div className="text-[12px] mt-0.5">Знакомый: {item.known_contact} - можно попросить рекомендацию</div>}
         {item.detail && <div className="text-[12px] faint mt-0.5">{item.detail}</div>}
       </div>
 
@@ -80,7 +85,7 @@ function QueueCard({ item, slug }: { item: QueueItemDTO; slug: string }) {
         <div className="grid gap-3 content-start min-w-0">
           <label className="block">
             <span className="label">Сопроводительное письмо</span>
-            <textarea className="input w-full" rows={8} value={letter} onChange={(e) => setLetter(e.target.value)} />
+            <textarea data-key="e" className="input w-full" rows={8} value={letter} onChange={(e) => setLetter(e.target.value)} />
           </label>
           <div className="flex gap-1.5">
             <button type="button" className="btn btn-sm" disabled={!dirty || !letter.trim() || act.isPending} onClick={() => saveLetter().then(() => toast.ok("Письмо сохранено"))}>
@@ -130,20 +135,20 @@ function QueueCard({ item, slug }: { item: QueueItemDTO; slug: string }) {
             Откликнуться на сайте
           </a>
         ) : (
-          <button type="button" className="btn btn-primary" disabled={act.isPending || !letter.trim()} onClick={() => start("send")}>
+          <button type="button" data-key="s" className="btn btn-primary" disabled={act.isPending || !letter.trim()} onClick={() => start("send")}>
             Отправить
           </button>
         )}
         <button type="button" className="btn" disabled={act.isPending} onClick={() => start("inspect")}>
           Проверить форму
         </button>
-        <button type="button" className="btn" disabled={act.isPending} onClick={() => start("retailor")}>
+        <button type="button" data-key="r" className="btn" disabled={act.isPending} onClick={() => start("retailor")}>
           Пересобрать CV
         </button>
         <button type="button" className="btn" disabled={act.isPending} onClick={markSent} title="Откликнулся сам на сайте по ссылке">
           Отправил вручную
         </button>
-        <button type="button" className="btn btn-danger" disabled={act.isPending} onClick={skip}>
+        <button type="button" data-key="x" className="btn btn-danger" disabled={act.isPending} onClick={skip}>
           Пропустить
         </button>
         {runId && <RunProgress slug={slug} runId={runId} />}
@@ -155,18 +160,73 @@ function QueueCard({ item, slug }: { item: QueueItemDTO; slug: string }) {
 export function QueuePage() {
   const { slug = "" } = useParams();
   const q = useQueue(slug);
+  const [cur, setCur] = useState(0);
+  const [hint, setHint] = useState(() => {
+    try {
+      return localStorage.getItem("sgz_queue_hint") !== "0";
+    } catch {
+      return true;
+    }
+  });
   // Telegram cards link to /queue#app-<id>: the list loads async, so scroll once it's there.
   const loaded = Boolean(q.data);
   useEffect(() => {
-    if (loaded && location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "start" });
+    if (!loaded || !location.hash) return;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "start" });
+    const i = (q.data ?? []).findIndex((it) => `#app-${it.id}` === location.hash);
+    if (i >= 0) setCur(i);
   }, [loaded]);
+
+  // Desktop triage: j/k move between cards, s send (confirmed), x skip, r rebuild CV, e edit letter, ? hint.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (e.metaKey || e.ctrlKey || e.altKey || t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || document.querySelector("[role=dialog]")) return;
+      if (e.key === "?") {
+        setHint((h) => {
+          try {
+            localStorage.setItem("sgz_queue_hint", h ? "0" : "1");
+          } catch {
+            /* not persisted */
+          }
+          return !h;
+        });
+        return;
+      }
+      const cards = [...document.querySelectorAll<HTMLElement>("section[id^='app-']")];
+      if (!cards.length) return;
+      const i = Math.min(cur, cards.length - 1);
+      const btn = (k: string) => cards[i]!.querySelector<HTMLElement>(`[data-key="${k}"]`);
+      if (e.key === "j" || e.key === "k") {
+        const n = Math.max(0, Math.min(cards.length - 1, i + (e.key === "j" ? 1 : -1)));
+        setCur(n);
+        cards[n]!.scrollIntoView({ block: "start", behavior: "smooth" });
+      } else if (e.key === "s") {
+        const title = cards[i]!.querySelector("a")?.textContent ?? "";
+        if (btn("s") && confirm(`Отправить отклик: ${title}?`)) btn("s")!.click();
+      } else if (e.key === "x" || e.key === "r") btn(e.key)?.click();
+      else if (e.key === "e") {
+        e.preventDefault();
+        btn("e")?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [cur]);
+
   if (q.isLoading) return <Spinner />;
   const items = q.data ?? [];
   return (
     <div className="grid gap-4">
       <p className="text-[13px] muted">Отклики на сайты компаний. Ничего не отправляется без кнопки «Отправить».</p>
+      {hint && items.length > 0 && (
+        <p className="hidden sm:block text-[12px] faint">
+          Клавиши: <span className="kbd">j</span>/<span className="kbd">k</span> - следующая/предыдущая, <span className="kbd">s</span> - отправить, <span className="kbd">x</span> - пропустить,{" "}
+          <span className="kbd">r</span> - пересобрать CV, <span className="kbd">e</span> - письмо, <span className="kbd">?</span> - скрыть подсказку
+        </p>
+      )}
       {items.length ? (
-        items.map((it) => <QueueCard key={it.id} item={it} slug={slug} />)
+        items.map((it, i) => <QueueCard key={it.id} item={it} slug={slug} active={i === Math.min(cur, items.length - 1)} />)
       ) : (
         <Section>
           <Empty>Очередь пуста</Empty>

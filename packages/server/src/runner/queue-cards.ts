@@ -1,8 +1,8 @@
 // Telegram cards for new review-queue items. «Отправить» starts stage send:<id> (or parks the id until
 // the runner is free), «Пропустить» marks the item SKIP_MANUAL. The tap is the human decision: nothing
 // is submitted without it.
-import { RunBusyError, Status, type RunService, type Store, type Vacancy } from "@sgz/shared";
-import { escapeHtml } from "../notify/format.js";
+import { RunBusyError, Status, type Decision, type RunService, type Store, type Vacancy } from "@sgz/shared";
+import { escapeHtml, knownLine, vitalsLine } from "../notify/format.js";
 
 const PENDING = "queue_send_pending";
 
@@ -17,15 +17,20 @@ export function parseQueueCallback(data: string): { send: boolean; id: number } 
   return m ? { send: m[1] === "s", id: Number(m[2]) } : null;
 }
 
-const money = (n: number) => n.toLocaleString("ru-RU").replace(/\s/g, " ");
-
 /** HTML card: vacancy, why the LLM picked it, the start of the letter, links to the posting and the panel. */
-export function formatQueueCard(v: Pick<Vacancy, "title" | "company" | "url" | "salaryFrom" | "salaryTo" | "currency">, reason: string, letter: string, queueUrl: string): string {
-  const salary = v.salaryFrom || v.salaryTo ? [v.salaryFrom ? `от ${money(v.salaryFrom)}` : "", v.salaryTo ? `до ${money(v.salaryTo)}` : "", v.currency].filter(Boolean).join(" ") : "";
+export function formatQueueCard(
+  v: Pick<Vacancy, "title" | "company" | "url" | "salaryFrom" | "salaryTo" | "currency"> & { workFormat?: string },
+  reason: string,
+  letter: string,
+  queueUrl: string,
+  decision?: Pick<Decision, "fit_score" | "fit_reason"> | null,
+  known = "",
+): string {
   const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n).trimEnd()}…` : s);
   return [
     `📥 <b>${escapeHtml(v.title)}</b> · ${escapeHtml(v.company)}`,
-    salary,
+    escapeHtml(vitalsLine(v, decision)),
+    escapeHtml(knownLine(known)),
     reason && `\n${escapeHtml(cut(reason, 300))}`,
     letter && `\nПисьмо: ${escapeHtml(cut(letter, 400))}`,
     `\n${escapeHtml(v.url)}`,

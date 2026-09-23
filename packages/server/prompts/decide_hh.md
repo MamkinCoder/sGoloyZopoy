@@ -46,6 +46,8 @@
 `seniority` - junior / middle / senior / lead по тексту вакансии.
 `red_flags` - короткие пометки: «тест», «5+ лет», «нужен Kubernetes», «зарплата ниже вилки» и т.п. Пустой массив, если нет.
 `reason` - одно предложение, почему такое решение.
+`fit_score` - 0-100, насколько вакансия совпадает с `verified_skills`, вилкой и форматом работы профиля (для любого `apply`). Честно: 80+ только при совпадении главного стека.
+`fit_reason` - до 90 символов, конкретное пересечение или разрыв, например «Go+K8s, вилка ок, офис Москва». Только факты из профиля и вакансии.
 
 Сопроводительное письмо (`cover_letter`), только если `apply: true`, иначе пустая строка. Правила ниже.
 
@@ -77,6 +79,8 @@
     "seniority": string,           // junior | middle | senior | lead
     "red_flags": string[],
     "resume_fit": string,          // good | poor
+    "fit_score": number,           // 0-100
+    "fit_reason": string,          // до 90 символов
     "tailored": {                  // только при resume_fit=poor, иначе не указывай
       "title": string,
       "about": string,

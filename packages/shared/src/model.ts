@@ -88,6 +88,8 @@ export interface Profile {
   exclude_words: string[];
   company_blacklist: string[];
   extra: Record<string, string>; // free facts for questionnaires
+  /** «Компания - контакт» lines: people the seeker knows there (referral nudge on cards; never sent to the LLM). */
+  known_companies: string[];
 }
 
 export interface ResumeSummary {
@@ -145,6 +147,10 @@ export interface Decision {
   resume_fit?: "good" | "poor";
   /** Sanitized edit for a tailored resume; present only when resume_fit is "poor" and apply is true. */
   tailored?: { title: string; about: string; key_skills: string[] };
+  /** 0-100 match with verified skills / salary / format. Missing on older rows and when the model omits it. */
+  fit_score?: number;
+  /** Short concrete overlap, e.g. «Go+K8s, вилка ок». */
+  fit_reason?: string;
 }
 
 export interface Question {

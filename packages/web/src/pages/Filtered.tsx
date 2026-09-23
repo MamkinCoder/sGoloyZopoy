@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useApplicationAction, useFiltered } from "../api/hooks";
 import { RunProgress, runStartError } from "../components/RunProgress";
-import { StatusBadge } from "../components/StatusBadge";
+import { FitBadge, KnownBadge, StatusBadge } from "../components/StatusBadge";
 import { Empty, Section, Spinner } from "../components/Ui";
 import { fmtDateTime } from "../lib/format";
 import { toast } from "../lib/toast";
@@ -43,6 +43,8 @@ function FilteredRow({ item, slug }: { item: FilteredItemDTO; slug: string }) {
       </div>
       <div className="text-[13px] flex flex-wrap items-baseline gap-1.5">
         <StatusBadge status={item.status} />
+        <FitBadge score={item.fit_score} reason={item.fit_reason} />
+        <KnownBadge contact={item.known_contact} />
         <span className="muted break-words">{item.reason || "—"}</span>
       </div>
     </li>
@@ -52,8 +54,10 @@ function FilteredRow({ item, slug }: { item: FilteredItemDTO; slug: string }) {
 export function FilteredPage() {
   const { slug = "" } = useParams();
   const [source, setSource] = useState("all");
+  const [byFit, setByFit] = useState(false);
   const q = useFiltered(slug, source);
-  const items = q.data ?? [];
+  // Rows without a score (older decisions, filter skips before decide) sink to the bottom.
+  const items = byFit ? [...(q.data ?? [])].sort((a, b) => (b.fit_score ?? -1) - (a.fit_score ?? -1)) : (q.data ?? []);
   return (
     <Section
       title={
@@ -62,11 +66,17 @@ export function FilteredPage() {
         </>
       }
       right={
-        <select className="input w-auto" value={source} onChange={(e) => setSource(e.target.value)} aria-label="Источник">
-          <option value="all">Все</option>
-          <option value="hh">hh.ru</option>
-          <option value="career">Сайты</option>
-        </select>
+        <div className="flex gap-2">
+          <select className="input w-auto" value={byFit ? "fit" : "new"} onChange={(e) => setByFit(e.target.value === "fit")} aria-label="Сортировка">
+            <option value="new">Сначала новые</option>
+            <option value="fit">По fit</option>
+          </select>
+          <select className="input w-auto" value={source} onChange={(e) => setSource(e.target.value)} aria-label="Источник">
+            <option value="all">Все</option>
+            <option value="hh">hh.ru</option>
+            <option value="career">Сайты</option>
+          </select>
+        </div>
       }
     >
       {q.isLoading ? (

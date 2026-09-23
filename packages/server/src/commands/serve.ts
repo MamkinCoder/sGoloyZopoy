@@ -8,6 +8,7 @@ import { createScheduler } from "../scheduler/index.js";
 import { telegramFetch } from "../notify/proxy.js";
 import { startTelegramCallbacks } from "../notify/telegram.js";
 import { parseSkillCallback, resolveSkill } from "../runner/skills.js";
+import { addKnownCompany } from "../runner/skills.js";
 import { handleQueueTap, parseQueueCallback, startPendingSend } from "../runner/queue-cards.js";
 import { buildDigest, digestDue, queueList } from "../notify/digest.js";
 import { careerRotation } from "../runner/career.js";
@@ -111,11 +112,13 @@ export async function serve(): Promise<void> {
   // Telegram buttons: queue cards (send / skip) and «есть / нет» answers for unknown skills (update the
   // profile, then answer the waiting chats). /status and /queue answer from the configured chats.
   const digestAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
-  const onCommand = async (cmd: string, args = "") => {
+  const onCommand = async (cmd: string, text = "", chatId = "") => {
+    const args = text.replace(/^\S+\s*/, "").trim();
     if (cmd === "/status") return `${app.runner.active() ? `Идёт прогон #${app.runner.active()!.id}` : "Бот свободен"}\n\n${digestAll()}`;
     if (cmd === "/queue") return app.store.listUsers(true).map((u) => queueList(app.store, u, app.cfg.panelUrl)).join("\n\n");
     if (cmd === "/company") return companyReport(app.store, args);
-    return "Команды: /status - итоги дня, /queue - очередь на проверку, /company <название> - история откликов в компанию";
+    if (cmd === "/know") return addKnownCompany(app.store, chatId, text);
+    return "Команды: /status - итоги дня, /queue - очередь на проверку, /company <название> - история откликов в компанию, /know Компания - Имя: запомнить знакомого в компании";
   };
   const stopCallbacks = app.cfg.tgBotToken
     ? startTelegramCallbacks(app.cfg.tgBotToken, async (data) => {
