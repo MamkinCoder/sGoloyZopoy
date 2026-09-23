@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { defaultProfile } from "../../src/config/profile.js";
+import { FakeLLM } from "../../src/llm/fake.js";
 import { harness } from "./fakes.js";
 
 describe("chats", () => {
@@ -27,6 +29,29 @@ describe("chats", () => {
     expect((await h.json("PUT", `/api/users/yaroslav/chats/${t.id}/interview`, { interview_at: "завтра" })).status).toBe(400);
     expect(await (await h.json("PUT", `/api/users/yaroslav/chats/${t.id}/interview`, { interview_at: null })).json()).toMatchObject({ interviewAt: null });
     expect((await h.json("PUT", "/api/users/yaroslav/chats/999/interview", { interview_at: null })).status).toBe(404);
+  });
+
+  it("study pack: POST 202 builds in the background, GET returns the stored pack, 404 for another user's thread", async () => {
+    const h = await harness({ llm: new FakeLLM() });
+    const u = h.store.getUserBySlug("yaroslav")!;
+    const other = h.store.upsertUser({ ...u, id: undefined, slug: "other", name: "Other" });
+    h.store.saveProfile(u.id, { ...defaultProfile(), verified_skills: ["Go"] });
+    const v = h.store.upsertVacancy({ source: "hh", externalId: "1", url: "https://hh.ru/vacancy/1", title: "Go dev", company: "Co", salaryFrom: 0, salaryTo: 0, currency: "", descriptionText: "Go", hasTest: false, requiresLetter: false, area: "", workFormat: "", publishedAt: null, archived: false, dedupHash: "" });
+    const t = h.store.upsertChatThread({ userId: u.id, hhNegotiationId: "n1", isBot: false, vacancyId: v.id, employer: "Co", state: "invited", lastSeenAt: "" });
+    const foreign = h.store.upsertChatThread({ userId: other.id, hhNegotiationId: "n2", isBot: false, vacancyId: v.id, employer: "Co", state: "invited", lastSeenAt: "" });
+    const url = `/api/users/yaroslav/chats/${t.id}/study`;
+    expect(await (await h.get(url)).json()).toEqual({ pack: null, generating: false, error: "" });
+    expect((await h.json("POST", url)).status).toBe(202);
+    await new Promise((r) => setTimeout(r, 0));
+    const got = await (await h.get(url)).json();
+    expect(got.generating).toBe(false);
+    expect(got.pack).toMatchObject({ vacancyTitle: "Go dev", company: "Co", checklist: [{ level: "must" }] });
+    expect(got.pack.prompt).toContain("Позиция: Go dev в Co.");
+    const list = await (await h.get("/api/users/yaroslav/chats")).json();
+    expect(list[0]).toMatchObject({ id: t.id, has_study: true });
+    expect(list[0]).not.toHaveProperty("study");
+    expect((await h.get(`/api/users/yaroslav/chats/${foreign.id}/study`)).status).toBe(404);
+    expect((await h.json("POST", `/api/users/yaroslav/chats/${foreign.id}/study`)).status).toBe(404);
   });
 });
 

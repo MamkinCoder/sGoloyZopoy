@@ -8,6 +8,7 @@ import { expandPool, syncPool, syncIsStale } from "./pool.js";
 import { decideExtras, readLessons } from "./learn.js";
 import { askSkill, skillCallback, threadWaiting } from "./skills.js";
 import { followupChats, sendInterviewPrep } from "./interview.js";
+import { alertWithStudy } from "./study.js";
 import { viewersStage } from "./viewers.js";
 import { mapNegotiationState } from "../hh/state.js";
 import { dayInTz, shortStamp } from "../scheduler/tz.js";
@@ -428,8 +429,9 @@ async function chatsStage(ctx: RunContext, u: UserRun): Promise<void> {
       const history = ctx.req.dryRun
         ? [...stored, ...pending.map((m, i) => ({ ...m, id: -1 - i, threadId: thread.id, createdAt: m.createdAt ?? ctx.now().toISOString() }))]
         : ctx.store.listChatMessages(thread.id);
-      const alert = async (title: string, body: string) => {
+      const alert = async (title: string, body: string, study = false) => {
         if (ctx.req.dryRun) ctx.log.info("chats", `[dry-run] would alert: ${title}`, { thread_id: thread.id });
+        else if (study) await alertWithStudy(ctx.deps.notifier, title, body, thread.id);
         else await ctx.deps.notifier.alert(title, body);
       };
       if (detail.thread.state === "invited" && prev?.state !== "invited") {
@@ -437,7 +439,7 @@ async function chatsStage(ctx: RunContext, u: UserRun): Promise<void> {
         ctx.log.info("chats", `${t.employer}: INVITATION`, { thread_id: thread.id });
         const vtitle = vacancy?.title ? ` (${vacancy.title})` : "";
         const said = [...detail.messages].reverse().find((m) => m.direction === "in" && m.text.trim())?.text.trim().slice(0, 800);
-        await alert(`🎉 Приглашение: ${t.employer}${vtitle}`, `${user.name}: работодатель пригласил на следующий этап.\n${said ? `\n«${said}»\n\n` : ""}${t.chatUrl}`).catch(() => undefined);
+        await alert(`🎉 Приглашение: ${t.employer}${vtitle}`, `${user.name}: работодатель пригласил на следующий этап.\n${said ? `\n«${said}»\n\n` : ""}${t.chatUrl}`, !!vacancy).catch(() => undefined);
         await sendInterviewPrep(ctx, u, thread.id, t.employer, vacancy, said ?? "");
       }
       if (detail.thread.state === "rejected" && prev?.state !== "rejected") {

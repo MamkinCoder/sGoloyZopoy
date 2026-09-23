@@ -8,6 +8,7 @@ import type {
   Decision,
   HHResume,
   InterviewPrep,
+  StudyItem,
   LLMClient,
   PoolVariant,
   Profile,
@@ -89,6 +90,10 @@ export class FakeLLM implements LLMClient {
     ask_them: ["Как устроена команда?"],
   });
 
+  onInterviewStudy: (profile: Profile, vacancy: Vacancy, prep: InterviewPrep | null) => StudyItem[] = (_p, v) => [
+    { topic: `Стек из вакансии ${v.title}`, why: "требование вакансии", level: "must", gap: false, study: "fake: повторить основы" },
+  ];
+
   onJson: (task: string, tier: Tier, prompt: string, schemaDescription: string) => unknown = () => ({});
 
   onStagehand: StagehandLLM["generate"] = async (p) => {
@@ -131,6 +136,10 @@ export class FakeLLM implements LLMClient {
   async interviewPrep(profile: Profile, vacancy: Vacancy, invitation: string): Promise<InterviewPrep> {
     this.record("interviewPrep", [profile, vacancy, invitation]);
     return this.onInterviewPrep(profile, vacancy, invitation);
+  }
+  async interviewStudy(profile: Profile, vacancy: Vacancy, prep: InterviewPrep | null): Promise<StudyItem[]> {
+    this.record("interviewStudy", [profile, vacancy, prep]);
+    return this.onInterviewStudy(profile, vacancy, prep);
   }
   async json<T>(task: string, tier: Tier, prompt: string, schemaDescription: string): Promise<T> {
     this.record("json", [task, tier, prompt, schemaDescription]);

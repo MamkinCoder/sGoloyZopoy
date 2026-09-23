@@ -67,7 +67,7 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
     report: (user: User, run: Run) => send(user.tgChatId || chatId, formatReport(user, run, panelUrl, opts.tz)),
     alert: (title: string, body: string) => send(chatId, formatAlert(title, body)),
     ask: (text: string, buttons: { text: string; data: string }[]) =>
-      sendOne(chatId, text, { reply_markup: { inline_keyboard: [buttons.map((b) => ({ text: b.text, callback_data: b.data }))] } }),
+      sendOne(chatId, text, buttons.length ? { reply_markup: { inline_keyboard: [buttons.map((b) => ({ text: b.text, callback_data: b.data }))] } } : {}),
   };
 }
 

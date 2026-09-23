@@ -1,6 +1,6 @@
 // Dependencies injected into createApp. Everything optional beyond cfg/store/runner/version is a
 // health hook the integrator wires from other workstreams (they may not exist yet when H ships).
-import type { Config, RunService, Store } from "@sgz/shared";
+import type { Config, LLMClient, RunService, Store } from "@sgz/shared";
 
 export interface HHSessionCheck {
   ok: boolean | null;
@@ -25,6 +25,8 @@ export interface ApiDeps {
   store: Store;
   runner: RunService;
   version: string;
+  /** On-demand LLM calls outside runs (interview study pack). Absent: those endpoints answer 503. */
+  llm?: LLMClient;
   /** Registered career-site adapter names (GET /api/adapters). Defaults to the ATSKind list. */
   adapters?: string[];
   hhSessionCheck?: (slug: string) => HHSessionCheck;

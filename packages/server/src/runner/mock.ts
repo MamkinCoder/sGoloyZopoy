@@ -40,18 +40,24 @@ export function loadMock(store: MockStore, chatId: string, now: Date): MockState
 const save = (store: MockStore, chatId: string, st: MockState | null) => store.setSetting(key(chatId), st ? JSON.stringify(st) : "");
 
 /** A user's own chat sees only their threads; the admin chat sees every active user's. */
-function usersFor(store: MockStore, chatId: string): User[] {
+export function usersFor(store: Pick<Store, "listUsers">, chatId: string): User[] {
   const all = store.listUsers(true);
   const own = all.filter((u) => u.tgChatId === chatId);
   return own.length ? own : all;
 }
 
-/** /mock [employer]: the most recent thread with a prep brief (optionally matching the employer). */
+/** Mock questions: the study pack's gap topics first (what the seeker must learn), then the prep brief's. */
+const mockQuestions = (t: ChatThread): string[] => [
+  ...(t.study?.checklist ?? []).filter((it) => it.gap).map((it) => `Расскажите, что знаете про тему «${it.topic}»`),
+  ...(t.prep?.questions ?? []),
+];
+
+/** /mock [employer]: the most recent thread with a prep brief or study pack (optionally matching the employer). */
 export function startMock(store: MockStore, chatId: string, employer: string, now: Date): string {
   const q = employer.trim().toLowerCase();
   const threads: ChatThread[] = usersFor(store, chatId)
     .flatMap((u) => store.listChatThreads(u.id))
-    .filter((t) => t.prep?.questions.length && (!q || t.employer.toLowerCase().includes(q)))
+    .filter((t) => mockQuestions(t).length && (!q || t.employer.toLowerCase().includes(q)))
     .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
   const t = threads[0];
   if (!t) return q ? `Нет приглашения с подготовкой для «${employer.trim()}».` : "Пока нет приглашений с подготовкой: тренировка появится после первого приглашения.";
@@ -59,7 +65,7 @@ export function startMock(store: MockStore, chatId: string, employer: string, no
     userId: t.userId,
     threadId: t.id,
     employer: t.employer,
-    qs: t.prep!.questions.slice(0, MOCK_QUESTIONS).map((x) => ({ q: x })),
+    qs: mockQuestions(t).slice(0, MOCK_QUESTIONS).map((x) => ({ q: x })),
     idx: 0,
     transcript: [],
     at: now.toISOString(),

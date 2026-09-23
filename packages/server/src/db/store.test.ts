@@ -75,7 +75,7 @@ describe("migrations", () => {
         .prepare("SELECT name FROM schema_migrations ORDER BY name")
         .all()
         .map((r) => r.name);
-      expect(names).toEqual(["001_init.sql", "002_hh_resumes_created_at.sql", "003_company_limiter.sql", "004c_chat_interview.sql", "005d_interview_outcome.sql"]);
+      expect(names).toEqual(["001_init.sql", "002_hh_resumes_created_at.sql", "003_company_limiter.sql", "004c_chat_interview.sql", "005d_interview_outcome.sql", "006_study.sql"]);
       expect(a.db.prepare("PRAGMA journal_mode").get()?.journal_mode).toBe("wal");
       a.upsertUser(userFixture("x"));
       a.close();

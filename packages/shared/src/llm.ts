@@ -1,6 +1,6 @@
 // LLM contract. Workstream D implements over `claude -p` (Claude Code headless, subscription).
 import type { StagehandLLM } from "./browser.js";
-import type { Answer, CV, ChatMessage, Decision, HHResume, InterviewPrep, Profile, Question, ResumeSummary, Vacancy } from "./model.js";
+import type { Answer, CV, ChatMessage, Decision, HHResume, InterviewPrep, Profile, Question, ResumeSummary, StudyItem, Vacancy } from "./model.js";
 
 export type Tier = "fast" | "write" | "tailor"; // haiku | sonnet | opus
 
@@ -45,6 +45,8 @@ export interface LLMClient {
   coverLetterCareer(profile: Profile, cv: CV, vacancy: Vacancy, lessons?: string[]): Promise<string>;
   /** Prep brief for the seeker on an invitation; `invitation` is the employer's last message. */
   interviewPrep(profile: Profile, vacancy: Vacancy, invitation: string): Promise<InterviewPrep>;
+  /** Interview study checklist (10-20 topics) for the vacancy, on a button press; `prep` is the thread's brief. */
+  interviewStudy(profile: Profile, vacancy: Vacancy, prep: InterviewPrep | null): Promise<StudyItem[]>;
   /** Free-form JSON task used by the browser layer's agent flows (career onboarding etc.). */
   json<T>(task: string, tier: Tier, prompt: string, schemaDescription: string): Promise<T>;
   /** Adapter for Stagehand's `model: { generate }`. */

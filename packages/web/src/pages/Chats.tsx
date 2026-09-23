@@ -1,7 +1,7 @@
-import type { ChatThreadDTO, InterviewOutcome, InterviewPrep } from "@sgz/shared";
+import type { ChatThreadDTO, InterviewOutcome, InterviewPrep, StudyItem } from "@sgz/shared";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useChatMessages, useChats, useSetInterview, useSetOutcome } from "../api/hooks";
+import { useChatMessages, useChats, useSetInterview, useSetOutcome, useStartStudy, useStudy } from "../api/hooks";
 import { ThreadStateBadge } from "../components/StatusBadge";
 import { Empty, Spinner } from "../components/Ui";
 import { fmtDateTime, fmtRel } from "../lib/format";
@@ -104,6 +104,7 @@ function ThreadView({ thread, threadId, slug }: { thread: ChatThreadDTO | null; 
       )}
       {thread && <InterviewBar thread={thread} slug={slug} />}
       {thread?.prep && <PrepCard prep={thread.prep} />}
+      {thread?.vacancy && <StudyCard threadId={thread.id} slug={slug} />}
       <div className="p-3 max-h-[70vh] overflow-y-auto grid gap-2">
         {msgs.isLoading && <Spinner />}
         {msgs.data?.length === 0 && <Empty>Сообщений нет</Empty>}
@@ -208,5 +209,116 @@ function PrepCard({ prep }: { prep: InterviewPrep }) {
       {block("Пробелы и как ответить", prep.gaps)}
       {block("Спросить у них", prep.ask_them)}
     </details>
+  );
+}
+
+const LEVEL_LABEL: Record<StudyItem["level"], string> = { must: "Обязательно", likely: "Скорее всего", nice: "Плюсом" };
+
+// Checked topics per thread, only in this browser; storage may be unavailable (private mode).
+const studyKey = (id: number) => `sgz_study_${id}`;
+function loadChecked(id: number): string[] {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(studyKey(id)) ?? "[]");
+    return Array.isArray(v) ? v.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+function saveChecked(id: number, topics: string[]) {
+  try {
+    localStorage.setItem(studyKey(id), JSON.stringify(topics));
+  } catch {
+    /* storage unavailable: the checkboxes just don't persist */
+  }
+}
+
+async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    if (!ok) throw new Error("copy failed");
+  }
+}
+
+/** Interview study pack: checklist of likely topics (gaps highlighted) + a ChatGPT tutor prompt to copy. */
+function StudyCard({ threadId, slug }: { threadId: number; slug: string }) {
+  const study = useStudy(slug, threadId);
+  const start = useStartStudy(slug, threadId);
+  const [checked, setChecked] = useState<string[]>(() => loadChecked(threadId));
+  useEffect(() => setChecked(loadChecked(threadId)), [threadId]);
+  const pack = study.data?.pack ?? null;
+  const busy = start.isPending || !!study.data?.generating;
+  const toggle = (topic: string) => {
+    const next = checked.includes(topic) ? checked.filter((t) => t !== topic) : [...checked, topic];
+    setChecked(next);
+    saveChecked(threadId, next);
+  };
+  const build = () => start.mutate(undefined, { onSuccess: () => toast.info("Готовлю чеклист, это займёт до пары минут") });
+  const copy = () =>
+    pack &&
+    copyText(pack.prompt).then(
+      () => toast.ok("Промпт скопирован, вставьте его в ChatGPT"),
+      () => toast.error("Не получилось скопировать: выделите текст вручную"),
+    );
+
+  return (
+    <div className="px-3 py-2 border-b border-[var(--border)] text-[13px] grid gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold">📚 Чеклист к собеседованию</span>
+        {pack && <span className="faint text-[12px]">{fmtRel(pack.at)}</span>}
+        <span className="flex-1" />
+        {busy && <span className="muted text-[12px]">готовлю…</span>}
+        <button type="button" className="btn btn-sm" disabled={busy} onClick={build}>
+          {pack ? "Пересобрать" : "Чеклист к собеседованию"}
+        </button>
+      </div>
+      {study.data?.error && !busy && <div className="text-[var(--bad)] text-[12px]">Не собрался: {study.data.error}</div>}
+      {pack && (
+        <>
+          <div className="faint text-[12px]">
+            {pack.vacancyTitle} · {pack.company}. Отмечено {pack.checklist.filter((it) => checked.includes(it.topic)).length} из {pack.checklist.length}, 📌 - пробел, нужно подтянуть
+          </div>
+          {(["must", "likely", "nice"] as const).map((lvl) => {
+            const xs = pack.checklist.filter((it) => it.level === lvl);
+            if (!xs.length) return null;
+            return (
+              <div key={lvl}>
+                <div className="font-semibold">{LEVEL_LABEL[lvl]}</div>
+                <ul className="grid gap-1 mt-1">
+                  {xs.map((it) => (
+                    <li key={it.topic} className={`rounded px-2 py-1 ${it.gap ? "bg-[var(--warn-soft)]" : ""}`}>
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" className="mt-0.5" checked={checked.includes(it.topic)} onChange={() => toggle(it.topic)} />
+                        <span className={checked.includes(it.topic) ? "line-through opacity-60" : ""}>
+                          {it.gap && "📌 "}
+                          <span className="font-medium">{it.topic}</span>
+                          {it.study && <span> - {it.study}</span>}
+                          {it.why && <span className="block faint text-[12px]">{it.why}</span>}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+          <div className="flex items-center gap-2">
+            <span className="font-semibold flex-1">Промпт для ChatGPT</span>
+            <button type="button" className="btn btn-sm" onClick={copy}>
+              Скопировать промпт
+            </button>
+          </div>
+          <textarea className="input font-mono text-[12px] h-40" readOnly value={pack.prompt} aria-label="Промпт для ChatGPT" onFocus={(e) => e.currentTarget.select()} />
+        </>
+      )}
+    </div>
   );
 }

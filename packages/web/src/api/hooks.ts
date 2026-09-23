@@ -17,6 +17,7 @@ import type {
   RunEventDTO,
   StartRunBody,
   StatsDTO,
+  StudyDTO,
   UserDTO,
 } from "@sgz/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -38,6 +39,7 @@ export const keys = {
   resumes: (slug: string) => ["resumes", slug] as const,
   chats: (slug: string) => ["chats", slug] as const,
   chatMessages: (id: number) => ["chat-messages", id] as const,
+  study: (slug: string, id: number) => ["study", slug, id] as const,
   runs: (slug: string, limit: number) => ["runs", slug, limit] as const,
   run: (id: number) => ["run", id] as const,
   runEvents: (id: number) => ["run-events", id] as const,
@@ -202,6 +204,22 @@ export function useSetOutcome(slug: string) {
     mutationFn: ({ id, outcome }: { id: number; outcome: InterviewOutcome | null }) =>
       api<ChatThreadDTO>(`/users/${slug}/chats/${id}/outcome`, { method: "PUT", body: { outcome } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.chats(slug) }),
+  });
+}
+
+/** Interview study pack; polled every 3 s while the server is building it. */
+export const useStudy = (slug: string, id: number) =>
+  useQuery({
+    queryKey: keys.study(slug, id),
+    queryFn: () => api<StudyDTO>(`/users/${slug}/chats/${id}/study`),
+    refetchInterval: (q) => (q.state.data?.generating ? 3000 : false),
+  });
+
+export function useStartStudy(slug: string, id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<{ generating: boolean }>(`/users/${slug}/chats/${id}/study`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.study(slug, id) }),
   });
 }
 

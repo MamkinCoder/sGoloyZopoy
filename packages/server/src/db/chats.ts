@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatThread, InterviewOutcome, InterviewPrep, Store } from "@sgz/shared";
+import type { ChatMessage, ChatThread, InterviewOutcome, InterviewPrep, Store, StudyPack } from "@sgz/shared";
 import { bool, jsonObjOrNull, num, numOrNull, placeholders, str, strOrNull, toJson, type Row, type Sql, nowISO } from "./sql.js";
 
 const mapThread = (r: Row): ChatThread => ({
@@ -13,6 +13,7 @@ const mapThread = (r: Row): ChatThread => ({
   interviewAt: strOrNull(r.interview_at),
   prep: jsonObjOrNull<InterviewPrep>(r.prep_json),
   interviewOutcome: strOrNull(r.interview_outcome) as InterviewOutcome | null,
+  study: jsonObjOrNull<StudyPack>(r.study_json),
 });
 
 const mapMessage = (r: Row): ChatMessage => ({
@@ -36,6 +37,7 @@ type ChatsRepo = Pick<
   | "markAnswered"
   | "setChatInterview"
   | "setChatPrep"
+  | "setChatStudy"
   | "claimInterviewReminders"
   | "claimOutcomeAsks"
   | "setInterviewOutcome"
@@ -151,6 +153,9 @@ export function chatsRepo(s: Sql): ChatsRepo {
     },
     setChatPrep(threadId, prep) {
       s.run("UPDATE chat_threads SET prep_json = ? WHERE id = ?", toJson(prep), threadId);
+    },
+    setChatStudy(threadId, study) {
+      s.run("UPDATE chat_threads SET study_json = ? WHERE id = ?", toJson(study), threadId);
     },
     claimInterviewReminders(nowISO, untilISO) {
       return s.transaction(() => {

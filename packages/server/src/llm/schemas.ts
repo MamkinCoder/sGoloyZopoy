@@ -43,6 +43,16 @@ export const InterviewPrepSchema = z.object({
   ask_them: z.array(z.string()).default([]),
 });
 
+/** interview_study: 10-20 topics the interviewer will likely ask about; tolerant per field, strict on topic. */
+export const StudyItemSchema = z.object({
+  topic: z.string(),
+  why: z.string().default(""),
+  level: z.enum(["must", "likely", "nice"]).catch("likely"),
+  gap: z.boolean().catch(false),
+  study: z.string().default(""),
+});
+export const StudyChecklistSchema = z.object({ checklist: z.array(StudyItemSchema) });
+
 export const ResumeSummarySchema = z.object({
   direction: z.string(),
   seniority: z.string().default(""),

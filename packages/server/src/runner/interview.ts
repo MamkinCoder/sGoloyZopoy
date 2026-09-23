@@ -7,6 +7,7 @@ import { HH_ORIGIN } from "../hh/urls.js";
 import { shortStamp } from "../scheduler/tz.js";
 import type { RunContext } from "./context.js";
 import type { UserRun } from "./user.js";
+import { alertWithStudy } from "./study.js";
 import { errMessage, isStop } from "./util.js";
 
 type ThreadSummary = Awaited<ReturnType<HHClient["listThreads"]>>[number];
@@ -81,7 +82,7 @@ export async function sendInterviewPrep(ctx: RunContext, u: UserRun, threadId: n
     u.stats.llmCall();
     ctx.store.setChatPrep(threadId, prep);
     const market = marketLine(ctx.store, u.user.id, vacancy);
-    await ctx.deps.notifier.alert(`📝 Подготовка: ${employer} (${vacancy.title})`, market ? `${formatPrep(prep).slice(0, 3350)}\n\n${market}` : formatPrep(prep));
+    await alertWithStudy(ctx.deps.notifier, `📝 Подготовка: ${employer} (${vacancy.title})`, market ? `${formatPrep(prep).slice(0, 3350)}\n\n${market}` : formatPrep(prep), threadId);
   } catch (e) {
     ctx.log.warn("chats", `${employer}: interview prep failed: ${errMessage(e)}`, { thread_id: threadId });
   }

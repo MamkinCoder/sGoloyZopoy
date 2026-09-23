@@ -28,6 +28,7 @@ import {
   type RunService,
   type Stats,
   type Store,
+  type StudyPack,
   type User,
   type Vacancy,
 } from "@sgz/shared";
@@ -234,6 +235,9 @@ export class FakeStore implements Store {
   }
   setChatPrep(threadId: number, prep: InterviewPrep) {
     for (const t of this.threads) if (t.id === threadId) t.prep = prep;
+  }
+  setChatStudy(threadId: number, study: StudyPack) {
+    for (const t of this.threads) if (t.id === threadId) t.study = study;
   }
   claimInterviewReminders(): ChatThread[] {
     return [];

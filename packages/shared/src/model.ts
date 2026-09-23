@@ -208,6 +208,26 @@ export interface ChatThread {
   prep?: InterviewPrep | null;
   /** Post-interview outcome tapped in Telegram or set in the panel; see Store.setInterviewOutcome. */
   interviewOutcome?: InterviewOutcome | null;
+  /** On-demand interview study pack (checklist + ChatGPT prompt); see Store.setChatStudy. */
+  study?: StudyPack | null;
+}
+
+/** One topic the interviewer will likely ask about. `gap`: not in verified_skills, the seeker must learn it. */
+export interface StudyItem {
+  topic: string;
+  why: string;
+  level: "must" | "likely" | "nice";
+  gap: boolean;
+  study: string;
+}
+
+/** Interview study pack, built on a button press: LLM checklist + a deterministic ChatGPT tutor prompt. */
+export interface StudyPack {
+  checklist: StudyItem[];
+  prompt: string;
+  at: string;
+  vacancyTitle: string;
+  company: string;
 }
 
 /** After an interview: moved on to the next stage, rejected, no news, offer. */

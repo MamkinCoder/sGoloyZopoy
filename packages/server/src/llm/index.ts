@@ -16,6 +16,7 @@ import type {
   Question,
   ResumeSummary,
   StagehandLLM,
+  StudyItem,
   Store,
   Tier,
   Vacancy,
@@ -23,7 +24,7 @@ import type {
 import { z, type ZodType } from "zod";
 import { ClaudeError, TIER_MODEL, extractJson, runClaude } from "./claude.js";
 import { neverClaimList, profileForLLM, renderHistory, renderQuestions, renderResumes, renderVacancies, renderVacancy } from "./format.js";
-import { LIMITS, blockedTech, ensureDecisions, enforceMax, normalizeProse, sanitizeLetter, stripLinkSentences, stripNeverClaimSentences } from "./guards.js";
+import { LIMITS, blockedTech, claimRegex, ensureDecisions, enforceMax, normalizeProse, sanitizeLetter, stripLinkSentences, stripNeverClaimSentences } from "./guards.js";
 import {
   AnswersSchema,
   ChatReplySchema,
@@ -32,6 +33,7 @@ import {
   InterviewPrepSchema,
   PoolVariantsSchema,
   ResumeSummarySchema,
+  StudyChecklistSchema,
   TailorSchema,
   unwrapArray,
 } from "./schemas.js";
@@ -247,6 +249,17 @@ function makeClient(ctx: Ctx): LLMClient {
       };
     },
 
+    async interviewStudy(profile: Profile, vacancy: Vacancy, prep: InterviewPrep | null): Promise<StudyItem[]> {
+      const prompt = renderPrompt("interview_study", {
+        never_claim: neverClaimList(profile),
+        profile: profileForLLM(profile),
+        vacancy: renderVacancy(vacancy, 4000),
+        prep: prep ? renderPrep(prep) : "(нет)",
+      });
+      const r = await call(ctx, { task: "interview_study", tier: "write", prompt, schema: StudyChecklistSchema, jsonSchema: toJsonSchema(StudyChecklistSchema) });
+      return guardStudy(profile, r.checklist);
+    },
+
     async json<T>(task: string, tier: Tier, prompt: string, schemaDescription: string): Promise<T> {
       const full = `${prompt.trimEnd()}\n\n## Схема ответа\n\n${schemaDescription.trim()}\n\nВерни только JSON.\n`;
       return call(ctx, { task, tier, prompt: full, schema: z.unknown() as ZodType<T> });
@@ -289,6 +302,32 @@ async function decideBatch(ctx: Ctx, input: DecideInput, vacancies: Vacancy[]): 
     // Two garbage answers: rather than failing the whole run, skip this batch with "no decision".
   }
   return ensureDecisions(vacancies, decisions, resumes, blockedTech(profile)).map((d) => guardTailored(profile, d));
+}
+
+const renderPrep = (p: InterviewPrep): string =>
+  [...p.questions.map((q) => `- вопрос: ${q}`), ...p.gaps.map((g) => `- пробел: ${g}`)].join("\n") || "(пусто)";
+
+const STUDY_LEVELS = ["must", "likely", "nice"] as const;
+
+// Links only: tech names with dots and slashes («Node.js/Express») are fine in a checklist.
+const STUDY_LINK_RE = /https?:\/\/|www\.|t\.me\/|[\w.+-]+@[\w-]+\.[a-z]{2,}|\b[a-z0-9-]+\.(?:ru|com|org|net|io|dev|me|app)\b/i;
+
+/** No links, one line per field, never-claim topics always marked as gaps, must → likely → nice, at most 20. */
+export function guardStudy(profile: Profile, items: StudyItem[]): StudyItem[] {
+  const never = claimRegex(profile.never_claim_skills);
+  const line = (t: string, max: number) => {
+    const s = enforceMax(normalizeProse(t.replace(/\s*\n\s*/g, " ")), max);
+    return STUDY_LINK_RE.test(s) ? "" : s;
+  };
+  const seen = new Set<string>();
+  const out: StudyItem[] = [];
+  for (const it of items) {
+    const topic = line(it.topic, 120);
+    if (!topic || seen.has(topic.toLowerCase())) continue;
+    seen.add(topic.toLowerCase());
+    out.push({ topic, why: line(it.why, 200), level: it.level, gap: it.gap || !!never?.test(topic), study: line(it.study, 200) });
+  }
+  return out.sort((a, b) => STUDY_LEVELS.indexOf(a.level) - STUDY_LEVELS.indexOf(b.level)).slice(0, 20);
 }
 
 const bullets = (xs: (string | undefined)[] = []): string => xs.filter(Boolean).map((x) => `- ${x}`).join("\n");

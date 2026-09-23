@@ -33,6 +33,7 @@ const outputs: Record<string, unknown> = {
   tailor_cv: { cv, changes: [] },
   cover_letter_career: { cover_letter: "Здравствуйте. Готов обсудить детали." },
   interview_prep: { questions: [], stories: [], gaps: [], ask_them: [] },
+  interview_study: { checklist: [{ topic: "Go", why: "x", level: "must", gap: false, study: "x" }] },
 };
 
 describe("prompt templates", () => {
@@ -52,6 +53,9 @@ describe("prompt templates", () => {
   it("cover_letter_career", async () => check("cover_letter_career", await capture("cover_letter_career", (l) => l.coverLetterCareer(profile, cv, vacancies[0]!))));
 
   it("interview_prep", async () => check("interview_prep", await capture("interview_prep", (l) => l.interviewPrep(profile, vacancies[0]!, "Приглашаем на техническое собеседование в четверг."))));
+
+  it("interview_study", async () =>
+    check("interview_study", await capture("interview_study", (l) => l.interviewStudy(profile, vacancies[0]!, { questions: ["Как устроен GC в Go?"], stories: [], gaps: ["Kafka: в продакшене не использовал"], ask_them: [] }))));
 
   it("site_onboard and pick_element render via renderPrompt", () => {
     check("site_onboard", renderPrompt("site_onboard", { url: "https://example.com/careers", hints: "", page_text: "Careers at Example. Open roles: Backend Engineer (Go). Powered by Lever. jobs.lever.co/example" }), false);

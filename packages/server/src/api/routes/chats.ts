@@ -1,21 +1,24 @@
 import { Hono } from "hono";
-import type { ChatThreadDTO } from "@sgz/shared";
+import type { ChatThreadDTO, StudyDTO } from "@sgz/shared";
 import type { ApiDeps } from "../deps.js";
-import { badRequest, notFound } from "../errors.js";
+import { badRequest, HttpError, notFound } from "../errors.js";
+import { startStudy, studyStatus } from "../../runner/study.js";
 import { InterviewSchema, OutcomeSchema, parseBody } from "../validate.js";
 import { idParam, userOr404 } from "./common.js";
 
-export function chatRoutes({ store }: ApiDeps): Hono {
+export function chatRoutes({ store, llm }: ApiDeps): Hono {
   const r = new Hono();
 
   r.get("/users/:slug/chats", (c) => {
     const u = userOr404(store, c.req.param("slug"));
     const threads = store.listChatThreads(u.id, c.req.query("state") || undefined);
-    const out: ChatThreadDTO[] = threads.map((t) => {
+    // The study pack (~15 KB with the prompt) comes from GET …/study; the list only says whether one exists.
+    const out: ChatThreadDTO[] = threads.map(({ study, ...t }) => {
       const msgs = store.listChatMessages(t.id);
       const v = t.vacancyId === null ? null : store.getVacancy(t.vacancyId);
       return {
         ...t,
+        has_study: !!study,
         vacancy: v ? { id: v.id, title: v.title, company: v.company, url: v.url } : null,
         unanswered: msgs.filter((m) => m.direction === "in" && m.isQuestion && !m.answered).length,
         last_message: msgs.at(-1)?.text ?? null,
@@ -48,6 +51,26 @@ export function chatRoutes({ store }: ApiDeps): Hono {
     const b = await parseBody(c, OutcomeSchema);
     store.setInterviewOutcome(id, b.outcome);
     return c.json(store.listChatThreads(u.id).find((t) => t.id === id));
+  });
+
+  const ownThread = (slug: string | undefined, id: number) => {
+    const t = store.listChatThreads(userOr404(store, slug).id).find((x) => x.id === id);
+    if (!t) throw notFound(`chat not found: ${id}`);
+    return t;
+  };
+
+  // Interview study pack: POST starts the build in the background (one LLM call), GET is polled for it.
+  r.post("/users/:slug/chats/:id/study", (c) => {
+    const t = ownThread(c.req.param("slug"), idParam(c));
+    if (t.vacancyId === null) throw badRequest("у диалога нет вакансии");
+    if (!llm) throw new HttpError(503, "LLM недоступен");
+    startStudy(store, llm, t.id).catch(() => undefined); // the failure is reported by GET
+    return c.json({ generating: true }, 202);
+  });
+
+  r.get("/users/:slug/chats/:id/study", (c) => {
+    const t = ownThread(c.req.param("slug"), idParam(c));
+    return c.json({ pack: t.study ?? null, ...studyStatus(t.id) } satisfies StudyDTO);
   });
 
   return r;

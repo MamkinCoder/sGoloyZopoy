@@ -82,6 +82,8 @@ application row replaces the filtered one as the vacancy's newest, so it drops o
 | GET | /chats/:id/messages | | `[ChatMessage]` |
 | PUT | /users/:slug/chats/:id/interview | `{interview_at: ISO string|null}` | `ChatThread` |
 | PUT | /users/:slug/chats/:id/outcome | `{outcome: next|rejected|silence|offer|null}` | `ChatThread` |
+| POST | /users/:slug/chats/:id/study | | `{generating:true}` 202 — builds the interview study pack in the background (one LLM call, no run) |
+| GET | /users/:slug/chats/:id/study | | `StudyDTO` `{pack: StudyPack|null, generating, error}` |
 
 ## Runs
 | GET | /runs?user=slug&limit=50 | | `[Run]` |
@@ -186,7 +188,19 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
 - `GET /users/:slug/chats?state=` optional filter; each thread also has `last_message`, `interviewAt`
   (UTC ISO or null: captured by the chat bot from `answer_chat.interview_at`, or set by hand) and `prep`
   (`{questions, stories:[{skill,prompt}], gaps, ask_them}` or null: the interview brief generated on an invitation
-  and also sent to Telegram).
+  and also sent to Telegram). The list carries `has_study` (a study pack is stored) instead of the pack itself.
+- Interview study pack (`runner/study.ts`), only on demand, never automatic: `POST /users/:slug/chats/:id/study`
+  (400 when the thread has no vacancy, 404 when it is not this user's, 503 when the server has no LLM client)
+  starts one `write` call (`prompts/interview_study.md`: vacancy, profile, the thread's `prep`) and answers 202; a
+  second POST while it runs joins the same build. `GET` is polled: `{pack, generating, error}` (`error`: last
+  failure, `""` if none). `StudyPack` = `{checklist:[{topic, why, level: must|likely|nice, gap, study}], prompt,
+  at, vacancyTitle, company}`, stored in `chat_threads.study_json`. The checklist (10-20 topics, at most 20 kept)
+  is guarded: one line per field, fields with links dropped, a topic from `never_claim_skills` is always a gap,
+  sorted must → likely → nice. `prompt` is built in code, not by the LLM: a Russian ChatGPT tutor prompt
+  (position, vacancy text ≤3000 chars, experience + real stack, the numbered checklist with gaps marked
+  «(пробел - нужно подтянуть)», how to tutor), ≤12 000 chars, with e-mails, phones, Telegram handles and links
+  removed. The panel's Chats thread view shows it with checkboxes (kept in `localStorage` per thread), gaps
+  highlighted, «Скопировать промпт» and «Пересобрать».
 - `PUT /users/:slug/chats/:id/interview`: any `Date`-parseable string, stored as UTC ISO; `null` clears it; 400 on
   an unparseable date, 404 when the thread is not this user's. A changed time re-arms the reminder: `sgz serve`
   checks every minute and sends one Telegram ping ~2h before the interview. A changed time also re-arms
@@ -248,7 +262,18 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       - `/company <name>`: per active user, sends, replies / invites, rejections, median time to the first
         employer message for that company key.
       - `/salary <слово>`: salary band over vacancies whose title contains the word (same rules as `analytics.salary`).
+      - `/study [компания]`: study pack for the most recent `invited` / `needs_human` thread with a vacancy
+        (optionally matching the employer or vacancy company; a user's own `tgChatId` sees only their threads).
       - `/mock [employer]`, `/stop`: text mock interview (below).
+      - The referral radar is gone: its Telegram command and profile field were removed; an old profile
+        that still has the field parses fine, the key is ignored.
+    - Study pack in Telegram: the invitation alert (when the thread has a vacancy) and the prep brief carry
+      a «📚 Чеклист к собеседованию» button, callback `st:<thread id>`. The tap is answered at once («готовлю
+      чеклист…») and the pack is built in the background through `app.llm` (the global `claude` mutex
+      serializes it with runs). Then two messages: the checklist (Обязательно / Скорее всего / Плюсом, gaps
+      marked 📌, one line per topic) with «🔄 Пересобрать» (`st:<thread id>:r`), and the prompt in `<pre>`
+      (tap to copy; HTML-escaped, split into ≤4096-char parts). A pack younger than 7 days is resent without an
+      LLM call unless the tap is «Пересобрать». Messages go to `TG_CHAT_ID`, like the other alerts.
       - Anything else starting with `/` gets the help line.
   - Outcome learning (`runner/learn.ts`, advisory only, never a reason to reject):
     - decide (hh and career) gets `company_history` for batch employers with 3+ SENT applications,
@@ -263,9 +288,9 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
     - `retro_day` (`"sun"` default, `"mon"`…`"sat"`, `""` = off) + `retro_at` (`"19:00"`): once a week,
       «Итоги недели» per active user (the `GET /users/:slug/retro` numbers as text); a user with fewer than 10
       sends that week gets nothing. Last sent day: setting `retro_last_day`. `/week` answers it on demand.
-    - `/mock [employer]`: text mock interview from the most recent thread with a prep brief (`prep_json`,
-      optionally matching the employer; a user's own `tgChatId` sees only their threads). Up to 5 prep
-      questions; each plain message is an answer, graded by one LLM call (`prompts/mock_feedback.md`, tier
+    - `/mock [employer]`: text mock interview from the most recent thread with a prep brief (`prep_json`)
+      or a study pack (optionally matching the employer; a user's own `tgChatId` sees only their threads). Up
+      to 5 questions, the study pack's gap topics first, then the prep questions; each plain message is an answer, graded by one LLM call (`prompts/mock_feedback.md`, tier
       `write`) that may add one follow-up (max 2 per session); after the last one a summary call
       (`prompts/mock_summary.md`) lists 3 things to tighten. `/stop` ends it. State: setting
       `mock:<chatId>` (JSON, `""` = none), expires after 2 h of silence. Prompts use only the profile's real

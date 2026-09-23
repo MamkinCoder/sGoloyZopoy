@@ -4,6 +4,7 @@ import type {
   Application,
   CareerSite,
   SalaryBand,
+  StudyPack,
   ChatMessage,
   ChatThread,
   Decision,
@@ -176,8 +177,18 @@ export interface ChatThreadDTO extends ChatThread {
   vacancy: { id: number; title: string; company: string; url: string } | null;
   unanswered: number;
   last_message: string | null;
+  /** A study pack is stored (GET /users/:slug/chats/:id/study returns it); `study` itself is not in the list. */
+  has_study: boolean;
 }
 export type ChatMessageDTO = ChatMessage;
+
+/** GET /users/:slug/chats/:id/study: the stored pack (null until built) and whether a build is running. */
+export interface StudyDTO {
+  pack: StudyPack | null;
+  generating: boolean;
+  /** Last build failure for this thread ("" when none). */
+  error: string;
+}
 
 export interface RunDTO extends Run {
   user_slug: string | null;

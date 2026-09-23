@@ -9,6 +9,7 @@ import type {
   HHResume,
   InterviewOutcome,
   InterviewPrep,
+  StudyPack,
   Profile,
   Question,
   QuestionnaireAnswer,
@@ -160,6 +161,7 @@ export interface Store {
   /** Sets (null clears) the interview time; a changed time re-arms its reminder. */
   setChatInterview(threadId: number, atISO: string | null): void;
   setChatPrep(threadId: number, prep: InterviewPrep): void;
+  setChatStudy(threadId: number, study: StudyPack): void;
   /** Threads with an interview in (now, until] not reminded yet; marks them reminded. */
   claimInterviewReminders(nowISO: string, untilISO: string): ChatThread[];
   /** Threads whose interview was in [fromISO, toISO] with no outcome and never asked; marks them asked. */

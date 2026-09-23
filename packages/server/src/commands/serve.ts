@@ -20,6 +20,7 @@ import { errMessage } from "../runner/util.js";
 import type { RunRequest } from "@sgz/shared";
 import { buildRetro, MIN_SENT, retroDue } from "../notify/retro.js";
 import { mockAnswer, startMock, stopMock } from "../runner/mock.js";
+import { parseStudyCallback, studyCommand, studyTap } from "../runner/study.js";
 
 export async function serve(): Promise<void> {
   const app = await createAppContext({ withScheduler: true });
@@ -27,6 +28,7 @@ export async function serve(): Promise<void> {
     cfg: app.cfg,
     store: app.store,
     runner: app.runner,
+    llm: app.llm,
     version: app.version,
     schedulerNext: () => app.scheduler?.running() ? app.scheduler.next().toISOString() : null,
     settingsChanged: (settings) => {
@@ -112,7 +114,7 @@ export async function serve(): Promise<void> {
     // touch_last_at only once the run really started: a RunBusyError must not skip the raise for 4 h.
     else if (job?.kind === "touch") void start({ userSlug: "all", source: "hh", stage: "touch" }).then((id) => typeof id === "number" && app.store.setSetting("touch_last_at", new Date().toISOString())); else if (job?.kind === "career") void start({ userSlug: job.userSlug, source: "career", stage: "rotate" });
   };
-  // Telegram buttons: queue cards (send / skip) and «есть / нет» answers for unknown skills (update the
+  // Telegram buttons: queue cards (send / skip), «📚 Чеклист» (runner/study.ts) and «есть / нет» answers for unknown skills (update the
   // profile, then answer the waiting chats). /status and /queue answer from the configured chats.
   const digestAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
   const retroAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildRetro(app.store, u, app.cfg.tz, new Date()) ?? `Мало данных: за неделю меньше ${MIN_SENT} откликов`}`).join("\n\n");
@@ -128,13 +130,16 @@ export async function serve(): Promise<void> {
     if (cmd === "/week") return retroAll();
     if (cmd === "/mock") return startMock(app.store, chatId, args, new Date());
     if (cmd === "/stop") return stopMock(app.store, chatId, new Date());
-    return "Команды: /status - итоги дня, /queue - очередь, /week - итоги недели, /company <название> - история откликов, /salary <слово> - рынок зарплат, /mock [компания] - тренировка собеседования, /stop - закончить тренировку";
+    if (cmd === "/study") return studyCommand(app, chatId, args, new Date());
+    return "Команды: /status - итоги дня, /queue - очередь, /week - итоги недели, /company <название> - история откликов, /salary <слово> - рынок зарплат, /study [компания] - чеклист и промпт к собеседованию, /mock [компания] - тренировка собеседования, /stop - закончить тренировку";
   };
   const onText = (chatId: string, text: string) => mockAnswer(app.store, app.llm, chatId, text, new Date());
   const stopCallbacks = app.cfg.tgBotToken
     ? startTelegramCallbacks(app.cfg.tgBotToken, async (data) => {
         const q = parseQueueCallback(data);
         if (q) return handleQueueTap(app.store, app.runner, q);
+        const st = parseStudyCallback(data);
+        if (st) return studyTap(app, st, new Date());
         const io = parseOutcomeCallback(data);
         if (io) {
           app.store.setInterviewOutcome(io.threadId, io.outcome);
