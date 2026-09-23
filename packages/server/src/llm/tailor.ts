@@ -1,6 +1,6 @@
 // Post-checks for tailor_cv: the model may reorder and rephrase; it may not change facts.
 import type { CV, Profile } from "@sgz/shared";
-import { LIMITS, claimRegex, enforceMax, normalizeProse, stripNeverClaimSentences } from "./guards.js";
+import { LIMITS, blockedTech, claimRegex, enforceMax, normalizeProse, stripNeverClaimSentences } from "./guards.js";
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -22,7 +22,9 @@ export function guardTailoredCV(profile: Profile, base: CV, tailored: CV): { cv:
     if (!ok) dropped.push(t);
     return ok;
   };
-  const cleanText = (s: string, max: number) => enforceMax(stripNeverClaimSentences(normalizeProse(s), never), max);
+  // Prose may mention only tech the seeker verified or the base CV already lists, same as letters.
+  const blocked = blockedTech({ verified_skills: [...allowed], never_claim_skills: never });
+  const cleanText = (s: string, max: number) => enforceMax(stripNeverClaimSentences(normalizeProse(s), blocked), max);
 
   const skills = tailored.skills
     .map((g) => ({ name: g.name, items: g.items.filter(keepTool) }))

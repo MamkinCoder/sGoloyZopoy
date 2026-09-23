@@ -76,13 +76,6 @@
 {
   "title": "Backend-разработчик",
   "name": "Ярослав Тестов",
-  "contacts": {
-    "email": "test@example.com",
-    "phone": "+7 900 000-00-00",
-    "telegram": "@testhandle",
-    "github": "github.com/testhandle",
-    "city": "Санкт-Петербург"
-  },
   "about": "Backend-разработчик на Go и Node.js. Делал интеграции, биллинг, кэширование.",
   "skills": [
     {

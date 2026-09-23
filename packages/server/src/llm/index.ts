@@ -175,8 +175,12 @@ function makeClient(ctx: Ctx): LLMClient {
       const interview_at = at && !Number.isNaN(at.getTime()) ? at.toISOString() : null;
       if (choices.length && !unknown_skills.length) {
         // Quick-reply buttons: only an exact option is accepted by the employer's chat bot.
-        const norm = (s: string) => s.trim().toLowerCase();
-        const picked = choices.find((c) => norm(c) === norm(r.reply)) ?? choices.find((c) => norm(r.reply).includes(norm(c)) || norm(c).includes(norm(r.reply)));
+        // An empty reply (offer, documents, rejection) presses nothing; a loose match counts only when it is unambiguous.
+        const norm = (s: string) => s.trim().toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, "");
+        const want = norm(r.reply);
+        if (!want) return { reply: "", needs_human: r.needs_human, reason: enforceMax(r.reason, LIMITS.reason), unknown_skills, interview_at };
+        const loose = choices.filter((c) => want.includes(norm(c)) || norm(c).includes(want));
+        const picked = choices.find((c) => norm(c) === want) ?? (loose.length === 1 ? loose[0] : undefined);
         return picked
           ? { reply: picked, needs_human: r.needs_human, reason: enforceMax(r.reason, LIMITS.reason), unknown_skills, interview_at }
           : { reply: "", needs_human: true, reason: enforceMax(`не выбрал вариант из кнопок: ${r.reply}`, LIMITS.reason), unknown_skills, interview_at };
@@ -220,7 +224,7 @@ function makeClient(ctx: Ctx): LLMClient {
       const prompt = renderPrompt("cover_letter_career", {
         never_claim: neverClaimList(profile),
         profile: profileForLLM(profile),
-        cv,
+        cv: { ...cv, contacts: undefined }, // no email/phone/github for the model to copy into the letter
         vacancy: renderVacancy(vacancy, 6000),
       });
       const r = await call(ctx, { task: "cover_letter_career", tier: "write", prompt, schema: CoverLetterSchema, jsonSchema: toJsonSchema(CoverLetterSchema) });
@@ -332,12 +336,12 @@ function guardVariants(profile: Profile, existing: HHResume[], variants: PoolVar
   const poolIds = new Set(existing.map((r) => r.hhResumeId));
   const out: PoolVariant[] = [];
   for (const v of variants) {
-    const key = v.title.trim().toLowerCase();
+    const e = cleanResumeEdit(profile, v);
+    const key = e.title.toLowerCase();
     if (!key || titles.has(key)) continue;
     titles.add(key);
     out.push({
-      ...cleanResumeEdit(profile, v),
-      title: normalizeProse(v.title),
+      ...e,
       based_on_resume_id: poolIds.has(v.based_on_resume_id) ? v.based_on_resume_id : (existing[0]?.hhResumeId ?? ""),
       direction: profile.directions.includes(v.direction) ? v.direction : (profile.directions[0] ?? v.direction),
     });

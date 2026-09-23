@@ -1,7 +1,9 @@
 // Deterministic post-checks on model output. The prompt asks; these enforce.
 import type { Decision, HHResume, Vacancy } from "@sgz/shared";
 
-export const LINK_RE = /https?:\/\/|www\.|t\.me|@[a-z0-9_]{4,}/i;
+// URLs, t.me, @handles, emails, host/path, bare profile hosts, RU/international phones.
+export const LINK_RE =
+  /https?:\/\/|www\.|t\.me|@[a-z0-9_]{4,}|[\w.+-]+@[\w-]+\.[a-z]{2,}|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\/|\b(?:github|gitlab|bitbucket|linkedin|habr|leetcode|vk|telegram)\.(?:com|ru|org|me)\b|\+\d[\d\s()-]{8,}\d|\b8[\s(-]*\d{3}[\s)-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}\b/i;
 const EMOJI_RE = /[\p{Extended_Pictographic}\u{FE0F}]/gu;
 const SENTENCE_RE = /[^.!?\n]+(?:[.!?]+|\n|$)/g;
 
@@ -58,10 +60,13 @@ export function containsNeverClaim(text: string, never: string[]): boolean {
   return re ? re.test(text) : false;
 }
 
+// An honest «X в продакшене не использовал» is what the prompts ask for; it is not a claim.
+const isDenial = (s: string) => /(?:^|[^\p{L}])(?:не\s+(?:использовал|применял|работал|было|довелось|пробовал)|нет\s+опыта)(?=$|[^\p{L}])/iu.test(s) && /прод|production/iu.test(s);
+
 export function stripNeverClaimSentences(text: string, never: string[]): string {
   const re = claimRegex(never);
   if (!re) return text;
-  return joinSentences(splitSentences(text).filter((s) => !re.test(s)));
+  return joinSentences(splitSentences(text).filter((s) => !re.test(s) || isDenial(s)));
 }
 
 /** Truncate at a sentence boundary when possible; hard-cut otherwise. */
@@ -99,8 +104,11 @@ export const COMMON_TECH = [
 
 /** never_claim plus every common technology the profile doesn't verify: nothing unverified gets claimed in writing. */
 export function blockedTech(p: { verified_skills: string[]; never_claim_skills: string[] }): string[] {
-  const have = new Set(p.verified_skills.map((s) => s.toLowerCase()));
-  return [...p.never_claim_skills, ...COMMON_TECH.filter((t) => !have.has(t.toLowerCase()))];
+  // A token is verified when it appears as a word in any verified skill ("AWS S3" → AWS, "Apache Kafka" → Kafka).
+  const verified = (t: string) => p.verified_skills.some((s) => claimRegex([t])!.test(s));
+  const alias: Record<string, string> = { k8s: "Kubernetes", kubernetes: "k8s" };
+  const alt = (t: string) => alias[t.toLowerCase()];
+  return [...p.never_claim_skills, ...COMMON_TECH.filter((t) => !verified(t) && !(alt(t) && verified(alt(t)!)))];
 }
 
 export function sanitizeLetter(text: string, never: string[], max: number): string {

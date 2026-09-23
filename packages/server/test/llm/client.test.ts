@@ -131,6 +131,14 @@ describe("createLLM", () => {
     expect((await llm.answerChat(profile, null, history, choices)).reply).toBe(choices[0]);
     const off = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "Конечно!", needs_human: false, reason: "x" }) });
     expect(await off.answerChat(profile, null, history, choices)).toMatchObject({ reply: "", needs_human: true });
+    const empty = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "", needs_human: true, reason: "оффер" }) });
+    expect(await empty.answerChat(profile, null, history, choices)).toMatchObject({ reply: "", needs_human: true, reason: "оффер" });
+    const quiet = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "", needs_human: false, reason: "отказ" }) });
+    expect(await quiet.answerChat(profile, null, history, choices)).toMatchObject({ reply: "", needs_human: false });
+    const yes = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "Да.", needs_human: false, reason: "x" }) });
+    expect((await yes.answerChat(profile, null, history, ["Когда удобно", "Да"])).reply).toBe("Да");
+    const ambiguous = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "да", needs_human: false, reason: "x" }) });
+    expect(await ambiguous.answerChat(profile, null, history, ["Да, удобно", "Да, но позже"])).toMatchObject({ reply: "", needs_human: true });
   });
 
   it("answerQuestionnaire: validates option ranges, caps text, drops unknown idx", async () => {
@@ -157,6 +165,7 @@ describe("createLLM", () => {
       { title: "Go-разработчик", about: "dup", key_skills: [], based_on_resume_id: "", direction: "go-backend" },
       { title: "React-разработчик", about: "Пишу на React и TypeScript. Kubernetes знаю.", key_skills: ["react", "Kafka", "TypeScript"], based_on_resume_id: "nope", direction: "react" },
       { title: "react-разработчик", about: "dup2", key_skills: [], based_on_resume_id: "", direction: "react" },
+      { title: "Kafka", about: "x", key_skills: [], based_on_resume_id: "", direction: "python" },
       { title: "Python-разработчик", about: "x", key_skills: [], based_on_resume_id: "", direction: "python" },
       { title: "Ещё один", about: "x", key_skills: [], based_on_resume_id: "", direction: "fullstack" },
     ]) });
@@ -175,7 +184,7 @@ describe("createLLM", () => {
       about: "Go-разработчик — платежи. Kubernetes в проде.",
       skills: [{ name: "Языки", items: ["Go", "Rust", "TypeScript"] }],
       jobs: [
-        { ...cv.jobs[1]!, bullets: ["Писал REST API на Node.js/TypeScript"] },
+        { ...cv.jobs[1]!, bullets: ["Писал REST API на Node.js/TypeScript", "Интегрировал сервис со Scala-бэкендом."] },
         { ...cv.jobs[0]!, company: "финтех ооо", period: "2019 - 2030", bullets: ["Вынес кэш в Redis. " + "д".repeat(300), "Настроил CI/CD", "Деплоил в Kubernetes"], stack: ["Go", "Kafka"] },
       ],
       education: [],
@@ -188,6 +197,7 @@ describe("createLLM", () => {
     expect(r.cv.jobs.map((j) => [j.company, j.period])).toEqual(cv.jobs.map((j) => [j.company, j.period]));
     expect(r.cv.jobs[0]!.bullets).toEqual(["Вынес кэш в Redis.", "Настроил CI/CD"]);
     expect(r.cv.jobs[0]!.stack).toEqual(["Go"]);
+    expect(r.cv.jobs[1]!.bullets).toEqual(["Писал REST API на Node.js/TypeScript"]);
     expect(r.cv.skills).toEqual([{ name: "Языки", items: ["Go", "TypeScript"] }]);
     expect(r.cv.about).toBe("Go-разработчик - платежи.");
     expect(r.changes[0]).toBe("title под вакансию - Go");
@@ -199,6 +209,7 @@ describe("createLLM", () => {
     const dir = stubDir();
     const llm = createLLM(cfg, null, { env: stubEnv(dir, "valid", { cover_letter: "Здравствуйте. Откликаюсь на Go. Портфолио www.me.ru. Готов обсудить детали." }) });
     expect(await llm.coverLetterCareer(profile, cv, vacancies[0]!)).toBe("Здравствуйте. Откликаюсь на Go. Готов обсудить детали.");
+    expect(readFileSync(`${dir}/prompt-1.txt`, "utf8")).not.toContain(cv.contacts.email);
     const llm2 = createLLM(cfg, null, { env: stubEnv(dir, "prose", { ats: "lever" }) });
     const j = await llm2.json<{ ats: string }>("site_onboard", "write", "Страница: ...", '{ "ats": string }');
     expect(j.ats).toBe("lever");
