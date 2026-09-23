@@ -91,7 +91,7 @@ describe("career site CSV import", () => {
     expect(store.listCareerSites(user.id).find((site) => site.slug === "new-site")).toMatchObject({
       name: "New",
       profile: { notes: "Категория: Startup\nhello" },
-      enabled: true,
+      enabled: false,
       lastRunAt: null,
     });
   });

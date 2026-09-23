@@ -138,8 +138,8 @@ calling `make backup-db`.
    `base_url`, `config` (per adapter), `enabled`. Or `POST /api/users/:slug/career-sites`.
    For a prepared CSV (`slug,name,category,base_url,note`), import it with
    `sgz site import --user <slug> --csv <path>`. The import validates every row before writing, updates
-   matching slugs while preserving their enabled/profile/run state, and stores category/note in the new
-   site's profile notes.
+   matching slugs while preserving their enabled/profile/run state, stores category/note in the new
+   site's profile notes, and adds new sites disabled. Enable and onboard them one at a time.
 2. Onboard it once with a dry run: Runs -> New run, source `career`, stage `onboard:<siteId>`, dry run. The
    agent walks the site, records selectors into the action cache and stores what it found.
 3. Real run with `--limit 1`, check the generated resume (`GET /api/resumes/:id/pdf`) and the application.

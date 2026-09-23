@@ -128,7 +128,7 @@ export function importCareerSites(store: Pick<Store, "listCareerSites" | "upsert
     const old = existing.get(row.slug);
     const site: Omit<CareerSite, "id"> & { id?: number } = old
       ? { id: old.id, userId, slug: old.slug, name: row.name, baseUrl: row.baseUrl, ats: old.ats, profile: old.profile, enabled: old.enabled, lastRunAt: old.lastRunAt }
-      : { userId, slug: row.slug, name: row.name, baseUrl: row.baseUrl, ats: "custom", profile: { notes: [row.category && `Категория: ${row.category}`, row.note].filter(Boolean).join("\n") }, enabled: true, lastRunAt: null };
+      : { userId, slug: row.slug, name: row.name, baseUrl: row.baseUrl, ats: "custom", profile: { notes: [row.category && `Категория: ${row.category}`, row.note].filter(Boolean).join("\n") }, enabled: false, lastRunAt: null };
     store.upsertCareerSite(site);
     if (old) updated += 1;
     else created += 1;
