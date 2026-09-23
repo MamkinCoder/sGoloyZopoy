@@ -6,8 +6,6 @@ import { fileURLToPath } from "node:url";
 import type { MiddlewareHandler } from "hono";
 import { fileResponse, safeFile } from "./files.js";
 
-export const defaultSpaDir = (): string => fileURLToPath(new URL("../../spa/", import.meta.url));
-
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -29,7 +27,7 @@ const MIME: Record<string, string> = {
   ".webmanifest": "application/manifest+json",
 };
 
-export function spaStatic(spaDir: string = defaultSpaDir()): MiddlewareHandler {
+export function spaStatic(spaDir = fileURLToPath(new URL("../../spa/", import.meta.url))): MiddlewareHandler {
   const root = resolve(spaDir);
   const index = join(root, "index.html");
   return async (c, next) => {

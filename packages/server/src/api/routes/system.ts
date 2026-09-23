@@ -5,11 +5,6 @@ import { careerRotation } from "../../runner/career.js";
 import { FOLLOWUP_DAYS_DEFAULT } from "../../runner/interview.js";
 import { parseBody, SETTING_KEYS, SettingsSchema } from "../validate.js";
 
-const DEDUP_WINDOW_DAYS_DEFAULT = "60";
-const COMPANY_LIMIT_MAX_DEFAULT = "10";
-const COMPANY_LIMIT_WINDOW_DAYS_DEFAULT = "30";
-const COMPANY_LIMIT_PERSONA_LOCK_DEFAULT = "1";
-
 export function systemRoutes(deps: ApiDeps): Hono {
   const { store, cfg } = deps;
   const r = new Hono();
@@ -40,11 +35,11 @@ export function systemRoutes(deps: ApiDeps): Hono {
   const defaults: Record<(typeof SETTING_KEYS)[number], string> = {
     schedule_at: cfg.scheduleAt,
     schedule_jitter_min: String(cfg.scheduleJitterMin),
-    dedup_window_days: DEDUP_WINDOW_DAYS_DEFAULT,
+    dedup_window_days: "60",
     tz: cfg.tz,
-    company_limit_max: COMPANY_LIMIT_MAX_DEFAULT,
-    company_limit_window_days: COMPANY_LIMIT_WINDOW_DAYS_DEFAULT,
-    company_limit_persona_lock: COMPANY_LIMIT_PERSONA_LOCK_DEFAULT,
+    company_limit_max: "10",
+    company_limit_window_days: "30",
+    company_limit_persona_lock: "1",
     feedback_request: "1",
     chat_track_since: "2026-09-23",
     chat_followup_days: FOLLOWUP_DAYS_DEFAULT,

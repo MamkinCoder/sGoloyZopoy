@@ -2,7 +2,7 @@ import type { Profile, Store, User } from "@sgz/shared";
 import { normalizeProfile } from "../config/profile.js";
 import { bool, num, str, toJson, type Row, type Sql, nowISO, json } from "./sql.js";
 
-export const mapUser = (r: Row): User => ({
+const mapUser = (r: Row): User => ({
   id: num(r.id),
   slug: str(r.slug),
   name: str(r.name),

@@ -24,7 +24,7 @@ import {
 } from "./sql.js";
 import { VACANCY_COLS, mapPrefixedVacancy } from "./vacancies.js";
 
-export const mapApplication = (r: Row): Application => ({
+const mapApplication = (r: Row): Application => ({
   id: num(r.id),
   userId: num(r.user_id),
   vacancyId: num(r.vacancy_id),
@@ -53,7 +53,7 @@ const mapRow = (r: Row): ApplicationRow => ({
 });
 
 /** "hh" and site slugs match exactly; "career" means every non-hh source. */
-export function sourceClause(alias: string, source: string): { sql: string; params: Param[] } {
+function sourceClause(alias: string, source: string): { sql: string; params: Param[] } {
   if (source === "career") return { sql: `${alias}.source <> 'hh'`, params: [] };
   return { sql: `${alias}.source = ?`, params: [source] };
 }

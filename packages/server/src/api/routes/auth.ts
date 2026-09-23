@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import type { AuthService } from "../auth.js";
-import { clientIp } from "../auth.js";
+import { clientIp, type AuthService } from "../auth.js";
 import { HttpError, unauthorized } from "../errors.js";
 import { parseBody } from "../validate.js";
 

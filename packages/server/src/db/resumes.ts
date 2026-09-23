@@ -1,7 +1,7 @@
 import type { GeneratedResume, HHResume, ResumeSummary, Store } from "@sgz/shared";
 import { bool, jsonObjOrNull, num, str, toJson, type Row, type Sql, nowISO } from "./sql.js";
 
-export const mapHHResume = (r: Row): HHResume => ({
+const mapHHResume = (r: Row): HHResume => ({
   id: num(r.id),
   userId: num(r.user_id),
   hhResumeId: str(r.hh_resume_id),
@@ -13,7 +13,7 @@ export const mapHHResume = (r: Row): HHResume => ({
   syncedAt: str(r.synced_at),
 });
 
-export const mapGenerated = (r: Row): GeneratedResume => ({
+const mapGenerated = (r: Row): GeneratedResume => ({
   id: num(r.id),
   userId: num(r.user_id),
   vacancyId: num(r.vacancy_id),

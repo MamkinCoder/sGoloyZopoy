@@ -11,7 +11,7 @@ export const hhLogin = async (args: string[]): Promise<void> => {
   if (!slug) throw new Error("usage: sgz hh-login --user <slug> [--bin <chrome path>]");
   const base = dataDir();
   const userDir = join(base, "users", slug);
-  const launcher = await loadLauncher();
+  const launcher = loadLauncher();
   await loginInteractive(
     launcher,
     {

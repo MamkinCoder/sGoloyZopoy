@@ -39,6 +39,11 @@ function findSnapshot(deps: ApiDeps, row: ApplicationRow): string | null {
 export function applicationRoutes(deps: ApiDeps): Hono {
   const { store, runner } = deps;
   const r = new Hono();
+  const rowOr404 = (id: number) => {
+    const row = store.getApplication(id);
+    if (!row) throw notFound("application not found");
+    return row;
+  };
 
   r.get("/users/:slug/applications", (c) => {
     const u = userOr404(store, c.req.param("slug"));
@@ -60,8 +65,7 @@ export function applicationRoutes(deps: ApiDeps): Hono {
 
   r.get("/applications/:id", (c) => {
     const id = idParam(c);
-    const row = store.getApplication(id);
-    if (!row) throw notFound("application not found");
+    const row = rowOr404(id);
     const dto: ApplicationDetailDTO = {
       ...toApplicationDTO(row),
       questionnaire: store.listQuestionnaireAnswers(id).map((qa) => ({ question: qa.question, answer: qa.answer })),
@@ -72,8 +76,7 @@ export function applicationRoutes(deps: ApiDeps): Hono {
   });
 
   r.get("/applications/:id/snapshot", (c) => {
-    const row = store.getApplication(idParam(c));
-    if (!row) throw notFound("application not found");
+    const row = rowOr404(idParam(c));
     const file = findSnapshot(deps, row);
     if (!file) throw notFound("no snapshot");
     return guardedFile(deps.cfg.dataDir, file, "text/html; charset=utf-8");
@@ -139,11 +142,6 @@ export function applicationRoutes(deps: ApiDeps): Hono {
     return c.json(items);
   });
 
-  const rowOr404 = (id: number) => {
-    const row = store.getApplication(id);
-    if (!row) throw notFound("application not found");
-    return row;
-  };
   const queuedOr400 = (id: number) => {
     const row = rowOr404(id);
     if (row.application.status !== Status.QUEUED) throw badRequest(`application is ${row.application.status}, not queued`);

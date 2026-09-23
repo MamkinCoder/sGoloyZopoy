@@ -5,13 +5,13 @@ import type { Config } from "@sgz/shared";
 import { paths } from "@sgz/shared";
 import { loadEnvFile } from "./env.js";
 
-export { parseEnvText, loadEnvFile } from "./env.js";
-export { defaultProfile, normalizeProfile, loadProfileYaml, saveProfileYaml } from "./profile.js";
+export { parseEnvText } from "./env.js";
+export { loadProfileYaml, saveProfileYaml } from "./profile.js";
 
 export const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-export const DEFAULTS = {
+const DEFAULTS = {
   dataDir: "./data",
   bind: { host: "0.0.0.0", port: 3002 },
   claudeBin: "claude",
@@ -46,7 +46,7 @@ export function parseDurationMs(raw: string | undefined, fallback: number): numb
   return Math.round(n * mult);
 }
 
-export function parseBool(raw: string | undefined, fallback: boolean): boolean {
+function parseBool(raw: string | undefined, fallback: boolean): boolean {
   if (raw === undefined || raw.trim() === "") return fallback;
   return !["false", "0", "no", "off"].includes(raw.trim().toLowerCase());
 }

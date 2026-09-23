@@ -15,8 +15,6 @@ import { statsRepo } from "./stats.js";
 import { usersRepo } from "./users.js";
 import { vacanciesRepo } from "./vacancies.js";
 
-export { seedDefaultUsers } from "./users.js";
-
 export interface SqliteStore extends Store {
   readonly db: DatabaseSync;
   readonly path: string;

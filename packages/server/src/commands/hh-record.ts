@@ -2,9 +2,10 @@
 // Headless run with the persistent profile + injected cookies; records every step of the chosen
 // flows into <out> (default data/recordings/<slug>-<timestamp>). Nothing is submitted.
 import { join } from "node:path";
+import { loadCookies } from "../browser/cookies.js";
 import { createHHClient } from "../hh/client.js";
 import { createHHRecorder } from "../hh/recorder.js";
-import { chromiumBin, dataDir, loadLauncher, parseArgs, readCookieFile, str, userAgent } from "./hh-common.js";
+import { chromiumBin, dataDir, loadLauncher, parseArgs, str, userAgent } from "./hh-common.js";
 
 export const hhRecord = async (args: string[]): Promise<void> => {
   const a = parseArgs(args);
@@ -15,7 +16,7 @@ export const hhRecord = async (args: string[]): Promise<void> => {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const outDir = str(a.out) || join(base, "recordings", `${slug}-${stamp}`);
   const snapshotDir = join(outDir, "snapshots");
-  const launcher = await loadLauncher();
+  const launcher = loadLauncher();
   const client = createHHClient({ snapshotDir, log: (m, d) => console.log(m, d ? JSON.stringify(d) : "") });
   const recorder = createHHRecorder(client);
   const s = await launcher.launch({
@@ -28,7 +29,7 @@ export const hhRecord = async (args: string[]): Promise<void> => {
     cacheDir: join(base, "action-cache"),
   });
   try {
-    const cookies = await readCookieFile(join(userDir, "hh-cookies.json")).catch(() => []);
+    const cookies = await loadCookies(join(userDir, "hh-cookies.json")).catch(() => []);
     if (cookies.length) await s.setCookies(cookies);
     if (!(await client.checkLogin(s))) throw new Error("not logged in: run `sgz hh-login` first");
     const vacancy = str(a.vacancy);
