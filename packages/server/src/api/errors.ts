@@ -17,7 +17,7 @@ export const badRequest = (msg: string) => new HttpError(400, msg);
 export const unauthorized = (msg = "unauthorized") => new HttpError(401, msg);
 export const notFound = (msg = "not found") => new HttpError(404, msg);
 
-export function formatZod(e: ZodError): string {
+function formatZod(e: ZodError): string {
   return e.issues.map((i) => `${i.path.length ? i.path.join(".") + ": " : ""}${i.message}`).join("; ");
 }
 

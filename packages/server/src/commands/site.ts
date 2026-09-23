@@ -115,12 +115,7 @@ export function parseCareerSitesCsv(input: string): CareerSiteCsvRow[] {
   });
 }
 
-export interface CareerSiteImportSummary {
-  created: number;
-  updated: number;
-}
-
-export function importCareerSites(store: Pick<Store, "listCareerSites" | "upsertCareerSite">, userId: number, rows: CareerSiteCsvRow[]): CareerSiteImportSummary {
+export function importCareerSites(store: Pick<Store, "listCareerSites" | "upsertCareerSite">, userId: number, rows: CareerSiteCsvRow[]): { created: number; updated: number } {
   const existing = new Map(store.listCareerSites(userId).map((site) => [site.slug, site]));
   let created = 0;
   let updated = 0;
@@ -167,7 +162,7 @@ export async function site(args: string[]): Promise<void> {
     }
     if (sub === "add") {
       const slug = values.slug ?? url!.hostname.replace(/^www\./, "").replace(/[^a-z0-9]+/gi, "-");
-      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error("--slug must contain lowercase letters, digits and hyphens");
+      if (!SLUG_RE.test(slug)) throw new Error("--slug must contain lowercase letters, digits and hyphens");
       if (store.listCareerSites(user.id).some((s) => s.slug === slug)) throw new Error(`site ${slug} already exists; edit it in the panel`);
       console.log(JSON.stringify(store.upsertCareerSite({ userId: user.id, slug, name: values.name ?? url!.hostname,
         baseUrl: url!.href, ats: "custom", profile: {}, enabled: true, lastRunAt: null }), null, 2));

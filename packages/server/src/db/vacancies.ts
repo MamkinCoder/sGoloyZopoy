@@ -2,7 +2,7 @@ import type { Store, Vacancy } from "@sgz/shared";
 import { companyKey, normalizeDedup } from "@sgz/shared";
 import { bool, num, str, strOrNull, type Row, type Sql, nowISO } from "./sql.js";
 
-export const mapVacancy = (r: Row): Vacancy => ({
+const mapVacancy = (r: Row): Vacancy => ({
   id: num(r.id),
   source: str(r.source),
   externalId: str(r.external_id),

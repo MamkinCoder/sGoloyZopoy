@@ -1,7 +1,7 @@
 import type { CareerSite, SiteProfile, Store } from "@sgz/shared";
 import { bool, json, num, str, strOrNull, toJson, type Row, type Sql } from "./sql.js";
 
-export const mapSite = (r: Row): CareerSite => ({
+const mapSite = (r: Row): CareerSite => ({
   id: num(r.id),
   userId: num(r.user_id),
   slug: str(r.slug),

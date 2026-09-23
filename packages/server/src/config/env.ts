@@ -21,14 +21,8 @@ export function parseEnvText(text: string): Record<string, string> {
   return out;
 }
 
-/** Loads `path` into `env` for keys that are unset. Returns the keys it set. */
-export function loadEnvFile(path: string, env: NodeJS.ProcessEnv = process.env): string[] {
-  if (!existsSync(path)) return [];
-  const set: string[] = [];
-  for (const [k, v] of Object.entries(parseEnvText(readFileSync(path, "utf8")))) {
-    if (env[k] !== undefined) continue;
-    env[k] = v;
-    set.push(k);
-  }
-  return set;
+/** Loads `path` into `env` for keys that are unset. */
+export function loadEnvFile(path: string, env: NodeJS.ProcessEnv): void {
+  if (!existsSync(path)) return;
+  for (const [k, v] of Object.entries(parseEnvText(readFileSync(path, "utf8")))) env[k] ??= v;
 }

@@ -1,6 +1,5 @@
 import type { Stats, Status, Store } from "@sgz/shared";
-import { userAnalytics } from "./analytics.js";
-import { BOT_OUT } from "./analytics.js";
+import { BOT_OUT, userAnalytics } from "./analytics.js";
 import { num, str, type Param, type Row, type Sql } from "./sql.js";
 
 type StatsRepo = Pick<Store, "userStats" | "userAnalytics">;

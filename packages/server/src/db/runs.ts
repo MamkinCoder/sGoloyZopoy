@@ -2,7 +2,7 @@ import type { Run, RunEvent, RunStats, Store } from "@sgz/shared";
 import { emptyRunStats } from "@sgz/shared";
 import { bool, json, num, numOrNull, str, strOrNull, toJson, type Row, type Sql, nowISO } from "./sql.js";
 
-export const mapRun = (r: Row): Run => ({
+const mapRun = (r: Row): Run => ({
   id: num(r.id),
   userId: numOrNull(r.user_id),
   source: str(r.source) as Run["source"],
@@ -15,7 +15,7 @@ export const mapRun = (r: Row): Run => ({
   error: str(r.error),
 });
 
-export const mapEvent = (r: Row): RunEvent => {
+const mapEvent = (r: Row): RunEvent => {
   const e: RunEvent = {
     id: num(r.id),
     runId: num(r.run_id),

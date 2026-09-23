@@ -1,7 +1,7 @@
 import type { ChatMessage, ChatThread, InterviewPrep, Store } from "@sgz/shared";
 import { bool, jsonObjOrNull, num, numOrNull, placeholders, str, strOrNull, toJson, type Row, type Sql, nowISO } from "./sql.js";
 
-export const mapThread = (r: Row): ChatThread => ({
+const mapThread = (r: Row): ChatThread => ({
   id: num(r.id),
   userId: num(r.user_id),
   hhNegotiationId: str(r.hh_negotiation_id),
@@ -14,7 +14,7 @@ export const mapThread = (r: Row): ChatThread => ({
   prep: jsonObjOrNull<InterviewPrep>(r.prep_json),
 });
 
-export const mapMessage = (r: Row): ChatMessage => ({
+const mapMessage = (r: Row): ChatMessage => ({
   id: num(r.id),
   threadId: num(r.thread_id),
   hhMessageId: strOrNull(r.hh_message_id),

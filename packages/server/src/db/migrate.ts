@@ -12,15 +12,7 @@ const stripPragmas = (sql: string): string =>
     .filter((line) => !/^\s*PRAGMA\s/i.test(line))
     .join("\n");
 
-export function listMigrations(dir: string = MIGRATIONS_DIR): { name: string; sql: string }[] {
-  return readdirSync(dir)
-    .filter((f) => f.endsWith(".sql"))
-    .sort()
-    .map((name) => ({ name, sql: readFileSync(`${dir}/${name}`, "utf8") }));
-}
-
-/** Returns the names of migrations applied by this call. */
-export function applyMigrations(db: DatabaseSync, dir: string = MIGRATIONS_DIR): string[] {
+export function applyMigrations(db: DatabaseSync): void {
   db.exec(
     "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)",
   );
@@ -30,20 +22,17 @@ export function applyMigrations(db: DatabaseSync, dir: string = MIGRATIONS_DIR):
       .all()
       .map((r) => String(r.name)),
   );
-  const applied: string[] = [];
   const mark = db.prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)");
-  for (const m of listMigrations(dir)) {
-    if (done.has(m.name)) continue;
+  for (const name of readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort()) {
+    if (done.has(name)) continue;
     db.exec("BEGIN");
     try {
-      db.exec(stripPragmas(m.sql));
-      mark.run(m.name, new Date().toISOString());
+      db.exec(stripPragmas(readFileSync(`${MIGRATIONS_DIR}/${name}`, "utf8")));
+      mark.run(name, new Date().toISOString());
       db.exec("COMMIT");
     } catch (err) {
       db.exec("ROLLBACK");
-      throw new Error(`migration ${m.name} failed: ${err instanceof Error ? err.message : String(err)}`);
+      throw new Error(`migration ${name} failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-    applied.push(m.name);
   }
-  return applied;
 }

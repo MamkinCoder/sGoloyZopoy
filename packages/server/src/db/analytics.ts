@@ -1,10 +1,10 @@
 // userAnalytics: every dashboard aggregate in one pass of small GROUP BY queries.
 // Bot replies = outgoing messages WITHOUT hh_message_id (history imported from hh carries one).
 import type { AnalyticsCount, AnalyticsDTO, AnalyticsDay, AnalyticsEvent } from "@sgz/shared";
+import { num, str, type Param, type Row, type Sql } from "./sql.js";
 
 /** Messages the bot itself sent: no hh id (they're inserted locally) and not hh's «Отклик на вакансию» placeholder. */
 export const BOT_OUT = "m.direction='out' AND m.hh_message_id IS NULL AND m.text NOT LIKE 'Отклик на вакансию%'";
-import { num, str, type Param, type Row, type Sql } from "./sql.js";
 
 const DAY_MS = 24 * 3600 * 1000;
 
@@ -17,7 +17,7 @@ const REJECT_BUCKETS: [string, RegExp][] = [
   ["зарплата", /зарплат|оклад|доход|salary|вилк/i],
 ];
 
-export function rejectBucket(reason: string): string {
+function rejectBucket(reason: string): string {
   for (const [label, re] of REJECT_BUCKETS) if (re.test(reason)) return label;
   return "другое";
 }

@@ -6,8 +6,8 @@ import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { unauthorized } from "./errors.js";
 
-export const SESSION_COOKIE = "sgz_session";
-export const SESSION_TTL_MS = 30 * 24 * 3600 * 1000;
+const SESSION_COOKIE = "sgz_session";
+const SESSION_TTL_MS = 30 * 24 * 3600 * 1000;
 const LOGIN_MAX_FAILURES = 5;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 

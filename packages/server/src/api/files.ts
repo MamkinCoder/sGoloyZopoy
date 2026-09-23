@@ -4,7 +4,7 @@ import { resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { notFound } from "./errors.js";
 
-export function isUnder(rootDir: string, target: string): boolean {
+function isUnder(rootDir: string, target: string): boolean {
   const root = resolve(rootDir);
   const t = resolve(target);
   return t === root || t.startsWith(root.endsWith(sep) ? root : root + sep);

@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import type { Application, ApplicationDTO, ApplicationRow, Run, RunDTO, Store, User } from "@sgz/shared";
+import type { ApplicationDTO, ApplicationRow, Run, RunDTO, Store, User } from "@sgz/shared";
 import { notFound } from "../errors.js";
 import { intParam } from "../validate.js";
 
@@ -28,5 +28,3 @@ export function toRunDTO(store: Store, r: Run, slugCache?: Map<number, string | 
   }
   return { ...r, user_slug: slug };
 }
-
-export const isSent = (a: Application) => a.status === "SENT";
