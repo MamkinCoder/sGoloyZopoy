@@ -408,6 +408,20 @@ describe("runs", () => {
     expect(store.listRuns(null, 1)).toHaveLength(1);
     expect(store.getRun(999)).toBeNull();
   });
+
+  it("closes orphaned running/queued runs and reports the last done", () => {
+    const base = { userId: null, source: "all", trigger: "schedule", stats: emptyRunStats(), tgSent: false, error: "" } as const;
+    const running = store.insertRun({ ...base, status: "running" });
+    const queued = store.insertRun({ ...base, status: "queued" });
+    const done = store.insertRun({ ...base, status: "running" });
+    expect(store.lastRunAt("done")).toBeNull();
+    store.finishRun({ ...done, status: "done", finishedAt: past });
+    expect(store.reconcileOrphanedRuns(future)).toBe(2);
+    for (const id of [running.id, queued.id]) expect(store.getRun(id)).toMatchObject({ status: "stopped", finishedAt: future, error: "orphaned by restart" });
+    expect(store.getRun(done.id)?.status).toBe("done");
+    expect(store.reconcileOrphanedRuns(future)).toBe(0);
+    expect(store.lastRunAt("done")).toBe(past);
+  });
 });
 
 describe("stats / settings / llm / career / backup", () => {

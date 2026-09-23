@@ -79,6 +79,12 @@ export async function createAppContext(opts: AppOptions = {}): Promise<AppContex
   const store = fn<(path: string) => Store>(dbMod, "openStore", "db")(paths.db(cfg));
   const seed = dbMod.seedDefaultUsers;
   if (typeof seed === "function") seed(store);
+  // serve owns the db: no runner exists yet, so every running/queued row was left by a crash or
+  // power loss. CLI commands skip this so they never close a live run of a serve beside them.
+  if (opts.withScheduler) {
+    const orphans = store.reconcileOrphanedRuns(new Date().toISOString());
+    if (orphans > 0) warn(`app: closed ${orphans} run(s) orphaned by a restart`);
+  }
   // Panel settings are persisted in SQLite; apply the scheduler subset on the
   // next boot so a restart does not silently revert the user's choices.
   const savedSchedule = store.getSetting("schedule_at");

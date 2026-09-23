@@ -10,6 +10,7 @@ import { startTelegramCallbacks } from "../notify/telegram.js";
 import { parseSkillCallback, resolveSkill } from "../runner/skills.js";
 import { careerRotation } from "../runner/career.js";
 import { nextJob } from "../scheduler/autopilot.js";
+import { checkHeartbeat } from "../scheduler/health.js";
 import { errMessage } from "../runner/util.js";
 import type { RunRequest } from "@sgz/shared";
 
@@ -64,7 +65,12 @@ export async function serve(): Promise<void> {
   };
   // Every minute: one job when the runner is idle (see scheduler/autopilot.ts for the order).
   // Career chunks keep a single-run runner from starving the chat bot for hours.
+  let lastHealth = Date.now();
   const tick = () => {
+    if (Date.now() - lastHealth >= 30 * 60_000) {
+      lastHealth = Date.now();
+      void checkHeartbeat(app.store, app.notifier, app.startedAt, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: heartbeat: ${errMessage(e)}`));
+    }
     if (app.runner.active()) return;
     const job = nextJob({
       now: Date.now(),

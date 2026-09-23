@@ -170,6 +170,7 @@ export const SETTING_KEYS = [
   "career_per_site",
   "career_sites_per_run",
   "career_autopilot",
+  "run_max_min",
 ] as const;
 const numish = z.union([z.number().int().min(0), z.string().regex(/^\d+$/)]).transform(String);
 const boolish = z.union([z.literal("0"), z.literal("1")]);
@@ -188,6 +189,7 @@ export const SettingsSchema = z
     career_sites_per_run: numish, // sites per autopilot chunk (between chat polls)
     career_autopilot: boolish, // "0" = no automatic career gathering between chat polls
     career_per_site: numish, // max vacancies queued per career site per run (spread wide)
+    run_max_min: numish, // watchdog: max minutes per run, "0" = built-in caps (20 chats/touch, 30 career chunk, 150 full)
     chat_track_since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD"), // chats modified since this day are tracked
   })
   .partial()

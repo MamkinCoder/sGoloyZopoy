@@ -83,6 +83,7 @@ describe("system", () => {
       career_per_site: "3",
       career_sites_per_run: "1",
       career_autopilot: "1",
+      run_max_min: "0",
     });
     const put = await h.json("PUT", "/api/settings", { schedule_at: "09:30", dedup_window_days: 45 });
     expect(await put.json()).toMatchObject({ schedule_at: "09:30", dedup_window_days: "45" });

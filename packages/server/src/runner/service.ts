@@ -18,6 +18,19 @@ export interface Runner extends RunService {
   drain(): Promise<void>;
 }
 
+/** Watchdog limit for one run: short stages get tight caps, `run_max_min` (minutes, >0) overrides all. */
+export function maxRunMs(req: Pick<RunRequest, "stage">, override: string | null): number {
+  const o = Number(override);
+  if (override && Number.isFinite(o) && o > 0) return o * 60_000;
+  const st = req.stage ?? "";
+  if (st === "chats" || st === "touch") return 20 * 60_000;
+  if (st === "rotate" || /^(send|inspect|retailor|force):/.test(st)) return 30 * 60_000;
+  return 150 * 60_000;
+}
+
+/** After the watchdog aborts, a wedged await that never reaches checkAbort gets this long before the runner moves on. */
+export const WATCHDOG_GRACE_MS = 60_000;
+
 export function createRunner(deps: RunnerDeps): Runner {
   const hub = new EventHub();
   const store = deps.store;
@@ -28,8 +41,24 @@ export function createRunner(deps: RunnerDeps): Runner {
     const log = createRunLogger(store, hub, run.id, stderr);
     const ctx = createContext(deps, run, req, log, controller.signal);
     let final: Run = { ...run };
+    // Watchdog: a hung page or LLM call must not hold the single runner (and the chat bot) all day.
+    const limitMs = maxRunMs(req, store.getSetting("run_max_min"));
+    let timedOut = "";
+    let grace: ReturnType<typeof setTimeout> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const watchdog = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        timedOut = `watchdog: exceeded ${Math.round(limitMs / 60_000)} min`;
+        log.error("session", timedOut);
+        controller.abort();
+        void ctx.browser.close().catch(() => undefined);
+        void deps.notifier.alert(`Прогон #${run.id} остановлен сторожем`, `идёт дольше ${Math.round(limitMs / 60_000)} мин (${req.source}/${req.stage ?? "full"})`).catch(() => undefined);
+        grace = setTimeout(() => reject(new Error(timedOut)), WATCHDOG_GRACE_MS);
+      }, limitMs);
+    });
+    watchdog.catch(() => undefined);
     try {
-      const r = await runPipeline(ctx);
+      const r = await Promise.race([runPipeline(ctx), watchdog]);
       final = { ...run, status: r.status, error: r.error, stats: aggregate(r.users, req.dryRun), finishedAt: ctx.now().toISOString() };
       // Chat polls and autopilot career chunks run all day: report only when something happened.
       const s = final.stats;
@@ -42,8 +71,12 @@ export function createRunner(deps: RunnerDeps): Runner {
       await ctx.browser.close().catch(() => undefined);
       final = { ...run, status: "failed", error: errMessage(e), finishedAt: ctx.now().toISOString() };
       log.error("session", `run failed: ${final.error}`, { stack: e instanceof Error ? e.stack : undefined });
-      await deps.notifier.alert(`Прогон #${run.id} упал`, final.error).catch((ae: unknown) => log.warn("report", `alert failed: ${errMessage(ae)}`));
+      if (!timedOut) await deps.notifier.alert(`Прогон #${run.id} упал`, final.error).catch((ae: unknown) => log.warn("report", `alert failed: ${errMessage(ae)}`));
+    } finally {
+      clearTimeout(timer);
+      clearTimeout(grace);
     }
+    if (timedOut) final.error = timedOut;
     try {
       store.finishRun(final);
     } catch (e) {

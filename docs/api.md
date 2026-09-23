@@ -189,6 +189,15 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
     - `career_sites_per_run`: sites per chunk, default 1 (keeps chat polls frequent); each chunk takes the least recently visited sites not yet visited today.
     - `career_per_site`: max vacancies queued per site per run, default 3.
     - Every ~4h it also runs hh stage `touch` (raise resumes in search).
+  - Reliability: `run_max_min` = watchdog limit per run in minutes, `"0"` (default) = built-in caps
+    (20 for `chats`/`touch`, 30 for `rotate` and `send:|inspect:|retailor:|force:`, 150 otherwise). On
+    timeout the run is aborted, the browser closed and a Telegram alert sent; the run ends with
+    `error: "watchdog: exceeded N min"`. If a wedged call ignores the abort, the runner frees itself
+    after 60 s more (run `failed`).
+- `sgz serve` boot closes runs left `running`/`queued` by a crash (`status: stopped`,
+  `error: "orphaned by restart"`). While the runner is enabled it also checks every 30 min that some
+  run finished `done` in the last 26 h (dead-man heartbeat): one Telegram alert when that breaks, one
+  more when it recovers (open state in setting `alert_open:heartbeat`).
 - Unknown `/api/*` path → 404 `{error:"not found"}`; malformed JSON body → 400.
 
 ### Files

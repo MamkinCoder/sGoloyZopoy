@@ -12,6 +12,7 @@ import type {
   QuestionnaireAnswer,
   Run,
   RunEvent,
+  RunStatus,
   Source,
   Status,
   User,
@@ -138,6 +139,10 @@ export interface Store {
   finishRun(r: Run): void;
   getRun(id: number): Run | null;
   listRuns(userId: number | null, limit: number): Run[];
+  /** Closes runs left running/queued by a crashed process; returns how many. Call before the runner exists. */
+  reconcileOrphanedRuns(finishedAt: string): number;
+  /** finished_at of the latest run with this status, or null. */
+  lastRunAt(status: RunStatus): string | null;
   appendRunEvent(e: NewRunEvent): RunEvent;
   listRunEvents(runId: number, afterId: number): RunEvent[];
 

@@ -268,6 +268,12 @@ export class FakeStore implements Store {
   listRuns(userId: number | null, limit: number) {
     return this.runs.filter((r) => userId === null || r.userId === userId).slice(-limit).reverse();
   }
+  reconcileOrphanedRuns() {
+    return 0;
+  }
+  lastRunAt() {
+    return null;
+  }
   appendRunEvent(e: NewRunEvent): RunEvent {
     const ev: RunEvent = { ...e, id: this.nextId(), ts: nowISO() };
     this.events.push(ev);

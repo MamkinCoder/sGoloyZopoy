@@ -29,7 +29,7 @@ export const mapEvent = (r: Row): RunEvent => {
   return e;
 };
 
-type RunsRepo = Pick<Store, "insertRun" | "finishRun" | "getRun" | "listRuns" | "appendRunEvent" | "listRunEvents">;
+type RunsRepo = Pick<Store, "insertRun" | "finishRun" | "getRun" | "listRuns" | "reconcileOrphanedRuns" | "lastRunAt" | "appendRunEvent" | "listRunEvents">;
 
 export function runsRepo(s: Sql): RunsRepo {
   return {
@@ -70,6 +70,17 @@ export function runsRepo(s: Sql): RunsRepo {
           ? s.all("SELECT * FROM runs ORDER BY started_at DESC, id DESC LIMIT ?", lim)
           : s.all("SELECT * FROM runs WHERE user_id = ? ORDER BY started_at DESC, id DESC LIMIT ?", userId, lim);
       return rows.map(mapRun);
+    },
+    reconcileOrphanedRuns(finishedAt) {
+      const r = s.run(
+        "UPDATE runs SET status = 'stopped', error = 'orphaned by restart', finished_at = ? WHERE status IN ('running','queued')",
+        finishedAt,
+      );
+      return Number(r.changes);
+    },
+    lastRunAt(status) {
+      const r = s.get("SELECT MAX(finished_at) AS at FROM runs WHERE status = ?", status);
+      return strOrNull(r?.at);
     },
     appendRunEvent(e) {
       const r = s.get(
