@@ -1,8 +1,9 @@
 import type { Stats, Status, Store } from "@sgz/shared";
 import { BOT_OUT, userAnalytics } from "./analytics.js";
+import { salaryBand } from "./salary.js";
 import { num, str, type Param, type Row, type Sql } from "./sql.js";
 
-type StatsRepo = Pick<Store, "userStats" | "userAnalytics">;
+type StatsRepo = Pick<Store, "userStats" | "userAnalytics" | "salaryBand">;
 
 export function statsRepo(s: Sql): StatsRepo {
   const count = (sql: string, ...params: Param[]): number => num((s.get(sql, ...params) as Row).n);
@@ -50,5 +51,6 @@ export function statsRepo(s: Sql): StatsRepo {
       } satisfies Stats;
     },
     userAnalytics: (userId, sinceISO) => userAnalytics(s, userId, sinceISO),
+    salaryBand: (q) => salaryBand(s, q),
   };
 }

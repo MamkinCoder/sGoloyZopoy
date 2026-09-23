@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage, ChatThread } from "@sgz/shared";
 import { openStore, seedDefaultUsers } from "../db/index.js";
-import { FOLLOW_UP, followupDue, formatPrep, remindInterviews } from "./interview.js";
+import { askOutcomes, FOLLOW_UP, followupDue, formatPrep, marketLine, parseOutcomeCallback, remindInterviews } from "./interview.js";
 
 const now = new Date("2026-09-23T12:00:00Z");
 const thread = (state: ChatThread["state"]): ChatThread => ({ id: 1, userId: 1, hhNegotiationId: "n1", isBot: false, vacancyId: null, employer: "Acme", state, lastSeenAt: "" });
@@ -59,5 +59,65 @@ describe("formatPrep", () => {
     expect(text).toContain("• Как устроен GC в Go?");
     expect(text).toContain("• Go: сервис заказов");
     expect(text).not.toContain("Пробелы");
+  });
+});
+
+describe("askOutcomes", () => {
+  it("asks once, 20h-3d after the interview, and a new interview time re-arms it", async () => {
+    const store = openStore(":memory:");
+    seedDefaultUsers(store);
+    const u = store.listUsers(true)[0]!;
+    const mk = (id: string, at: string) => {
+      const t = store.upsertChatThread({ userId: u.id, hhNegotiationId: id, isBot: false, vacancyId: null, employer: id, state: "invited", lastSeenAt: "" });
+      store.setChatInterview(t.id, at);
+      return t;
+    };
+    const due = mk("Due", "2026-09-22T10:00:00.000Z"); // 26h ago
+    mk("Fresh", "2026-09-23T09:00:00.000Z"); // 3h ago: too early
+    mk("Old", "2026-09-15T10:00:00.000Z"); // 8 days ago: too late
+    const done = mk("Done", "2026-09-22T09:00:00.000Z");
+    store.setInterviewOutcome(done.id, "offer");
+    const asks: { text: string; data: string[] }[] = [];
+    const notifier = { report: async () => undefined, alert: async () => undefined, ask: async (text: string, b: { data: string }[]) => void asks.push({ text, data: b.map((x) => x.data) }) };
+    await askOutcomes(store, notifier, now);
+    await askOutcomes(store, notifier, now);
+    expect(asks).toEqual([{ text: "Как прошло собеседование в Due?", data: ["next", "rejected", "silence", "offer"].map((o) => `io:${due.id}:${o}`) }]);
+    store.setChatInterview(due.id, "2026-09-22T10:00:00.000Z"); // same time: stays asked
+    await askOutcomes(store, notifier, now);
+    expect(asks).toHaveLength(1);
+    store.setChatInterview(due.id, "2026-09-22T11:00:00.000Z"); // next round
+    await askOutcomes(store, notifier, now);
+    expect(asks).toHaveLength(2);
+    expect(store.listChatThreads(u.id).find((t) => t.id === done.id)?.interviewOutcome).toBe("offer");
+  });
+
+  it("without buttons nothing is claimed", async () => {
+    const store = openStore(":memory:");
+    seedDefaultUsers(store);
+    const u = store.listUsers(true)[0]!;
+    const t = store.upsertChatThread({ userId: u.id, hhNegotiationId: "n", isBot: false, vacancyId: null, employer: "A", state: "invited", lastSeenAt: "" });
+    store.setChatInterview(t.id, "2026-09-22T10:00:00.000Z");
+    await askOutcomes(store, { report: async () => undefined, alert: async () => undefined }, now);
+    expect(store.claimOutcomeAsks("2026-09-01T00:00:00Z", "2026-09-30T00:00:00Z")).toHaveLength(1);
+  });
+
+  it("parses the callback", () => {
+    expect(parseOutcomeCallback("io:12:offer")).toEqual({ threadId: 12, outcome: "offer" });
+    expect(parseOutcomeCallback("io:12:maybe")).toBeNull();
+    expect(parseOutcomeCallback("q:s:12")).toBeNull();
+  });
+});
+
+describe("marketLine", () => {
+  it("uses the application's CV direction and stays empty without one", () => {
+    const band = { n: 30, p25: 200_000, p50: 250_000, p75: 300_000 };
+    const seen: unknown[] = [];
+    const store = (direction: string) => ({
+      lastApplication: () => ({ direction, llmDecision: null }) as never,
+      salaryBand: (q: unknown) => (seen.push(q), band),
+    });
+    expect(marketLine(store("go-backend"), 1, { id: 5 })).toBe("💰 Рынок (go-backend, вилки в вакансиях за 90 дней): 200k-300k, медиана 250k (n=30)");
+    expect(seen).toEqual([{ userId: 1, direction: "go-backend" }]);
+    expect(marketLine(store(""), 1, { id: 5 })).toBe("");
   });
 });

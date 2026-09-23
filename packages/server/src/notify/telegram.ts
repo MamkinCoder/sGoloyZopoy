@@ -106,7 +106,8 @@ export function startTelegramCallbacks(token: string, onTap: (data: string) => P
           const m = u.message;
           // Strangers can message the bot too: only the configured chats get answers.
           if (cmds && m?.text?.startsWith("/") && cmds.chatIds.includes(String(m.chat.id))) {
-            const reply = await cmds.onCommand(m.text.split(/[\s@]/)[0]!.toLowerCase(), m.text, String(m.chat.id)).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`);
+            const word = m.text.split(/\s/)[0]!;
+            const reply = await cmds.onCommand(word.split("@")[0]!.toLowerCase(), m.text, String(m.chat.id)).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`);
             for (const part of chunkMessage(reply)) await api("sendMessage", { chat_id: m.chat.id, text: part, disable_web_page_preview: true }).catch(() => undefined);
             continue;
           }

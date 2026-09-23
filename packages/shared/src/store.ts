@@ -7,11 +7,13 @@ import type {
   ChatThread,
   GeneratedResume,
   HHResume,
+  InterviewOutcome,
   InterviewPrep,
   Profile,
   Question,
   QuestionnaireAnswer,
   Run,
+  SalaryBand,
   RunEvent,
   RunStatus,
   Source,
@@ -160,6 +162,9 @@ export interface Store {
   setChatPrep(threadId: number, prep: InterviewPrep): void;
   /** Threads with an interview in (now, until] not reminded yet; marks them reminded. */
   claimInterviewReminders(nowISO: string, untilISO: string): ChatThread[];
+  /** Threads whose interview was in [fromISO, toISO] with no outcome and never asked; marks them asked. */
+  claimOutcomeAsks(fromISO: string, toISO: string): ChatThread[];
+  setInterviewOutcome(threadId: number, outcome: InterviewOutcome | null): void;
 
   // generated resumes
   insertGeneratedResume(g: Omit<GeneratedResume, "id" | "createdAt">): GeneratedResume;
@@ -196,8 +201,20 @@ export interface Store {
   resumeStats(userId: number, sinceISO: string): ResumeStat[];
   /** SENT hh letters with a known outcome (invited, rejected, or silent for 14+ days), newest first. */
   letterOutcomes(userId: number, limit: number): LetterOutcome[];
+  /** RUB band over vacancies seen in the last `days` (default 90); null below the min-N gate. */
+  salaryBand(q: SalaryQuery): SalaryBand | null;
   getSetting(key: string): string | null;
   setSetting(key: string, value: string): void;
   insertLLMCall(c: LLMCall): void;
   backup(destPath: string): void;
+}
+
+export interface SalaryQuery {
+  /** Only vacancies this user has an application row for (any status). */
+  userId?: number;
+  /** CV direction of those applications; needs userId. */
+  direction?: string;
+  /** Case-insensitive substring of the vacancy title. */
+  titleLike?: string;
+  days?: number;
 }

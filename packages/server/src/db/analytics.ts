@@ -1,6 +1,7 @@
 // userAnalytics: every dashboard aggregate in one pass of small GROUP BY queries.
 // Bot replies = outgoing messages WITHOUT hh_message_id (history imported from hh carries one).
 import type { AnalyticsCount, AnalyticsDTO, AnalyticsDay, AnalyticsEvent } from "@sgz/shared";
+import { salaryBand } from "./salary.js";
 import { num, str, type Param, type Row, type Sql } from "./sql.js";
 
 /** Messages the bot itself sent: no hh id (they're inserted locally) and not hh's «Отклик на вакансию» placeholder. */
@@ -23,13 +24,14 @@ function rejectBucket(reason: string): string {
 }
 
 const counts = (rows: Row[]): AnalyticsCount[] =>
-  rows.map((r) => ({ key: str(r.k) || "—", n: num(r.n), ...(r.hh === undefined ? {} : { hh: num(r.hh), resp: num(r.resp), inv: num(r.inv) }) }));
+  rows.map((r) => ({ key: str(r.k) || "—", n: num(r.n), ...(r.hh === undefined ? {} : { hh: num(r.hh), resp: num(r.resp), inv: num(r.inv), pass: num(r.pass) }) }));
 
 /** Per-key conversion columns over SENT rows `a`/`v`: only hh sends have negotiation threads, so rates use
  * `hh` as the denominator. "Responded" matches the funnel (thread viewed / invited / rejected). */
 export const threadIs = (states: string) =>
   `EXISTS (SELECT 1 FROM chat_threads t WHERE t.user_id = a.user_id AND t.vacancy_id = a.vacancy_id AND t.state IN (${states}))`;
-const RATE_COLS = `SUM(v.source = 'hh') AS hh, SUM(${threadIs("'viewed','invited','rejected'")}) AS resp, SUM(${threadIs("'invited'")}) AS inv`;
+const passedIt = "EXISTS (SELECT 1 FROM chat_threads t WHERE t.user_id = a.user_id AND t.vacancy_id = a.vacancy_id AND t.interview_outcome IN ('next','offer'))";
+const RATE_COLS = `SUM(v.source = 'hh') AS hh, SUM(${threadIs("'viewed','invited','rejected'")}) AS resp, SUM(${threadIs("'invited'")}) AS inv, SUM(${passedIt}) AS pass`;
 
 export function userAnalytics(s: Sql, userId: number, sinceISO: string | null): AnalyticsDTO {
   const since = sinceISO ?? "";
@@ -75,7 +77,8 @@ export function userAnalytics(s: Sql, userId: number, sinceISO: string | null): 
   const sent = sum("sent");
   const th = one(
     `SELECT COUNT(*) AS n, SUM(state IN ('viewed','invited','rejected')) AS resp, SUM(state='invited') AS inv,
-       SUM(state='rejected') AS rej FROM chat_threads WHERE user_id = ? AND last_seen_at >= ?`,
+       SUM(state='rejected') AS rej, SUM(interview_outcome IN ('next','offer')) AS passed,
+       SUM(interview_outcome = 'offer') AS offers FROM chat_threads WHERE user_id = ? AND last_seen_at >= ?`,
     userId,
     since,
   );
@@ -159,6 +162,9 @@ export function userAnalytics(s: Sql, userId: number, sinceISO: string | null): 
       { key: "sent", n: sent },
       { key: "viewed", n: responded },
       { key: "invited", n: num(th.inv) },
+      // tapped by the seeker after the interview (Telegram «как прошло?» or the panel)
+      { key: "passed", n: num(th.passed) },
+      { key: "offer", n: num(th.offers) },
     ],
     skip_reasons: top(
       "SELECT status AS k, COUNT(*) AS n FROM applications WHERE user_id = ? AND created_at >= ? AND status GLOB 'SKIP_*' GROUP BY k ORDER BY n DESC",
@@ -192,5 +198,6 @@ export function userAnalytics(s: Sql, userId: number, sinceISO: string | null): 
       since,
     ),
     recent,
+    salary: salaryBand(s, { userId }),
   };
 }
