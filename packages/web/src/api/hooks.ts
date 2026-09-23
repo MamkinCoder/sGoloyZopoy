@@ -289,7 +289,11 @@ export function useCareerSiteMutations(slug: string) {
       qc.invalidateQueries({ queryKey: keys.activeRun });
     },
   });
-  return { create, update, remove, onboard };
+  // Queue a `career` run over this one site: gather → decide → tailored CV → review queue.
+  const run = useMutation({
+    mutationFn: (id: number) => api<{ run_id: number }>(`/users/${slug}/career-sites/${id}/run`, { method: "POST" }),
+  });
+  return { create, update, remove, onboard, run };
 }
 
 // ---- system

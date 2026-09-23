@@ -269,6 +269,7 @@ function CareerSites({ slug }: { slug: string }) {
               onEdit={() => setEditing({ id: s.id, body: { name: s.name, baseUrl: s.baseUrl, ats: s.ats, profile: s.profile, enabled: s.enabled } })}
               onDelete={() => window.confirm(`Удалить «${s.name}»?`) && m.remove.mutate(s.id, { onSuccess: () => toast.ok("Удалено") })}
               onOnboard={() => m.onboard.mutate(s.id, { onSuccess: ({ run_id }) => toast.ok(`Онбординг запущен: run #${run_id}`) })}
+              onRun={() => m.run.mutate(s.id, { onSuccess: ({ run_id }) => toast.ok(`Сайт запущен: run #${run_id}, вакансии появятся в «Очереди»`) })}
               onSaveProfile={(profile) => m.update.mutate({ id: s.id, body: { profile } }, { onSuccess: () => toast.ok("Подсказки сохранены") })}
               onToggleEnabled={(enabled) => m.update.mutate({ id: s.id, body: { enabled } })}
             />
@@ -323,6 +324,7 @@ function SiteRow({
   onEdit,
   onDelete,
   onOnboard,
+  onRun,
   onSaveProfile,
   onToggleEnabled,
 }: {
@@ -332,6 +334,7 @@ function SiteRow({
   onEdit: () => void;
   onDelete: () => void;
   onOnboard: () => void;
+  onRun: () => void;
   onSaveProfile: (p: CareerSiteDTO["profile"]) => void;
   onToggleEnabled: (v: boolean) => void;
 }) {
@@ -372,6 +375,9 @@ function SiteRow({
           )}
         </span>
         <Toggle checked={site.enabled} onChange={onToggleEnabled} label="вкл" />
+        <button type="button" className="btn btn-sm" onClick={onRun} disabled={!site.enabled}>
+          Запустить
+        </button>
         <button type="button" className="btn btn-sm" onClick={onOnboard}>
           Онбординг
         </button>

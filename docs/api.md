@@ -136,6 +136,7 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
 | GET | /users/:slug | | user |
 | GET | /health-lite | | `{ok:true, version}` — unauthenticated liveness probe |
 | POST | /users/:slug/career-sites/:id/onboard | | `{run_id}` (202) — queues a `career` run, stage `onboard:<id>` |
+| POST | /users/:slug/career-sites/:id/run | | `{run_id}` (202) — queues a `career` run, stage `site:<id>`: gather → decide → tailored CV → review queue for this one site |
 
 - `PUT /users/:slug` additionally accepts `allow_other_country`, `pool_expand_per_day`, `opus_enabled`
   (bool / int ≥ 0). Unknown keys are ignored; wrong types → 400.

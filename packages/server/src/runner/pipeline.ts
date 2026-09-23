@@ -50,7 +50,7 @@ export function planHH(source: string, stage: string | undefined): HHPlan | null
 
 export function planCareer(source: string, stage: string | undefined): CareerPlan | null {
   if (source !== "career" && source !== "all") return null;
-  const plan: CareerPlan = { onboardOnly: null, discover: true, apply: true, target: null, rotate: false };
+  const plan: CareerPlan = { onboardOnly: null, siteOnly: null, discover: true, apply: true, target: null, rotate: false };
   if (!stage) return plan;
   if (stage.startsWith("onboard:")) {
     const id = Number(stage.slice("onboard:".length));
@@ -61,6 +61,8 @@ export function planCareer(source: string, stage: string | undefined): CareerPla
   if (stage === "search" || stage === "fetch" || stage === "discover") return { ...plan, apply: false };
   if (stage === "apply" || stage === "tailor") return plan;
   if (stage === "rotate") return { ...plan, rotate: true };
+  const site = /^site:(\d+)$/.exec(stage);
+  if (site) return { ...plan, siteOnly: Number(site[1]) };
   return null;
 }
 

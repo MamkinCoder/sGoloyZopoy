@@ -81,6 +81,14 @@ export function careerRoutes(deps: ApiDeps): Hono {
     return c.json({ run_id: await runner.start(req) }, 202);
   });
 
+  r.post("/users/:slug/career-sites/:id/run", async (c) => {
+    const u = userOr404(store, c.req.param("slug"));
+    const site = siteOr404(idParam(c));
+    if (site.userId !== u.id) throw notFound("career site not found");
+    const req: RunRequest = { userSlug: u.slug, source: "career", stage: `site:${site.id}`, dryRun: false, limit: 0, trigger: "manual" };
+    return c.json({ run_id: await runner.start(req) }, 202);
+  });
+
   r.get("/adapters", (c) => c.json(deps.adapters ?? [...ATS_KINDS]));
 
   return r;

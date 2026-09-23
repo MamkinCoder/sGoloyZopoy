@@ -23,6 +23,8 @@ import { errMessage } from "./util.js";
 export interface CareerPlan {
   /** Only onboard this site id (stage `onboard:<id>`); null = normal flow. */
   onboardOnly: number | null;
+  /** Stage `site:<id>`: the normal gather → queue flow for this one site only (panel «Запустить»). */
+  siteOnly: number | null;
   discover: boolean;
   apply: boolean;
   /** Stage send:<id> / inspect:<id> (one QUEUED application) or force:<id> (a filtered-out one → queue). */
@@ -77,7 +79,7 @@ export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPla
   // Least recently visited first, so a small daily budget still rotates through every site.
   let sites = ctx.store
     .listCareerSites(user.id, true)
-    .filter((s) => plan.onboardOnly === null || s.id === plan.onboardOnly)
+    .filter((s) => (plan.onboardOnly === null || s.id === plan.onboardOnly) && (plan.siteOnly === null || s.id === plan.siteOnly))
     .sort((a, b) => (a.lastRunAt ?? "").localeCompare(b.lastRunAt ?? ""));
   if (plan.rotate) {
     const r = careerRotation(ctx.store, user, ctx.cfg.tz, ctx.now());

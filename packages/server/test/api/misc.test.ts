@@ -47,6 +47,8 @@ describe("career sites", () => {
     const onb = await h.json("POST", `/api/users/yaroslav/career-sites/${site.id}/onboard`);
     expect(onb.status).toBe(202);
     expect(h.runner.started[0]).toMatchObject({ source: "career", stage: `onboard:${site.id}` });
+    expect((await h.json("POST", `/api/users/yaroslav/career-sites/${site.id}/run`)).status).toBe(202);
+    expect(h.runner.started[1]).toMatchObject({ source: "career", stage: `site:${site.id}` });
 
     expect(await (await h.get("/api/adapters")).json()).toEqual(["greenhouse", "custom"]);
     expect((await h.json("POST", "/api/users/yaroslav/career-sites", { adapter: "greenhouse" })).status).toBe(400);
