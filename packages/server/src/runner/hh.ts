@@ -11,6 +11,7 @@ import { followupChats, sendInterviewPrep } from "./interview.js";
 import { alertWithStudy } from "./study.js";
 import { viewersStage } from "./viewers.js";
 import { mapNegotiationState } from "../hh/state.js";
+import { vacancyUrl } from "../hh/urls.js";
 import { dayInTz, shortStamp } from "../scheduler/tz.js";
 import type { UserRun } from "./user.js";
 import { errMessage, isStop, parseSalary } from "./util.js";
@@ -373,6 +374,23 @@ export async function tailorResume(ctx: RunContext, u: UserRun, s: BrowserSessio
   }
 }
 
+const linkTriedKey = (threadId: number) => `vacancy_link_tried:${threadId}`;
+
+/** A chat's vacancy that isn't in the store (applied from another machine or by hand): fetch it once. */
+async function linkChatVacancy(ctx: RunContext, s: BrowserSession, ext: string, employer: string, threadId: number | undefined): Promise<Vacancy | null> {
+  if (threadId !== undefined) ctx.store.setSetting(linkTriedKey(threadId), ctx.now().toISOString());
+  try {
+    const url = vacancyUrl(ext);
+    const r = await ctx.hh.fetchVacancy(s, { externalId: ext, url, title: "", company: employer, salaryRaw: "" });
+    const base = ensureVacancy(ctx.store, skeletonVacancy("hh", ext, url, r.vacancy.title, r.vacancy.company || employer));
+    return ctx.store.upsertVacancy({ ...r.vacancy, id: base.id });
+  } catch (e) {
+    if (e instanceof RunAbortError || isStop(e)) throw e;
+    ctx.log.warn("chats", `${employer}: vacancy ${ext} not linked: ${errMessage(e)}`);
+    return null;
+  }
+}
+
 async function chatsStage(ctx: RunContext, u: UserRun): Promise<void> {
   const { user, profile, stats } = u;
   const s = await ctx.browser.openHH(user);
@@ -391,6 +409,12 @@ async function chatsStage(ctx: RunContext, u: UserRun): Promise<void> {
     if (!prev) return recent;
     if (t.unread || threadWaiting(ctx.store, user.id, prev.id)) return true;
     if (mapNegotiationState(t.state) === "invited" && prev.state !== "invited") return true; // a new invitation
+    // An invitation whose vacancy we never stored (applied from elsewhere): read it once to link it,
+    // so the prep brief and the study checklist have a job description.
+    if (prev.state === "invited" && prev.vacancyId === null && !ctx.store.getSetting(linkTriedKey(prev.id))) {
+      ctx.store.setSetting(linkTriedKey(prev.id), ctx.now().toISOString()); // once, even if the chat names no vacancy
+      return true;
+    }
     if (t.lastModified && t.lastModified > prev.lastSeenAt) return true;
     return ctx.store.listChatMessages(prev.id).some((m) => m.direction === "in" && !m.answered);
   });
@@ -405,7 +429,8 @@ async function chatsStage(ctx: RunContext, u: UserRun): Promise<void> {
       if (detail.thread.state !== "rejected" && mapNegotiationState(t.state) === "invited") detail.thread.state = "invited";
       const prev = known.get(t.negotiationId);
       const ext = detail.vacancyExternalId ?? t.vacancyExternalId;
-      const vacancy = ext ? ctx.store.findVacancyByExternal("hh", ext) : null;
+      let vacancy = ext ? ctx.store.findVacancyByExternal("hh", ext) : null;
+      if (!vacancy && ext && !prev?.vacancyId) vacancy = await linkChatVacancy(ctx, s, ext, t.employer, prev?.id);
       const next = {
         ...detail.thread,
         id: prev?.id,

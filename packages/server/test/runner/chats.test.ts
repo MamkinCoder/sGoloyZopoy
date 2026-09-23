@@ -21,19 +21,23 @@ function setup() {
   store = openStore(":memory:");
   const user = store.upsertUser({ slug: "y", name: "Y", tgChatId: "", dailyLimitHH: 10, dailyLimitCareer: 5, active: true, allowOtherCountry: true, poolExpandPerDay: 0, opusEnabled: false });
   store.saveProfile(user.id, profile);
-  const page = { state: "RESPONSE", lastModified: "2026-09-24T10:00:00.000Z", rejected: false, messages: [] as Msg[], survey: [] as Question[] };
+  const page = { state: "RESPONSE", lastModified: "2026-09-24T10:00:00.000Z", rejected: false, messages: [] as Msg[], survey: [] as Question[], ext: null as string | null };
   const hh = {
     listThreads: vi.fn(async () => [{ negotiationId: "n1", chatUrl: "https://hh.ru/chat/1", unread: false, employer: "Acme", state: page.state, vacancyExternalId: null, lastModified: page.lastModified }]),
     readThread: vi.fn(async (): Promise<ThreadDetail> => ({
       thread: { hhNegotiationId: "n1", isBot: false, vacancyId: null, employer: "Acme", state: page.rejected ? "rejected" : "new", lastSeenAt: "" },
-      vacancyExternalId: null,
+      vacancyExternalId: page.ext,
       messages: page.messages,
       survey: page.survey,
       writable: true,
     })),
     sendMessage: vi.fn(async () => {}),
+    fetchVacancy: vi.fn(async (_s: unknown, c: { externalId: string; url: string }) => ({
+      alreadyApplied: false,
+      vacancy: { source: "hh", externalId: c.externalId, url: c.url, title: "Frontend-разработчик (React)", company: "Acme", salaryFrom: 0, salaryTo: 0, currency: "", descriptionText: "React, TypeScript", hasTest: false, requiresLetter: false, area: "", workFormat: "", publishedAt: null, archived: false, dedupHash: "acme|frontend" },
+    })),
     submitSurvey: vi.fn(async () => {}),
-  } as unknown as RunContext["hh"] & { sendMessage: ReturnType<typeof vi.fn>; submitSurvey: ReturnType<typeof vi.fn> };
+  } as unknown as RunContext["hh"] & { sendMessage: ReturnType<typeof vi.fn>; submitSurvey: ReturnType<typeof vi.fn>; fetchVacancy: ReturnType<typeof vi.fn> };
   const llm = new FakeLLM();
   const alert = vi.fn(async () => {});
   let clock = Date.parse("2026-09-25T10:00:00Z");
@@ -61,6 +65,19 @@ function setup() {
 }
 
 describe("chatsStage", () => {
+  it("links an invitation's vacancy that was never stored, fetching it only once", async () => {
+    const t = setup();
+    t.page.state = "INVITATION";
+    t.page.ext = "777";
+    t.page.messages = [inMsg("1", "Приглашаем на собеседование")];
+    await t.run();
+    expect(t.hh.fetchVacancy).toHaveBeenCalledTimes(1);
+    expect(t.thread().vacancyId).not.toBeNull();
+    t.page.lastModified = "2026-09-26T10:00:00.000Z";
+    await t.run();
+    expect(t.hh.fetchVacancy).toHaveBeenCalledTimes(1);
+  });
+
   it("a rejection on a needs_human thread asks for feedback once and the thread becomes rejected", async () => {
     const t = setup();
     t.page.messages = [inMsg("1", "Пришлём тестовое, выполните?")];

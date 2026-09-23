@@ -41,6 +41,12 @@ describe("study pack: copy prompt", () => {
 });
 
 describe("study pack: checklist schema + guard", () => {
+  it("gives the tutor the vacancy as plain text, not hh's HTML", () => {
+    const p = buildStudyPrompt({ ...vacancy, descriptionText: "<p><strong>Задачи:</strong></p><ul><li>Go-сервисы</li><li>Vue.js</li></ul>" }, profile, items);
+    expect(p).toContain("Задачи:\n- Go-сервисы\n- Vue.js");
+    expect(p).not.toMatch(/<\/?(p|li|ul|strong)>/);
+  });
+
   it("parses tolerant fields and guards links, never-claim gaps, order and the cap", () => {
     const raw = StudyChecklistSchema.parse({
       checklist: [

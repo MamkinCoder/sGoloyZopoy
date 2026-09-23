@@ -5,6 +5,7 @@ import type { ChatThread, LLMClient, Notifier, Profile, Store, StudyItem, StudyP
 import { chunkMessage, escapeHtml, formatAlert } from "../notify/format.js";
 import { usersFor } from "./mock.js";
 import { errMessage } from "./util.js";
+import { stripHtml } from "../career/http.js";
 
 export const STUDY_TTL_MS = 7 * 86_400_000;
 export const STUDY_PROMPT_MAX = 12_000;
@@ -48,7 +49,8 @@ export function buildStudyPrompt(v: Pick<Vacancy, "title" | "company" | "descrip
         .filter(Boolean)
         .join("\n\n"),
     );
-  const desc = v.descriptionText.replace(/\s*\n\s*/g, "\n").trim();
+  // hh stores the description as HTML: the tutor gets plain text.
+  const desc = stripHtml(v.descriptionText);
   const room = Math.max(0, Math.min(DESC_MAX, STUDY_PROMPT_MAX - render("").length - 10));
   return render(desc.length > room ? `${desc.slice(0, room).trimEnd()}…` : desc).slice(0, STUDY_PROMPT_MAX);
 }
