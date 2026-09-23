@@ -31,6 +31,21 @@ export function maxRunMs(req: Pick<RunRequest, "stage">, override: string | null
 /** After the watchdog aborts, a wedged await that never reaches checkAbort gets this long before the runner moves on. */
 export const WATCHDOG_GRACE_MS = 60_000;
 
+const BACKGROUND_STAGES = new Set(["chats", "rotate", "touch"]);
+const REPEAT_ALERT_MS = 3 * 3600_000;
+
+/** Autopilot runs repeat every few minutes: the same failure (e.g. an expired hh login) is reported
+ * once per 3h instead of on every poll. Manual and full runs always report. Digits are ignored so
+ * "run #51"/timings don't make the same error look new. */
+export function repeatFailure(store: Pick<RunnerDeps["store"], "getSetting" | "setSetting">, req: RunRequest, error: string, now: Date): boolean {
+  if (req.trigger !== "schedule" || !BACKGROUND_STAGES.has(req.stage ?? "")) return false;
+  const key = `alert_last:${error.replace(/\d+/g, "#").slice(0, 80)}`;
+  const last = Date.parse(store.getSetting(key) ?? "");
+  if (Number.isFinite(last) && now.getTime() - last < REPEAT_ALERT_MS) return true;
+  store.setSetting(key, now.toISOString());
+  return false;
+}
+
 export function createRunner(deps: RunnerDeps): Runner {
   const hub = new EventHub();
   const store = deps.store;
@@ -66,12 +81,13 @@ export function createRunner(deps: RunnerDeps): Runner {
         req.trigger === "schedule" &&
         final.status === "done" &&
         ((req.stage === "chats" && !s.chat_replies && !s.invitations && !s.rejections) || (req.stage === "rotate" && !s.by_status.QUEUED) || req.stage === "touch");
-      if (!quietPoll) final.tgSent = await sendReports(ctx, final, r.users);
+      const repeated = final.status !== "done" && repeatFailure(store, req, final.error, ctx.now());
+      if (!quietPoll && !repeated) final.tgSent = await sendReports(ctx, final, r.users);
     } catch (e) {
       await ctx.browser.close().catch(() => undefined);
       final = { ...run, status: "failed", error: errMessage(e), finishedAt: ctx.now().toISOString() };
       log.error("session", `run failed: ${final.error}`, { stack: e instanceof Error ? e.stack : undefined });
-      if (!timedOut) await deps.notifier.alert(`Прогон #${run.id} упал`, final.error).catch((ae: unknown) => log.warn("report", `alert failed: ${errMessage(ae)}`));
+      if (!timedOut && !repeatFailure(store, req, final.error, ctx.now())) await deps.notifier.alert(`Прогон #${run.id} упал`, final.error).catch((ae: unknown) => log.warn("report", `alert failed: ${errMessage(ae)}`));
     } finally {
       clearTimeout(timer);
       clearTimeout(grace);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Config, Notifier } from "@sgz/shared";
+import type { Config, Notifier, RunRequest } from "@sgz/shared";
 import { openStore, type SqliteStore } from "../db/index.js";
 import type { RunnerDeps } from "./deps.js";
 
@@ -13,7 +13,7 @@ vi.mock("./pipeline.js", () => ({
   aggregate: () => ({ by_status: {} }),
   sendReports: async () => false,
 }));
-const { createRunner, maxRunMs, WATCHDOG_GRACE_MS } = await import("./service.js");
+const { createRunner, maxRunMs, repeatFailure, WATCHDOG_GRACE_MS } = await import("./service.js");
 
 let store: SqliteStore;
 let alerts: string[];
@@ -52,5 +52,24 @@ describe("run watchdog", () => {
     expect(store.getRun(id)?.status).toBe(status);
     expect(r.active()).toBeNull();
     expect(alerts).toEqual([`Прогон #${id} остановлен сторожем`]);
+  });
+});
+
+describe("repeatFailure", () => {
+  const store = () => {
+    const m = new Map<string, string>();
+    return { getSetting: (k: string) => m.get(k) ?? null, setSetting: (k: string, v: string) => void m.set(k, v) };
+  };
+  const req = (stage: string, trigger: "schedule" | "manual" = "schedule") => ({ userSlug: "all", source: "hh", stage, dryRun: false, limit: 0, trigger }) as RunRequest;
+  const t0 = new Date("2026-09-23T10:00:00Z");
+
+  it("reports a background failure once per 3h, ignoring digits; manual runs always", () => {
+    const s = store();
+    expect(repeatFailure(s, req("chats"), "run #51: login expired", t0)).toBe(false);
+    expect(repeatFailure(s, req("chats"), "run #52: login expired", new Date(t0.getTime() + 5 * 60_000))).toBe(true);
+    expect(repeatFailure(s, req("chats"), "run #53: login expired", new Date(t0.getTime() + 3 * 3600_000 + 1))).toBe(false);
+    expect(repeatFailure(s, req("chats", "manual"), "run #54: login expired", t0)).toBe(false);
+    expect(repeatFailure(s, req("send:5"), "boom", t0)).toBe(false);
+    expect(repeatFailure(s, req("send:5"), "boom", t0)).toBe(false);
   });
 });
