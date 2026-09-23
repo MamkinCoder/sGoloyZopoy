@@ -5,7 +5,9 @@ import {
   useAdapters,
   useCareerSiteMutations,
   useCareerSites,
+  useLessons,
   useProfile,
+  useResetLessons,
   useSaveProfile,
   useSaveSettings,
   useSettings,
@@ -42,6 +44,7 @@ export function SettingsPage() {
         ))}
       </div>
       {tab === "profile" && <ProfileEditor slug={slug} />}
+      {tab === "profile" && <LetterLessonsBox slug={slug} />}
       {tab === "user" && <UserEditor slug={slug} />}
       {tab === "sites" && <CareerSites slug={slug} />}
       {tab === "schedule" && <ScheduleEditor />}
@@ -172,6 +175,30 @@ function ProfileEditor({ slug }: { slug: string }) {
       </Section>
       <SaveBar dirty={dirty} pending={save.isPending} onReset={() => q.data && reset(q.data)} onSave={() => save.mutate(p, { onSuccess: () => toast.ok("Профиль сохранён") })} />
     </div>
+  );
+}
+
+// Read-only: rebuilt weekly from invited vs. not invited letters, fed into every cover-letter prompt.
+function LetterLessonsBox({ slug }: { slug: string }) {
+  const q = useLessons(slug);
+  const reset = useResetLessons(slug);
+  const lessons = q.data?.lessons ?? [];
+  return (
+    <Section
+      title="Уроки писем"
+      right={
+        <button type="button" className="btn btn-sm" disabled={!lessons.length || reset.isPending} onClick={() => reset.mutate(undefined, { onSuccess: () => toast.ok("Уроки сброшены") })}>
+          Сбросить
+        </button>
+      }
+    >
+      {lessons.length ? (
+        <textarea className="input" rows={Math.min(lessons.length + 1, 9)} readOnly value={lessons.map((l) => `- ${l}`).join("\n")} />
+      ) : (
+        <div className="faint text-[12px]">Пока нет: нужны хотя бы 5 писем с приглашением и 15 без него. Обновляются раз в неделю.</div>
+      )}
+      {q.data?.at && <div className="faint text-[12px] mt-2">Обновлено {fmtDateTime(q.data.at)}</div>}
+    </Section>
   );
 }
 

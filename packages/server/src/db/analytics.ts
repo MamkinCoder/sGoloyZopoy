@@ -27,7 +27,7 @@ const counts = (rows: Row[]): AnalyticsCount[] =>
 
 /** Per-key conversion columns over SENT rows `a`/`v`: only hh sends have negotiation threads, so rates use
  * `hh` as the denominator. "Responded" matches the funnel (thread viewed / invited / rejected). */
-const threadIs = (states: string) =>
+export const threadIs = (states: string) =>
   `EXISTS (SELECT 1 FROM chat_threads t WHERE t.user_id = a.user_id AND t.vacancy_id = a.vacancy_id AND t.state IN (${states}))`;
 const RATE_COLS = `SUM(v.source = 'hh') AS hh, SUM(${threadIs("'viewed','invited','rejected'")}) AS resp, SUM(${threadIs("'invited'")}) AS inv`;
 

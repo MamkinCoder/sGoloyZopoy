@@ -12,6 +12,7 @@ import { handleQueueTap, parseQueueCallback, startPendingSend } from "../runner/
 import { buildDigest, digestDue, queueList } from "../notify/digest.js";
 import { careerRotation } from "../runner/career.js";
 import { remindInterviews } from "../runner/interview.js";
+import { companyReport, refreshLessons } from "../runner/learn.js";
 import { nextJob } from "../scheduler/autopilot.js";
 import { checkHeartbeat } from "../scheduler/health.js";
 import { errMessage } from "../runner/util.js";
@@ -69,6 +70,8 @@ export async function serve(): Promise<void> {
   // Every minute: one job when the runner is idle (see scheduler/autopilot.ts for the order).
   // Career chunks keep a single-run runner from starving the chat bot for hours.
   let lastHealth = Date.now();
+  let lastLearn = 0;
+  let learning = false;
   const tick = async () => {
     void remindInterviews(app.store, app.notifier, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: interview reminders: ${errMessage(e)}`));
     if (Date.now() - lastHealth >= 30 * 60_000) {
@@ -79,6 +82,16 @@ export async function serve(): Promise<void> {
     // «Отправить» tapped in Telegram while a run was busy: those go first.
     if (await startPendingSend(app.store, app.runner).catch((e: unknown) => (console.error(`sgz serve: queued send: ${errMessage(e)}`), false))) return;
     if (app.runner.active()) return; // a panel / Telegram run started during the await
+    // Letter lessons: checked hourly, rebuilt weekly per user once enough outcomes exist (runner/learn.ts).
+    if (!learning && Date.now() - lastLearn >= 60 * 60_000) {
+      lastLearn = Date.now();
+      learning = true;
+      void (async () => {
+        for (const u of app.store.listUsers(true)) await refreshLessons(app.store, app.llm, u);
+      })()
+        .catch((e: unknown) => console.error(`sgz serve: letter lessons: ${errMessage(e)}`))
+        .finally(() => (learning = false));
+    }
     const job = nextJob({
       now: Date.now(),
       lastChatPoll,
@@ -98,10 +111,11 @@ export async function serve(): Promise<void> {
   // Telegram buttons: queue cards (send / skip) and «есть / нет» answers for unknown skills (update the
   // profile, then answer the waiting chats). /status and /queue answer from the configured chats.
   const digestAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
-  const onCommand = async (cmd: string) => {
+  const onCommand = async (cmd: string, args = "") => {
     if (cmd === "/status") return `${app.runner.active() ? `Идёт прогон #${app.runner.active()!.id}` : "Бот свободен"}\n\n${digestAll()}`;
     if (cmd === "/queue") return app.store.listUsers(true).map((u) => queueList(app.store, u, app.cfg.panelUrl)).join("\n\n");
-    return "Команды: /status - итоги дня, /queue - очередь на проверку";
+    if (cmd === "/company") return companyReport(app.store, args);
+    return "Команды: /status - итоги дня, /queue - очередь на проверку, /company <название> - история откликов в компанию";
   };
   const stopCallbacks = app.cfg.tgBotToken
     ? startTelegramCallbacks(app.cfg.tgBotToken, async (data) => {

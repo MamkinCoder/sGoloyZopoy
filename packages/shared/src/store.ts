@@ -70,6 +70,34 @@ export type NewRunEvent = Omit<RunEvent, "id" | "ts">;
 /** createdAt: hh's send time when known; the insert time otherwise. */
 export type NewChatMessage = Omit<ChatMessage, "id" | "threadId" | "createdAt"> & { createdAt?: string };
 
+/** Reply history of one employer (SENT applications of one user); see Store.companyIntel. */
+export interface CompanyIntel {
+  name: string;
+  sent: number;
+  /** An employer message arrived, or the thread reached invited / rejected. */
+  replied: number;
+  invited: number;
+  rejected: number;
+  /** Median hours from the send to the first employer message; null without replies. */
+  medianReplyH: number | null;
+}
+
+/** Conversion of one pool resume over SENT hh applications; see Store.resumeStats. */
+export interface ResumeStat {
+  hhResumeId: string;
+  title: string;
+  sent: number;
+  resp: number;
+  inv: number;
+}
+
+/** A sent cover letter and how it ended: invited, or not (rejected / silent for 14+ days). */
+export interface LetterOutcome {
+  title: string;
+  letter: string;
+  invited: boolean;
+}
+
 export interface Store {
   close(): void;
 
@@ -162,6 +190,12 @@ export interface Store {
   // stats / settings / llm
   userStats(userId: number, sinceISO: string | null): Stats;
   userAnalytics(userId: number, sinceISO: string | null): AnalyticsDTO;
+  /** Per company key (vacancies.company_key) among `keys`; companies without SENT rows are absent. */
+  companyIntel(userId: number, keys: string[]): Record<string, CompanyIntel>;
+  /** Per pool resume, SENT hh applications since `sinceISO`, most used first. */
+  resumeStats(userId: number, sinceISO: string): ResumeStat[];
+  /** SENT hh letters with a known outcome (invited, rejected, or silent for 14+ days), newest first. */
+  letterOutcomes(userId: number, limit: number): LetterOutcome[];
   getSetting(key: string): string | null;
   setSetting(key: string, value: string): void;
   insertLLMCall(c: LLMCall): void;

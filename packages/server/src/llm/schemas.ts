@@ -103,3 +103,6 @@ export function unwrapArray(v: unknown): unknown {
   }
   return v;
 }
+
+/** learn_letters: style lessons from invited vs. not invited letters. */
+export const LessonsSchema = z.object({ lessons: z.array(z.string()).default([]) });

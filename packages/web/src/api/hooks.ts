@@ -302,3 +302,16 @@ export function useSaveSettings() {
     onSuccess: (data) => qc.setQueryData(keys.settings, data),
   });
 }
+
+// ---- letter lessons (outcome learning loop)
+export type LetterLessons = { lessons: string[]; at: string };
+export const useLessons = (slug: string) =>
+  useQuery({ queryKey: ["lessons", slug] as const, queryFn: () => api<LetterLessons>(`/users/${slug}/lessons`) });
+
+export function useResetLessons(slug: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<LetterLessons>(`/users/${slug}/lessons`, { method: "DELETE" }),
+    onSuccess: (data) => qc.setQueryData(["lessons", slug], data),
+  });
+}
