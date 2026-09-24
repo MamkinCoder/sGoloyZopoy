@@ -7,6 +7,9 @@ import type {
   ChatMessageDTO,
   ChatThreadDTO,
   InterviewOutcome,
+  KbStory,
+  KbTag,
+  KbTagStatus,
   DedupRowDTO,
   FilteredItemDTO,
   HealthDTO,
@@ -349,6 +352,31 @@ export function useResetLessons(slug: string) {
     onSuccess: (data) => qc.setQueryData(["lessons", slug], data),
   });
 }
+// ---- knowledge base (tags + stories)
+export type KbStoryBody = Partial<Pick<KbStory, "title" | "company" | "period" | "context" | "did" | "result" | "confirmed">> & { tags?: string[] };
+
+export const useKbTags = (slug: string) => useQuery({ queryKey: ["kb-tags", slug] as const, queryFn: () => api<KbTag[]>(`/users/${slug}/kb/tags`) });
+
+export const useKbStories = (slug: string, tagId: number | null) =>
+  useQuery({ queryKey: ["kb-stories", slug, tagId] as const, queryFn: () => api<KbStory[]>(`/users/${slug}/kb/stories${qs({ tag: tagId })}`) });
+
+export function useKbMutations(slug: string) {
+  const qc = useQueryClient();
+  const onSuccess = () => {
+    qc.invalidateQueries({ queryKey: ["kb-tags", slug] });
+    qc.invalidateQueries({ queryKey: ["kb-stories", slug] });
+    qc.invalidateQueries({ queryKey: keys.profile(slug) });
+  };
+  const base = `/users/${slug}/kb`;
+  return {
+    setStatus: useMutation({ mutationFn: ({ id, status }: { id: number; status: KbTagStatus }) => api<KbTag>(`${base}/tags/${id}`, { method: "PUT", body: { status } }), onSuccess }),
+    create: useMutation({ mutationFn: (body: KbStoryBody) => api<KbStory>(`${base}/stories`, { method: "POST", body }), onSuccess }),
+    update: useMutation({ mutationFn: ({ id, body }: { id: number; body: KbStoryBody }) => api<KbStory>(`${base}/stories/${id}`, { method: "PUT", body }), onSuccess }),
+    confirm: useMutation({ mutationFn: (id: number) => api<KbStory>(`${base}/stories/${id}/confirm`, { method: "POST" }), onSuccess }),
+    remove: useMutation({ mutationFn: (id: number) => api<{ ok: boolean }>(`${base}/stories/${id}`, { method: "DELETE" }), onSuccess }),
+  };
+}
+
 /** Weekly retro (null = fewer than 10 sends this week). */
 export const useRetro = (slug: string) =>
   useQuery({ queryKey: ["retro", slug], queryFn: () => api<RetroDTO | null>(`/users/${slug}/retro`), refetchInterval: 300_000 });

@@ -23,6 +23,7 @@ import type {
   Vacancy,
 } from "./model.js";
 import type { AnalyticsDTO } from "./api.js";
+import type { KbStory, KbTag, KbTagStatus, NewKbStory, NewKbTag } from "./kb.js";
 
 export interface ApplicationFilter {
   userId?: number;
@@ -209,6 +210,19 @@ export interface Store {
   setSetting(key: string, value: string): void;
   insertLLMCall(c: LLMCall): void;
   backup(destPath: string): void;
+
+  // knowledge base (docs/ARCHITECTURE.md section 4; logic in server/src/kb/)
+  /** All tags of a user with story counts, by name. */
+  listKbTags(userId: number): KbTag[];
+  /** Finds a tag by name or alias (case-insensitive) or creates it; merges aliases, sets category/status when given. */
+  upsertKbTag(userId: number, t: NewKbTag): KbTag;
+  setKbTagStatus(tagId: number, status: KbTagStatus): KbTag | null;
+  /** Stories of a user, newest first; with `tagId` only the ones linked to that tag. */
+  listKbStories(userId: number, tagId?: number): KbStory[];
+  getKbStory(id: number): KbStory | null;
+  /** Insert (no id) or update (id); the tag links are replaced by `tagIds`. */
+  saveKbStory(s: NewKbStory & { id?: number }): KbStory;
+  deleteKbStory(id: number): void;
 }
 
 export interface SalaryQuery {

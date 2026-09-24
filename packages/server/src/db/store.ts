@@ -9,6 +9,7 @@ import { chatTasksRepo, type ChatTasksRepo } from "./chat-tasks.js";
 import { chatsRepo } from "./chats.js";
 import { intelRepo } from "./intel.js";
 import { jobsRepo, type JobsRepo } from "./jobs.js";
+import { kbRepo } from "./kb.js";
 import { applyMigrations } from "./migrate.js";
 import { resumesRepo } from "./resumes.js";
 import { runsRepo } from "./runs.js";
@@ -50,5 +51,6 @@ export function openStore(path: string): SqliteStore {
     ...intelRepo(s),
     ...jobsRepo(s),
     ...chatTasksRepo(s),
+    ...kbRepo(s),
   };
 }

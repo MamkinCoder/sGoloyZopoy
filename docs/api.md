@@ -115,6 +115,22 @@ by_status:{}, chat_replies, invitations, rejections, top_vacancies:[], dry_run},
 | DELETE | /career-sites/:id | | `{ok}` |
 | GET | /adapters | | `[string]` registered adapter names |
 
+## Knowledge base (docs/ARCHITECTURE.md section 4)
+| GET | /users/:slug/kb/tags | | `[KbTag]` by name |
+| PUT | /users/:slug/kb/tags/:id | `{status: "yes"\|"no"\|"unknown"}` | `KbTag`; profile skills re-synced; 404 for another user's tag |
+| GET | /users/:slug/kb/stories?tag=<tag id> | | `[KbStory]` newest first; without `tag` all stories |
+| POST | /users/:slug/kb/stories | `{did, title?, company?, period?, context?, result?, tags?: string[]}` | `KbStory` 201: `source: "panel"`, `confirmed: true`; empty title = first sentence of `did` |
+| PUT | /users/:slug/kb/stories/:id | any of the POST fields + `confirmed?` | `KbStory`; `tags` replaces the links, `source`/`hash` are kept |
+| POST | /users/:slug/kb/stories/:id/confirm | | `KbStory` with `confirmed: true` |
+| DELETE | /users/:slug/kb/stories/:id | | `{ok}`; 404 for another user's story |
+
+`KbTag`: `id, userId, name, aliases[], category, status, updatedAt, storyCount`. `KbStory`: `id, userId, title, company,
+period, context, did, result, source: seed|telegram|panel, confirmed, hash, createdAt, updatedAt, tags:[{id, name}]`
+(camelCase: the shared model as is). Tag names in `tags` match existing tags by name or alias (case-insensitive);
+a missing tag is created, and a tag that is new or `unknown` becomes `yes` (a human wrote a story about it; an
+explicit `no` stays). Every status change is mirrored into `profile.verified_skills` / `never_claim_skills`
+(`kb/write.ts` `syncProfileSkills`).
+
 ## System
 | GET | /health | | `{ok, version, uptime_s, mem_rss_mb, active_run_id, scheduler_next, users:[{slug, hh_login_ok:bool\|null, cookies_age_h}]}` |
 | GET | /settings | | `{[key]:value}` |

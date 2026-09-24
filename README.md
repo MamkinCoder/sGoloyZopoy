@@ -87,6 +87,9 @@ pnpm sgz habr-login --user <slug>                      # log in by hand once; sa
 pnpm sgz run --user <slug> --source habr --dry-run --limit 3
 pnpm sgz habr-resume --user <slug>                     # proposal for the ONE Habr profile -> habr-resume.proposal.json
 pnpm sgz habr-resume --user <slug> --apply             # only after the proposal was approved
+pnpm sgz kb seed --user <slug> [--dry-run --out f.json] # knowledge base: tags + stories from CVs/profile/Habr (LLM)
+pnpm sgz kb seed --user <slug> --from f.json           # import a dry-run seed without the LLM (idempotent)
+pnpm sgz kb list --user <slug> [--tag <name>]          # print tags / stories of one tag
 ```
 
 - Runs inside `--source all` (the daily scheduled run: hh, then Habr; career sites go through the autopilot's rotate chunks). Its conversations are answered by the always-on agent's `chats.sync` (see docs/ARCHITECTURE.md).

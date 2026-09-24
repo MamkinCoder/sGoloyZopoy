@@ -128,3 +128,19 @@ export const LessonsSchema = z.object({ lessons: z.array(z.string()).default([])
 /** Mock interview in Telegram (runner/mock.ts): feedback on one answer, then the closing summary. */
 export const MockFeedbackSchema = z.object({ feedback: z.string().min(1), follow_up: z.string().nullable().catch(null).default(null) });
 export const MockSummarySchema = z.object({ tighten: z.array(z.string()).default([]) });
+
+/** Knowledge base (src/kb/llm.ts): kb_seed returns tags + stories, kb_ingest only stories. */
+export const KbStoryOutSchema = z.object({
+  title: z.string(),
+  company: z.string().catch(""),
+  period: z.string().catch(""),
+  context: z.string().catch(""),
+  did: z.string().catch(""),
+  result: z.string().catch(""),
+  tags: z.array(z.string()).catch([]),
+});
+export const KbSeedSchema = z.object({
+  tags: z.array(z.object({ name: z.string(), aliases: z.array(z.string()).catch([]), category: z.string().catch("") })).default([]),
+  stories: z.array(KbStoryOutSchema).default([]),
+});
+export const KbIngestSchema = z.object({ stories: z.array(KbStoryOutSchema).default([]) });
