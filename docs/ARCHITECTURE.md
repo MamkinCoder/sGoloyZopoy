@@ -138,6 +138,17 @@ task: instant, restart-proof, independent of any run.
   automated here: in these chats «Хотите откликнуться?» → «Да» is itself the application (hh's assistant files it),
   and a separate hh apply would duplicate it; the note lets the human check. Every sync marks employer messages
   before our last message in a thread handled, so a chat the seeker answered by hand is replied to only after it.
+- Letter guarantee (2026-09-24): every hh application carries its cover letter. `hh.apply` reports
+  `letterAttached` and appends `letter not attached` (`LETTER_NOT_ATTACHED`) to a SENT row's reason_detail when the
+  letter field could not be filled (optional-letter form) or an instant response had no confirmed letter; apply
+  success is unchanged. `chats.sync` (hh) checks the chat of our SENT application (stored `cover_letter`, applied since
+  `chat_track_since`): a new thread when it is first read, known quiet threads as a backfill (at most
+  `LETTER_MAX_PER_SYNC` = 5 extra reads and 5 letter tasks per sync). No outgoing message containing the letter
+  (hh shows «Без сопроводительного письма»), no employer message, chat writable, not rejected -> a `ready` task with
+  the stored letter as draft goes through the normal `chats.send` (send marker, confirm, supersede if the employer
+  writes first). The letter is never regenerated. Setting `letter_followup:<thread>` = `task:<id>` | `attached` |
+  `employer replied` | `chat closed` makes it once per thread; hh's «Без сопроводительного письма» line, if parsed as
+  an employer message, is marked handled (not a turn).
 - The re-sync after a send is the normal full `chats.sync` pulled to +30 s (key dedupe), not a per-thread sync:
   unchanged threads cost one list read.
 - hh chat-bot surveys (the questionnaire widget) are still answered inside `chats.sync` (one LLM call inside a

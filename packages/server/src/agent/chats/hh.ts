@@ -1,7 +1,7 @@
 // chats.sync, hh.ru part: read the chat list, store new messages, keep today's side effects (invitation
 // alert + prep, rejection feedback request, feedback forwarding, bot surveys, follow-ups) and open a reply task
 // for every thread with unanswered employer messages. Replies themselves are written by the task jobs.
-import type { BrowserSession, ThreadRow, User, Vacancy } from "@sgz/shared";
+import { OPEN_TASK_STATES, Status, type BrowserSession, type ChatMessage, type ChatThread, type ThreadRow, type User, type Vacancy } from "@sgz/shared";
 import { mapNegotiationState } from "../../hh/state.js";
 import { vacancyUrl } from "../../hh/urls.js";
 import { followupChats } from "../../runner/interview.js";
@@ -17,6 +17,55 @@ export const CHAT_TRACK_SINCE_DEFAULT = "2026-09-23";
 /** Chat list pages (20 chats each) read per sync, and chat-list-only chats opened per sync. */
 export const CHAT_LIST_MAX_PAGES = 5;
 export const CHAT_LIST_MAX_OPENS = 10;
+
+/** Letters sent into chats per sync (letter guarantee, below); the rest wait for the next sync. */
+export const LETTER_MAX_PER_SYNC = 5;
+/** hh's own line on an application that went without a letter. */
+const NO_LETTER = /без сопроводительного письма/i;
+export const letterKey = (threadId: number) => `letter_followup:${threadId}`;
+const norm = (s: string) => s.replace(/\s+/g, " ").trim();
+
+/** The letter of our SENT application behind this thread (applied since `since`), or "". */
+function storedLetter(env: ChatEnv, thread: ChatThread, since: string): string {
+  const app = thread.vacancyId === null ? null : env.store.lastApplication(thread.userId, thread.vacancyId);
+  return app?.status === Status.SENT && app.createdAt >= since ? app.coverLetter.trim() : "";
+}
+
+/**
+ * Letter guarantee: every hh application carries its cover letter. When the chat of our SENT application shows no
+ * outgoing message with the stored letter (hh: «Без сопроводительного письма»), the employer has not written yet and
+ * the chat is writable, the stored letter (already filtered when written, never regenerated) goes out once as a
+ * ready task through chats.send. Setting `letter_followup:<thread>` records the decision, so each thread is decided
+ * once. True = a letter task is waiting in this thread (the rest of the sync would close it).
+ */
+function letterFollowup(env: ChatEnv, thread: ChatThread, history: ChatMessage[], chatUrl: string, writable: boolean | undefined, since: string, budget: { left: number }): boolean {
+  const key = letterKey(thread.id);
+  const mark = env.store.getSetting(key);
+  if (mark?.startsWith("task:")) return OPEN_TASK_STATES.includes(env.store.getChatTask(Number(mark.slice(5)))?.state ?? "closed");
+  const letter = mark ? "" : storedLetter(env, thread, since);
+  if (!letter) return false;
+  // hh's «Без сопроводительного письма» line is not an employer turn.
+  env.store.markAnswered(history.filter((m) => m.direction === "in" && !m.answered && NO_LETTER.test(m.text)).map((m) => m.id));
+  const probe = norm(letter).slice(0, 60);
+  const skip =
+    history.some((m) => m.direction === "out" && norm(m.text).includes(probe)) ? "attached"
+    : history.some((m) => m.direction === "in" && !NO_LETTER.test(m.text)) ? "employer replied"
+    : writable === false ? "chat closed"
+    : "";
+  if (skip) {
+    env.store.setSetting(key, skip);
+    return false;
+  }
+  if (budget.left <= 0) return false;
+  budget.left--;
+  const at = env.now().toISOString();
+  const task = env.store.insertChatTask({ userId: thread.userId, threadId: thread.id, messageIds: [], target: chatUrl, state: "ready" }, at);
+  env.store.patchChatTask(task.id, "ready", { draft: letter }, at);
+  env.store.setSetting(key, `task:${task.id}`);
+  env.enqueue("chats.send", { taskId: task.id }, { key: `send:${task.id}`, priority: 1 });
+  env.log.info("chats", `${thread.employer}: no cover letter in the chat, sending the stored one`, { thread_id: thread.id, task_id: task.id });
+  return true;
+}
 
 export const FEEDBACK_REQUEST =
   "Здравствуйте. Спасибо за ответ. Подскажите, пожалуйста, что именно в опыте или навыках не подошло под эту роль? Подробная обратная связь поможет мне прицельнее готовиться, буду благодарен за любые детали.";
@@ -74,6 +123,8 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
       return [];
     })
   ).filter((t) => !listed.has(t.negotiationId) && (listed.add(t.negotiationId), true));
+  let backfill = LETTER_MAX_PER_SYNC;
+  const letters = { left: LETTER_MAX_PER_SYNC };
   const needsLook = (t: ThreadRow): boolean => {
     const prev = known.get(t.negotiationId);
     const recent = !t.lastModified || t.lastModified >= since;
@@ -89,7 +140,9 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
       return true;
     }
     if (t.lastModified && t.lastModified > prev.lastSeenAt) return true;
-    return env.store.listChatMessages(prev.id).some((m) => m.direction === "in" && !m.answered);
+    if (env.store.listChatMessages(prev.id).some((m) => m.direction === "in" && !m.answered)) return true;
+    // Letter backfill: a quiet chat of our application whose letter was never checked (a few per sync).
+    return backfill > 0 && prev.state !== "rejected" && !env.store.getSetting(letterKey(prev.id)) && !!storedLetter(env, prev, since) && backfill-- > 0;
   };
   // The chat list is newest first; a burst of outreach waits for the next sync instead of stretching this one.
   const fromList = extra.filter(needsLook);
@@ -168,6 +221,7 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
         await env.throttle.afterMutation();
         history = env.store.listChatMessages(thread.id);
       }
+      if (letterFollowup(env, thread, history, t.chatUrl, detail.writable, since, letters)) continue;
       if (prev?.state === "needs_human" && inserted === 0) {
         env.log.info("chats", `${t.employer}: still waiting for a human`, { thread_id: thread.id });
         settleThread(env, thread.id, "ждёт человека"); // the human answers on hh; new messages reopen it

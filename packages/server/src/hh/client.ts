@@ -15,6 +15,7 @@ import {
   type SearchParams,
   type ThreadDetail,
   type Vacancy,
+  LETTER_NOT_ATTACHED,
   RunAbortError,
   Status,
   normalizeDedup,
@@ -364,11 +365,9 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
       // hh sends instantly when the account has one resume and no letter is required.
       if (await isSuccessShown(s)) {
         if (req.dryRun) return { status: Status.SKIP_DRY_RUN, reasonDetail: "WARNING: hh sent the response instantly on popup open (dry run could not prevent it)" };
-        if (req.coverLetter.trim()) {
-          const r = await fillLetter(s, req.coverLetter, id);
-          if (r.ok) await submitResponse(s);
-        }
-        return { status: Status.SENT, reasonDetail: "instant response (no popup)" };
+        // hh may still offer a letter field after an instant send; unconfirmed, so the agent's chats.sync checks the chat.
+        const attached = !!req.coverLetter.trim() && (await fillLetter(s, req.coverLetter, id)).ok && (await submitResponse(s));
+        return { status: Status.SENT, reasonDetail: `instant response (no popup)${attached || !req.coverLetter.trim() ? "" : `, ${LETTER_NOT_ATTACHED}`}`, letterAttached: attached };
       }
 
       if (await firstExisting(s, SEL.apply.resumeChooser)) {
@@ -382,9 +381,10 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
         return { status: Status.SKIP_DRY_RUN, reasonDetail: `dry run: ${questions.length} question(s), nothing submitted`, questions };
       }
 
+      let letterAttached = false;
       if (req.coverLetter.trim()) {
-        const r = await fillLetter(s, req.coverLetter, id);
-        if (!r.ok && v.requiresLetter) return fail("letter", "letter is required but could not be filled", Status.FAILED_UI, { questions });
+        letterAttached = (await fillLetter(s, req.coverLetter, id)).ok;
+        if (!letterAttached && v.requiresLetter) return fail("letter", "letter is required but could not be filled", Status.FAILED_UI, { questions });
       }
 
       let answers: Answer[] = [];
@@ -408,7 +408,8 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
       await sleep(settleMs);
       await assertNotBlocked(s);
       if (!(await confirmSent(s))) return fail("confirm", "no «Резюме доставлено» / «Отклик отправлен» after submit", Status.FAILED_NO_CONFIRMATION, { questions, answers });
-      return { status: Status.SENT, reasonDetail: questions.length ? `sent with ${questions.length} answered question(s)` : "sent", questions, answers };
+      const detail = questions.length ? `sent with ${questions.length} answered question(s)` : "sent";
+      return { status: Status.SENT, reasonDetail: letterAttached || !req.coverLetter.trim() ? detail : `${detail}, ${LETTER_NOT_ATTACHED}`, letterAttached, questions, answers };
     } catch (e) {
       if (e instanceof RunAbortError) throw e;
       return fail("error", e instanceof Error ? e.message : String(e));

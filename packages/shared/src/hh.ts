@@ -34,10 +34,15 @@ export interface ApplyRequest {
   answerQuestions: (qs: Question[]) => Promise<Answer[]>;
 }
 
+/** Appended to a SENT application's reason_detail when the cover letter did not go with it. */
+export const LETTER_NOT_ATTACHED = "letter not attached";
+
 export interface ApplyResult {
   status: Status;
   reasonDetail: string;
   snapshotPath?: string;
+  /** SENT only: the letter field was filled (and, after an instant send, submitted). false = no letter went with it. */
+  letterAttached?: boolean;
   questions?: Question[];
   answers?: Answer[];
 }

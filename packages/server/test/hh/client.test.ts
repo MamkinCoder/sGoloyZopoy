@@ -165,6 +165,37 @@ describe("hh client offline flows", () => {
     expect(t.writable).toBe(true);
   });
 
+  it("reports whether the letter went with an instant response", async () => {
+    const run = async (letterFills: boolean) => {
+      const s = new FakeSession(
+        { "https://hh.ru/vacancy/111": { html: fixture("vacancy.html"), existing: ['[data-qa="vacancy-response-link-top"]'] } },
+        {
+          onClick: (sel, f) => sel.includes("response-link-top") && f.addExisting('[data-qa="vacancy-response-success"]'),
+          onAct: (_i, o) => (o?.cacheKey === "hh.apply.letter_fill" ? letterFills : true),
+        },
+      );
+      return client.apply(s, { vacancy: { ...vacancy, requiresLetter: false }, resumeTitle: "Go", coverLetter: "Здравствуйте.", allowOtherCountry: false, dryRun: false, answerQuestions: async () => [] });
+    };
+    expect(await run(true)).toMatchObject({ status: Status.SENT, reasonDetail: "instant response (no popup)", letterAttached: true });
+    expect(await run(false)).toMatchObject({ status: Status.SENT, reasonDetail: "instant response (no popup), letter not attached", letterAttached: false });
+  });
+
+  it("a letter that cannot be filled on an optional-letter form still sends, flagged «letter not attached»", async () => {
+    const run = async (textarea: boolean) => {
+      const form = ['[data-qa="vacancy-response-submit-popup"]', ...(textarea ? ['textarea[name="letter"]'] : [])];
+      const s = new FakeSession(
+        { "https://hh.ru/vacancy/111": { html: fixture("vacancy.html"), existing: ['[data-qa="vacancy-response-link-top"]'] } },
+        {
+          onClick: (sel, f) => (sel.includes("response-link-top") ? f.addExisting(...form) : sel.includes("submit") && f.addExisting('[data-qa="vacancy-response-success"]')),
+          onAct: (_i, o) => o?.cacheKey !== "hh.apply.letter_fill",
+        },
+      );
+      return client.apply(s, { vacancy: { ...vacancy, requiresLetter: false }, resumeTitle: "Go", coverLetter: "Здравствуйте.", allowOtherCountry: false, dryRun: false, answerQuestions: async () => [] });
+    };
+    expect(await run(true)).toMatchObject({ status: Status.SENT, reasonDetail: "sent", letterAttached: true });
+    expect(await run(false)).toMatchObject({ status: Status.SENT, reasonDetail: "sent, letter not attached", letterAttached: false });
+  });
+
   it("dry-run opens the response form but never submits or sends chat", async () => {
     const s = new FakeSession(
       { "https://hh.ru/vacancy/111": { html: fixture("vacancy.html"), existing: ['[data-qa="vacancy-response-link-top"]', '[data-qa="resume-select-radio"]', '[data-qa="vacancy-response-questions"]'] } },
