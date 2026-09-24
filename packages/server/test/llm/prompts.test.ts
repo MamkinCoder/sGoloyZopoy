@@ -49,7 +49,7 @@ describe("prompt templates", () => {
   it("answer_chat", async () => check("answer_chat", await capture("answer_chat", (l) => l.answerChat(profile, vacancies[0]!, history))));
   it("answer_chat with a knowledge-base block", async () => {
     const kb = "Навыки по теме:\n- Jest: есть опыт (историй: 1)\n- Vitest: нет в опыте, не заявлять\n\nИстории из опыта (единственный материал об опыте):\n\n### Тесты биллинга [Jest]\nЯндекс, 2022-2024\nЧто сделал: Писал unit-тесты на Jest.";
-    const prompt = await capture("answer_chat", (l) => l.answerChat(profile, vacancies[0]!, history, [], kb));
+    const prompt = await capture("answer_chat", (l) => l.answerChat(profile, vacancies[0]!, history, [], { text: kb, no: [] }));
     check("answer_chat_kb", prompt);
     expect(prompt).toContain("## База знаний: опыт по темам вопроса\n\nНавыки по теме:");
   });

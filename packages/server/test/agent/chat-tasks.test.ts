@@ -1,6 +1,6 @@
 // Chat reply tasks end to end: sync -> triage -> review (one KB card) -> draft -> send.
 import { afterEach, describe, expect, it } from "vitest";
-import { FALLBACK_AFTER_MS, onLegacySkillTap, REMIND_AFTER_MS, SEND_RESYNC_MS } from "../../src/agent/chats/tasks.js";
+import { FALLBACK_AFTER_MS, REMIND_AFTER_MS, SEND_RESYNC_MS } from "../../src/agent/chats/tasks.js";
 import { chatHarness, inMsg } from "./harness.js";
 
 let h: ReturnType<typeof chatHarness>;
@@ -159,21 +159,6 @@ describe("chat reply tasks", () => {
     await h.sync();
     expect(h.tasks()).toHaveLength(2);
     expect(h.tasks()[1]!.messageIds).toHaveLength(2);
-  });
-
-  it("an old one-skill card (sk:) answers the open task waiting for that skill", async () => {
-    h = chatHarness();
-    h.page.messages = [inMsg("1", "Работали с Vitest?")];
-    h.llm.onTriageChat = () => ({ kind: "question", topics: ["Vitest"] });
-    await h.sync();
-    expect(onLegacySkillTap(h.env, { has: true, userId: h.user.id, key: "vitest" })).toContain("отвечаю работодателю");
-    await h.drain();
-    expect(h.tasks()[0]!.state).toBe("sent");
-    expect(onLegacySkillTap(h.env, { has: true, userId: h.user.id, key: "vitest" })).toBe("уже учтено");
-    // No open task: only remembered.
-    h.store.setSetting(`skill_pending:${h.user.id}:clickhouse`, "ClickHouse");
-    expect(onLegacySkillTap(h.env, { has: false, userId: h.user.id, key: "clickhouse" })).toContain("запомнил");
-    expect(h.store.getProfile(h.user.id)!.never_claim_skills).toContain("ClickHouse");
   });
 
   it("reminds after 2 h once, answers honestly without the skill after 12 h", async () => {

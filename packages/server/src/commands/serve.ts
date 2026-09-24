@@ -7,9 +7,7 @@ import { readMemAvailableMB } from "../runner/budget.js";
 import { createScheduler } from "../scheduler/index.js";
 import { telegramFetch } from "../notify/proxy.js";
 import { startTelegramCallbacks } from "../notify/telegram.js";
-import { parseSkillCallback } from "../runner/skills.js";
-import { onCardTap, onLegacySkillTap } from "../agent/chats/tasks.js";
-import { kbText, onKbTap, parseCardCallback, parseKbCallback } from "../agent/chats/review.js";
+import { kbText, onKbTap, parseKbCallback } from "../agent/chats/review.js";
 import { chatSchedules } from "../agent/chats/index.js";
 import { handleQueueTap, parseQueueCallback, startPendingSend } from "../runner/queue-cards.js";
 import { buildDigest, digestDue, queueList } from "../notify/digest.js";
@@ -117,8 +115,8 @@ export async function serve(): Promise<void> {
     if (job?.kind === "touch") void start({ userSlug: "all", source: "hh", stage: "touch" }).then((id) => typeof id === "number" && app.store.setSetting("touch_last_at", new Date().toISOString())); else if (job?.kind === "career") void start({ userSlug: job.userSlug, source: "career", stage: "rotate" });
   };
   // Telegram buttons: queue cards (send / skip), «📚 Чеклист» (runner/study.ts) and the chat reply cards'
-  // KB review buttons «Подтвердить / Дополнить / Нет навыка» per topic (agent/chats/review.ts: the answer goes into the task, the card is edited in place; phase-1 «ct:» ✅/❌ and old one-skill
-  // «sk:» cards map to the open task). /status and /queue answer from the configured chats.
+  // KB review buttons «Подтвердить / Дополнить / Нет навыка» per topic (agent/chats/review.ts: the answer goes into the task, the card is edited in place; old phase-1
+  // «ct:» and one-skill «sk:» cards only get «кнопка устарела»). /status and /queue answer from the configured chats.
   const digestAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
   const retroAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildRetro(app.store, u, app.cfg.tz, new Date()) ?? `Мало данных: за неделю меньше ${MIN_SENT} откликов`}`).join("\n\n");
   const onCommand = async (cmd: string, args = "", chatId = "") => {
@@ -151,12 +149,8 @@ export async function serve(): Promise<void> {
           app.store.setInterviewOutcome(io.threadId, io.outcome);
           return `Записал: ${OUTCOME_LABEL[io.outcome]}`;
         }
-        const card = parseCardCallback(data);
-        if (card) return chats ? onCardTap(chats, card) : AGENT_OFF;
-        const cb = parseSkillCallback(data);
-        if (cb) return chats ? onLegacySkillTap(chats, cb) : AGENT_OFF;
-        return "неизвестная кнопка";
-      }, { fetch: telegramFetch(), commands: { chatIds: [app.cfg.tgChatId, ...app.store.listUsers().map((u) => u.tgChatId)].filter(Boolean), onCommand, onText } })
+        return "кнопка устарела"; // old cards (phase-1 «ct:», one-skill «sk:») and anything unknown
+      }, { fetch: telegramFetch(), store: app.store, commands: { chatIds: [app.cfg.tgChatId, ...app.store.listUsers().map((u) => u.tgChatId)].filter(Boolean), onCommand, onText } })
     : null;
   const chatPoll = app.cfg.runnerEnabled ? setInterval(() => void tick(), 60_000) : null;
   // Evening digest: once a day at settings.digest_at ("" = off), independent of the runner.

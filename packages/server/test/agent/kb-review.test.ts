@@ -2,7 +2,7 @@
 // «Дополнить» / «Нет навыка», the free-text story -> kb.ingest -> expanded, modes, the draft's KB block, fallback.
 import { afterEach, describe, expect, it } from "vitest";
 import { askStoryText, kbText, parseKbCallback } from "../../src/agent/chats/review.js";
-import { FALLBACK_AFTER_MS, onCardTap } from "../../src/agent/chats/tasks.js";
+import { FALLBACK_AFTER_MS } from "../../src/agent/chats/tasks.js";
 import { chatHarness, inMsg, TG_CHAT } from "./harness.js";
 
 let h: ReturnType<typeof chatHarness>;
@@ -13,7 +13,7 @@ afterEach(() => {
 
 const reviews = () => h.store.listKbReviews(h.tasks().at(-1)!.id);
 const tag = (name: string) => h.store.listKbTags(h.user.id).find((t) => t.name === name)!;
-const draftKb = () => String(h.llm.calls.filter((c) => c.method === "answerChat").at(-1)!.args[4]);
+const draftKb = () => (h.llm.calls.filter((c) => c.method === "answerChat").at(-1)!.args[4] as { text: string } | undefined)?.text ?? "";
 
 /** One employer question about `topics`, synced up to the card. */
 async function ask(topics: string[], text = `Есть опыт с ${topics.join(", ")}?`) {
@@ -223,6 +223,23 @@ describe("KB review card", () => {
     expect(h.tap("Нет навыка Rust", h.asks[0])).toMatchObject({ note: "уже учтено" });
   });
 
+  it("the draft goes through kbBrief like letters: a fallback «нет» topic leaves the stories and joins the reply guard", async () => {
+    h = chatHarness();
+    h.story("Go", { title: "Платёжный шлюз", did: "Писал шлюз на Go. Переписал воркер на Rust ради скорости." });
+    h.story("Go", { title: "Rust-прототип", did: "Собрал прототип." });
+    await ask(["Rust"], "Есть опыт с Rust? У нас Go.");
+    h.advance(FALLBACK_AFTER_MS);
+    await h.drain();
+    const call = h.llm.calls.filter((c) => c.method === "answerChat").at(-1)!;
+    const kb = call.args[4] as { text: string; no: string[] };
+    expect(kb.text).toContain("- Rust: нет в опыте, не заявлять");
+    expect(kb.text).toContain("Писал шлюз на Go.");
+    expect(kb.text).not.toContain("воркер на Rust"); // the sentence naming it is gone
+    expect(kb.text).not.toContain("Rust-прототип"); // a title naming it drops the story
+    expect(kb.no).toContain("Rust");
+    expect((call.args[0] as { never_claim_skills: string[] }).never_claim_skills).toContain("Rust");
+  });
+
   it("a denied tag's aliases and story sentences never reach the draft; its aliases reach the reply guard", async () => {
     h = chatHarness();
     h.store.upsertKbTag(h.user.id, { name: "PostgreSQL", aliases: ["postgres"] });
@@ -234,18 +251,6 @@ describe("KB review card", () => {
     expect(draftKb()).not.toContain("postgres-реплику");
     const profile = h.llm.calls.filter((c) => c.method === "answerChat").at(-1)!.args[0] as { never_claim_skills: string[] };
     expect(profile.never_claim_skills).toEqual(expect.arrayContaining(["PostgreSQL", "postgres"]));
-  });
-
-  it("phase-1 ct: buttons still resolve the topic (y = confirm, n = no skill)", async () => {
-    h = chatHarness();
-    await ask(["Jest", "Vitest"]);
-    const id = h.tasks()[0]!.id;
-    expect(onCardTap(h.env, { taskId: id, idx: 0, has: true })).toMatchObject({ note: "✅ Jest" });
-    onCardTap(h.env, { taskId: id, idx: 1, has: false });
-    expect(reviews().map((r) => r.state)).toEqual(["confirmed", "denied"]);
-    expect([tag("Jest").status, tag("Vitest").status]).toEqual(["yes", "no"]);
-    await h.drain();
-    expect(h.tasks()[0]!.state).toBe("sent");
   });
 
   it("parses kr: callbacks", () => {

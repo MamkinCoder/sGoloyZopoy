@@ -5,11 +5,10 @@
 //   failed: a job exhausted its retries, or a send could not be confirmed (alerted per task by failTask)
 // Every step is a job keyed by the task id, reads the task from the DB and moves it with compare-and-set,
 // so repeats, restarts and a sync racing a draft are harmless.
-import { OPEN_TASK_STATES, tagIs, type ChatMessage, type ChatTask, type ChatThread, type ChatTopic, type KbBrief, type Profile, type TapReply, type Vacancy } from "@sgz/shared";
+import { OPEN_TASK_STATES, tagIs, type ChatMessage, type ChatTask, type ChatThread, type ChatTopic, type KbBrief, type Profile, type Vacancy } from "@sgz/shared";
 import { conversationUrl } from "../../habr/state.js";
-import { kbFor, renderKb, withKbNever, withoutNo } from "../../kb/context.js";
+import { kbBrief } from "../../kb/context.js";
 import { asksQuestion } from "../../hh/state.js";
-import { learnedSkills, legacySkillName, skillKey, withLearnedSkills } from "../../runner/skills.js";
 import { errMessage } from "../../runner/util.js";
 import { shortStamp } from "../../scheduler/tz.js";
 import { userById, type ChatEnv } from "./env.js";
@@ -94,7 +93,7 @@ export async function triageTask(env: ChatEnv, taskId: number): Promise<void> {
   if (!task || !env.store.moveChatTask(task.id, ["new", "triage"], "triage", {}, iso(env))) return;
   const history = env.store.listChatMessages(task.threadId);
   const fresh = history.filter((m) => task.messageIds.includes(m.id));
-  const r = await env.llm.triageChat(knownProfile(env, task.userId), history, fresh);
+  const r = await env.llm.triageChat(profileOf(env, task.userId), history, fresh);
   if (r.kind === "ack_only" || r.kind === "rejection") {
     // Today's behaviour: no reply (a rejection's feedback request is sent by chats.sync from the hh state).
     if (env.store.moveChatTask(task.id, "triage", "closed", { kind: r.kind, lastError: r.kind === "ack_only" ? "ответ не нужен" : "отказ" }, iso(env))) env.store.markAnswered(task.messageIds);
@@ -154,41 +153,6 @@ export async function fallbackTask(env: ChatEnv, taskId: number): Promise<void> 
 
 // ------------------------------------------------------------ Telegram taps
 
-/** A tap on a phase-1 grouped card (`ct:`, ✅ = confirm, ❌ = no skill; KB cards use review.ts onKbTap): the answer goes into the task, the same card is edited. Only when every topic
- *  has an answer (any mix of ✅/❌) the task moves on to drafting. */
-export function onCardTap(env: ChatEnv, tap: { taskId: number; idx: number; has: boolean }): TapReply | string {
-  const task = env.store.getChatTask(tap.taskId);
-  const topic = task?.topics[tap.idx];
-  if (!task || !topic) return "эта карточка уже неактуальна";
-  let target = task;
-  if (task.state !== "awaiting_review") {
-    // The employer wrote again: the card belongs to a superseded task, the answer goes to the open one.
-    const open = env.store.openChatTask(task.threadId);
-    if (open?.state === "awaiting_review" && open.topics.some((t) => same(t.name, topic.name) && t.answer === null)) target = open;
-    else return { note: "уже учтено", ...env.review.card(task, stateFooter(task)) };
-  }
-  const done = answerTopic(env, target, topic.name, tap.has);
-  if (!done) return { note: "уже учтено", ...env.review.card(task, stateFooter(task)) };
-  return { note: `${tap.has ? "✅" : "❌"} ${topic.name}`, ...env.review.card(done, done.state === "awaiting_review" ? undefined : READY_FOOTER) };
-}
-
-/** Old one-skill cards (`sk:y|n:<user>:<key>`): the answer goes to every open task of that user waiting for
- *  the same skill; with none, it is only remembered. */
-export function onLegacySkillTap(env: ChatEnv, cb: { has: boolean; userId: number; key: string }): string {
-  let name = legacySkillName(env.store, cb.userId, cb.key, true);
-  let hit = 0;
-  for (const t of env.store.listChatTasks("awaiting_review")) {
-    if (t.userId !== cb.userId) continue;
-    const tp = t.topics.find((x) => x.answer === null && (skillKey(x.name) === cb.key || (name !== null && same(x.name, name))));
-    if (!tp) continue;
-    name ??= tp.name;
-    if (answerTopic(env, t, tp.name, cb.has)) hit++;
-  }
-  if (!name) return "уже учтено";
-  if (!hit) env.review.record(cb.userId, name, cb.has);
-  return `${cb.has ? "✅" : "❌"} ${name} ${cb.has ? "есть" : "нет"}${hit ? ", отвечаю работодателю" : ", запомнил"}`;
-}
-
 /** Writes the answer (and remembers it via the gate); returns the updated task, null when nothing changed.
  *  Topics that are aliases of the same KB tag (Go / Golang) get the same answer. */
 export function answerTopic(env: ChatEnv, task: ChatTask, name: string, has: boolean): ChatTask | null {
@@ -214,36 +178,29 @@ export function stateFooter(task: ChatTask): string {
 
 // ------------------------------------------------------------ chats.draft (llm)
 
-/** Profile + learned skills: what the gate treats as known. */
-function knownProfile(env: ChatEnv, userId: number): Profile {
+/** The stored profile: its skill lists are the KB tag statuses (syncProfileSkills is their only writer). */
+function profileOf(env: ChatEnv, userId: number): Profile {
   const p = env.store.getProfile(userId);
   if (!p) throw new Error(`no profile for user ${userId}`);
-  return withLearnedSkills(p, learnedSkills(env.store, userId));
+  return p;
 }
 
-/** The profile the draft sees: known skills plus this task's answers (✅ -> verified, ❌ -> never claim). */
-export function draftProfile(p: Profile, topics: ChatTopic[]): Profile {
-  const yes = topics.filter((t) => t.answer === "yes").map((t) => t.name);
-  const no = topics.filter((t) => t.answer === "no").map((t) => t.name);
-  return withLearnedSkills(p, { yes, no });
-}
-
-/** KB block for the draft: the task topics + tags named in the vacancy / question, statuses as this task
- *  answered them (a fallback «нет» is not claimed even while the tag is unknown), the best stories. */
-/** Stories lose what they say about `no` tags and this task's «нет» topics, and those names with their aliases
- *  come back in `no` for the reply guard (withKbNever), as for application texts. */
-export function draftKb(env: ChatEnv, task: ChatTask, vacancy: Vacancy | null, history: ChatMessage[]): KbBrief {
+/** KB block for the draft, through the same kbBrief filter as letters: the task topics + tags named in the vacancy
+ *  / question, this task's answers as overrides (a fallback «нет» is not claimed even while the tag is unknown: its
+ *  sentences leave the stories and it joins `no`, which answerChat adds to never_claim via withKbNever). */
+export function draftKb(env: ChatEnv, task: ChatTask, vacancy: Vacancy | null, history: ChatMessage[]): KbBrief | undefined {
   const asked = history.filter((m) => task.messageIds.includes(m.id)).map((m) => m.text);
   const text = [vacancy ? `${vacancy.title}\n${vacancy.descriptionText}` : "", ...asked].join("\n");
-  const tags = env.store.listKbTags(task.userId);
-  const { stories, no } = withoutNo(tags, env.store.listKbStories(task.userId), task.topics.filter((t) => t.answer === "no").map((t) => t.name));
-  const kb = kbFor({ listKbTags: () => tags, listKbStories: () => stories }, task.userId, { tags: task.topics.map((t) => t.name), text }, KB_BUDGET);
-  const topics = kb.topics.map((t) => {
-    const answer = task.topics.find((x) => same(x.name, t.name))?.answer;
-    return answer ? { ...t, status: answer } : t;
-  });
-  return { text: renderKb({ ...kb, topics }), no };
+  const overrides = task.topics.flatMap((t) => (t.answer ? [{ name: t.name, status: t.answer }] : []));
+  return kbBrief(env.store, task.userId, { tags: task.topics.map((t) => t.name), text, overrides }, KB_BUDGET);
 }
+
+/** A «yes» of this task is a verified skill for the draft even when the topic is only an alias of the tag
+ *  (Golang / Go) or a new_only confirmed story: otherwise the model would ask about it again (unknown_skills). */
+const withYes = (p: Profile, topics: ChatTopic[]): Profile => {
+  const add = topics.filter((t) => t.answer === "yes" && !p.verified_skills.some((s) => same(s, t.name))).map((t) => t.name);
+  return add.length ? { ...p, verified_skills: [...p.verified_skills, ...add] } : p;
+};
 
 export async function draftTask(env: ChatEnv, taskId: number): Promise<void> {
   const task = env.store.getChatTask(taskId);
@@ -252,8 +209,7 @@ export async function draftTask(env: ChatEnv, taskId: number): Promise<void> {
   if (!thread) throw new Error(`thread ${task.threadId} not found`);
   const history = env.store.listChatMessages(thread.id);
   const vacancy = thread.vacancyId === null ? null : env.store.getVacancy(thread.vacancyId);
-  const kb = draftKb(env, task, vacancy, history);
-  const reply = await env.llm.answerChat(withKbNever(draftProfile(knownProfile(env, task.userId), task.topics), kb), vacancy, history, task.choices, kb.text);
+  const reply = await env.llm.answerChat(withYes(profileOf(env, task.userId), task.topics), vacancy, history, task.choices, draftKb(env, task, vacancy, history));
   const unknown = (reply.unknown_skills ?? []).filter((s) => !task.topics.some((t) => sameSkill(env, task.userId, t.name, s)));
   if (unknown.length) {
     // A skill triage missed: back to the gate with it (a new round: the reminder may come again).

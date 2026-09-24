@@ -8,7 +8,6 @@ import { tagIs, type ChatTask, type ChatTopic, type KbReview, type KbStory, type
 import { ingestKb, saveIngested } from "../../kb/llm.js";
 import { syncProfileSkills } from "../../kb/write.js";
 import { escapeHtml } from "../../notify/format.js";
-import { learnSkill } from "../../runner/skills.js";
 import type { ChatEnv, ChatStore } from "./env.js";
 import { answerTopic, READY_FOOTER, stateFooter } from "./tasks.js";
 
@@ -25,12 +24,6 @@ export interface ReviewGate {
   storiesShown(task: ChatTask): number;
   /** The task stopped waiting (12 h fallback): its open reviews expire. */
   expire(taskId: number): void;
-}
-
-/** Phase-1 cards still in the chat: `ct:<taskId>:<topicIndex>:<y|n>` (y = confirm, n = no skill). */
-export function parseCardCallback(data: string): { taskId: number; idx: number; has: boolean } | null {
-  const m = /^ct:(\d+):(\d+):([yn])$/.exec(data);
-  return m ? { taskId: Number(m[1]), idx: Number(m[2]), has: m[3] === "y" } : null;
 }
 
 /** c = Подтвердить, e = Дополнить, d = Нет навыка. */
@@ -176,7 +169,6 @@ export function kbReviewGate(store: ChatStore, notifier: Pick<Notifier, "ask" | 
     record(userId, topic, has, taskId) {
       const tag = topicTag(store, userId, topic);
       store.setKbTagStatus(tag.id, has ? "yes" : "no");
-      learnSkill(store, userId, tag.name, has); // the phase-1 learned answers must not override the KB
       syncProfileSkills(store, userId);
       if (taskId === undefined) return;
       for (const r of store.listKbReviews(taskId)) if (r.tagId === tag.id) store.resolveKbReview(r.id, has ? "confirmed" : "denied", iso());

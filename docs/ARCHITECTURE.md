@@ -106,7 +106,12 @@ task: instant, restart-proof, independent of any run.
   answered by it: typed employer text next to it gets a reply task. Habr's «вы договорились о работе?» survey
   marks only itself handled.
 - The agent's tables are on `SqliteStore` (`db/jobs.ts`, `db/chat-tasks.ts`, `db/kb-reviews.ts`), not on the shared `Store` contract:
-  only the agent and the API view (`ApiDeps.agent`) use them. Stage `chats` is gone from runs entirely.
+  only the agent and the API view (`ApiDeps.agent`) use them. Stage `chats` is gone from runs entirely (batch A: also
+  from the shared `Stage` type; `JobsRepo.getJob`, used only by tests, is deleted).
+- Batch A: the Telegram `getUpdates` offset is persisted (setting `tg_offset`, read at start, saved before each
+  update is handled), so a restart (every deploy) never replays an update: a replayed «Дополнить» story would land
+  on the next waiting review and mark the wrong tag `yes`. At most once on purpose. `Notifier.edit` goes through the
+  same retry loop as sends (network / 429 / 5xx), then only logs.
 
 ## 4. Knowledge base (the seeker's experience, replacing "master CV" as the source of truth)
 
@@ -148,6 +153,13 @@ kb_reviews(id, user_id, task_id NULL, tag_id, state: pending|confirmed|expanded|
   Removal matches the tag name only (an alias never deletes an entry). The reverse: a panel edit of the profile
   lists (`PUT /users/:slug/profile`, `applyProfileSkills`) moves the tags first (name in never -> `no`, in verified
   -> `yes`, in neither -> `unknown`), so the next sync keeps the edit.
+  As built (batch A): **`kb_tags.status` is the only source of skill claims.** The phase-1 `skills_learned:<user>`
+  setting (+ `learnSkill` / `learnedSkills` / `withLearnedSkills`, `runner/skills.ts`) is deleted; migration `008a`
+  folded it into the tags (only where a tag was `unknown`, missing tags created) and dropped the settings. Writers
+  only move tags, `syncProfileSkills` is the one (one-way) writer of the profile lists: a Telegram answer
+  (`record`: `setKbTagStatus` + sync), a panel edit (`applyProfileSkills`, which now also creates a tag for a listed
+  skill no tag knows, + sync), `sgz db import-profile` (`importProfile`: profile.yaml sets only tags with no status
+  yet, never_claim first, a human answer wins; then sync).
 - **Ingest** (`kb/llm.ts ingestKb`, pure, phase 3 calls it): the human's text -> 1..3 stories, numbers only from
   that text; `saveIngested` stores them `confirmed` and marks the asked tag `yes`.
 - **Telegram review card** (one per chat task, all topics in one message):
@@ -169,10 +181,16 @@ kb_reviews(id, user_id, task_id NULL, tag_id, state: pending|confirmed|expanded|
   edited via `Notifier.edit` (also after an empty or failed ingest, which says so per topic). Every text is its
   own `kb.ingest` (a second story is never dropped); «Нет навыка» tapped during the ingest wins. A topic the KB does not know becomes a tag with the profile's yes/no when listed,
   else `unknown`. `new_only` also skips tags already `no`; `off` answers from the tag status (unknown = not
-  claimed). Human answers also write `skills_learned:<user>` so `withLearnedSkills` never contradicts the KB.
-  `chats.draft` (round 3: stories without the `no` tags' and this task's «нет» topics' sentences, and their names +
-  aliases join never_claim for the reply guard via `withKbNever`) passes `renderKb(kbFor(topics + vacancy + question))` with this task's answers as statuses into
-  `answer_chat` (`{{kb}}` block). Old `ct:` taps map to confirm / no skill.
+  claimed). `chats.draft` (round 3: stories without the `no` tags' and this task's «нет» topics' sentences, and their
+  names + aliases join never_claim for the reply guard via `withKbNever`) passes a KB block over topics + vacancy +
+  question with this task's answers as statuses into `answer_chat` (`{{kb}}` block).
+  As built (truth + cleanup, batch A): the draft block is `kbBrief(..., {tags, text, overrides})`, the same filter as
+  letters; `overrides` are the task's answers (incl. the 12 h fallback «нет»), a «no» override is scrubbed from the
+  stories and joins `no` like a status-`no` tag, an asked `no` topic keeps its «не заявлять» line.
+  `answerChat(..., kb?: KbBrief)` applies `withKbNever` itself like the other generators; the only per-task profile
+  change left is a «да» topic added to verified_skills for that draft (an alias like Golang must not come back as
+  unknown_skills). `draftProfile` / `knownProfile` are gone (triage and draft read `getProfile`). Old `ct:` / `sk:`
+  buttons only answer «кнопка устарела» (their handlers are deleted).
 - **Consumers** (all through one module `kb/context.ts`: `kbFor(userId, {tags?, text?}, budget)` returning
   ranked stories + tag statuses, rendered for prompts):
   chat drafting, questionnaire answers, cover letters, interview prep/study packs, `tailor_cv` (LaTeX CVs are

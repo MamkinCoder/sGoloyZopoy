@@ -1,4 +1,4 @@
-import type { Notifier, Run, TapReply, TgButton, User } from "@sgz/shared";
+import type { Notifier, Run, Store, TapReply, TgButton, User } from "@sgz/shared";
 import { chunkMessage, formatAlert, formatReport } from "./format.js";
 
 export interface TelegramOptions {
@@ -19,16 +19,17 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
   }
   const doFetch = opts.fetch ?? fetch;
 
-  /** Resolves to the sent message's id (null when Telegram's answer had none). */
-  async function sendOne(chat: string, text: string, extra: Record<string, unknown> = {}): Promise<number | null> {
+  /** sendMessage / editMessageText with retries (network, 429, 5xx); resolves to the message id (null when
+   *  Telegram's answer had none). */
+  async function call(method: string, payload: Record<string, unknown>): Promise<number | null> {
     let lastErr = "";
     for (let attempt = 1; attempt <= RETRIES; attempt++) {
       let res: Response;
       try {
-        res = await doFetch(`${BASE}/bot${token}/sendMessage`, {
+        res = await doFetch(`${BASE}/bot${token}/${method}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ chat_id: chat, text, parse_mode: "HTML", disable_web_page_preview: true, ...extra }),
+          body: JSON.stringify({ parse_mode: "HTML", disable_web_page_preview: true, ...payload }),
         });
       } catch (e) {
         lastErr = e instanceof Error ? e.message : String(e);
@@ -58,6 +59,7 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
     }
     throw new Error(`telegram: giving up after ${RETRIES} attempts: ${lastErr}`);
   }
+  const sendOne = (chat: string, text: string, extra: Record<string, unknown> = {}) => call("sendMessage", { chat_id: chat, text, ...extra });
 
   async function send(chat: string, text: string): Promise<void> {
     if (!chat) {
@@ -71,13 +73,9 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
     report: (user: User, run: Run) => send(user.tgChatId || chatId, formatReport(user, run, panelUrl, opts.tz)),
     alert: (title: string, body: string) => send(chatId, formatAlert(title, body)),
     ask: async (text: string, buttons: TgButton[] | TgButton[][]) => (await sendOne(chatId, text, buttons.length ? { reply_markup: keyboard(buttons) } : {})) ?? undefined,
+    // A card edit is cosmetic: retried like a send, then only logged.
     edit: async (messageId: number, text: string, buttons: TgButton[][]) => {
-      const res = await doFetch(`${BASE}/bot${token}/editMessageText`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, message_id: messageId, text, parse_mode: "HTML", disable_web_page_preview: true, reply_markup: keyboard(buttons) }),
-      });
-      if (!res.ok) warn(`telegram: editMessageText ${res.status}`);
+      await call("editMessageText", { chat_id: chatId, message_id: messageId, text, reply_markup: keyboard(buttons) }).catch((e: unknown) => warn(`telegram: editMessageText: ${e instanceof Error ? e.message : String(e)}`));
     },
   };
 }
@@ -101,9 +99,17 @@ export interface TelegramCommands {
  * appended to the original message (its buttons go away); a TapReply replaces the message text and buttons
  * (a grouped card that stays tappable), its `say` follows as a new message. `onTap` gets the tapped chat's id.
  * With `commands`, also answers «/command» messages.
+ * With `store`, the update offset lives in setting `tg_offset`, read at start and saved before each update is
+ * handled: a restart (every deploy) never hands the same update over again. At most once on purpose: a replayed
+ * free text would go to the next waiting KB review and save the story under the wrong tag.
  * Returns a stop function. One consumer per bot token.
  */
-export function startTelegramCallbacks(token: string, onTap: (data: string, chatId: string) => Promise<string | TapReply>, opts: TelegramOptions & { commands?: TelegramCommands } = {}): () => void {
+export const TG_OFFSET = "tg_offset";
+export function startTelegramCallbacks(
+  token: string,
+  onTap: (data: string, chatId: string) => Promise<string | TapReply>,
+  opts: TelegramOptions & { commands?: TelegramCommands; store?: Pick<Store, "getSetting" | "setSetting"> } = {},
+): () => void {
   const doFetch = opts.fetch ?? fetch;
   const warn = opts.warn ?? ((m: string) => console.error(m));
   const api = async <T>(method: string, body: unknown): Promise<T> => {
@@ -113,7 +119,7 @@ export function startTelegramCallbacks(token: string, onTap: (data: string, chat
     return j.result;
   };
   let stopped = false;
-  let offset = 0;
+  let offset = Number(opts.store?.getSetting(TG_OFFSET)) || 0;
   void (async () => {
     while (!stopped) {
       try {
@@ -123,6 +129,7 @@ export function startTelegramCallbacks(token: string, onTap: (data: string, chat
         const updates = await api<Update[]>("getUpdates", { offset, timeout: 50, allowed_updates: cmds ? ["callback_query", "message"] : ["callback_query"] });
         for (const u of updates) {
           offset = u.update_id + 1;
+          opts.store?.setSetting(TG_OFFSET, String(offset));
           const m = u.message;
           // Strangers can message the bot too: only the configured chats get answers.
           const reply = async (text: string | null) => {

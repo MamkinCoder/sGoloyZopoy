@@ -8,6 +8,7 @@ let clock: number;
 const now = () => new Date(clock);
 const alerts: string[] = [];
 const notifier = { alert: async (t: string) => void alerts.push(t) };
+const getJob = (id: number) => store.listJobs(undefined, 1000).find((j) => j.id === id) ?? null;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -97,18 +98,18 @@ describe("agent queue", () => {
     const job = agent.enqueue("k", {}, { maxAttempts: 3 });
     agent.tick();
     await agent.settle();
-    expect(store.getJob(job.id)).toMatchObject({ state: "queued", attempts: 1, lastError: "boom" });
-    expect(Date.parse(store.getJob(job.id)!.runAfter) - clock).toBe(backoffMs(1));
+    expect(getJob(job.id)).toMatchObject({ state: "queued", attempts: 1, lastError: "boom" });
+    expect(Date.parse(getJob(job.id)!.runAfter) - clock).toBe(backoffMs(1));
     agent.tick(); // not due yet
     await agent.settle();
-    expect(store.getJob(job.id)!.attempts).toBe(1);
+    expect(getJob(job.id)!.attempts).toBe(1);
     clock += backoffMs(1);
     agent.tick();
     await agent.settle();
     clock += backoffMs(2);
     agent.tick();
     await agent.settle();
-    expect(store.getJob(job.id)).toMatchObject({ state: "failed", attempts: 3 });
+    expect(getJob(job.id)).toMatchObject({ state: "failed", attempts: 3 });
     expect(onFailed).toHaveBeenCalledTimes(1);
     expect(alerts).toEqual([]); // a handler with onFailed alerts per task itself
     // Every failed task job reaches its onFailed (no per-kind dedupe hiding the second employer).
@@ -149,7 +150,7 @@ describe("agent queue", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     await agent.settle();
     expect(close).toHaveBeenCalled();
-    expect(store.getJob(job.id)!.state).toBe("queued"); // retry pending
+    expect(getJob(job.id)!.state).toBe("queued"); // retry pending
     agent.enqueue("next");
     clock += backoffMs(1);
     agent.tick();
@@ -188,7 +189,7 @@ describe("agent queue", () => {
     agent.tick();
     await agent.settle();
     expect(run).not.toHaveBeenCalled();
-    expect(store.getJob(job.id)!.state).toBe("failed");
+    expect(getJob(job.id)!.state).toBe("failed");
     expect(onFailed).toHaveBeenCalledTimes(1);
   });
 
@@ -208,8 +209,8 @@ describe("agent queue", () => {
     agent.tick();
     await vi.advanceTimersByTimeAsync(60_000);
     await agent.settle();
-    expect(store.getJob(job.id)).toMatchObject({ state: "failed" });
-    expect(store.getJob(job.id)!.lastError).toContain("timeout");
+    expect(getJob(job.id)).toMatchObject({ state: "failed" });
+    expect(getJob(job.id)!.lastError).toContain("timeout");
     expect(close).toHaveBeenCalled();
   });
 
@@ -221,13 +222,13 @@ describe("agent queue", () => {
     agent.start();
     await agent.settle();
     expect(ran).toEqual([job.id]);
-    expect(store.getJob(job.id)!.state).toBe("done");
+    expect(getJob(job.id)!.state).toBe("done");
     // Another row left running with a lease that has passed (not ours): requeued by the loop.
     const other = store.enqueueJob("k", {}, {}, now().toISOString());
     store.claimJob(other.id, new Date(clock - 1).toISOString(), now().toISOString());
     await vi.advanceTimersByTimeAsync(1000);
     await agent.settle();
-    expect(store.getJob(other.id)!.state).toBe("done");
+    expect(getJob(other.id)!.state).toBe("done");
     await agent.stop();
   });
 
@@ -268,6 +269,6 @@ describe("agent queue", () => {
     const agent = createAgent({ store, handlers: {}, notifier, now, log: silent });
     const j = agent.enqueue("gone");
     agent.tick();
-    expect(store.getJob(j.id)).toMatchObject({ state: "failed", lastError: "no handler for gone" });
+    expect(getJob(j.id)).toMatchObject({ state: "failed", lastError: "no handler for gone" });
   });
 });

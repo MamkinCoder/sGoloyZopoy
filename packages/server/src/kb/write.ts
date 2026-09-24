@@ -190,10 +190,16 @@ export function withKbSkills<P extends Pick<Profile, "verified_skills" | "never_
   return { ...p, verified_skills: [...verified, ...missing(yes, verified)], never_claim_skills: [...never, ...missing(no, never)] };
 }
 
+/** A listed skill no tag names (name or alias) becomes a tag with that status: every claim lives in kb_tags. */
+function addMissingTags(store: Store, userId: number, skills: string[], status: KbTagStatus): void {
+  for (const s of skills) if (s.trim() && !store.listKbTags(userId).some((t) => tagIs(t, s))) store.upsertKbTag(userId, { name: s.trim(), status });
+}
+
 /**
  * The reverse direction, for a human editing the profile lists (panel): tags follow the edit, or the next
  * syncProfileSkills would revert it. By tag name: in never_claim -> no, in verified -> yes, in neither -> unknown;
- * a tag the lists only name by an alias keeps its status.
+ * a tag the lists only name by an alias keeps its status; a listed skill without a tag gets one. The caller then
+ * runs syncProfileSkills, the only writer of the lists.
  */
 export function applyProfileSkills(store: Store, userId: number, p: Pick<Profile, "verified_skills" | "never_claim_skills">): void {
   const has = (list: string[], n: string) => list.some((s) => norm(s) === norm(n));
@@ -202,6 +208,25 @@ export function applyProfileSkills(store: Store, userId: number, p: Pick<Profile
     const next: KbTagStatus = has(p.never_claim_skills, t.name) ? "no" : has(p.verified_skills, t.name) ? "yes" : all.some((s) => tagIs(t, s)) ? t.status : "unknown";
     if (next !== t.status) store.setKbTagStatus(t.id, next);
   }
+  addMissingTags(store, userId, p.never_claim_skills, "no");
+  addMissingTags(store, userId, p.verified_skills, "yes");
+}
+
+/**
+ * profile.yaml import (`sgz db import-profile`, every deploy): its lists only seed tags nobody answered yet (no tag,
+ * or a tag still `unknown`), so a human answer (Telegram, panel) always wins over the file; never_claim first, so a
+ * skill in both lists is not claimed. Then the profile is stored and syncProfileSkills writes the lists from the KB.
+ */
+export function importProfile(store: Store, userId: number, p: Profile): void {
+  for (const [list, status] of [[p.never_claim_skills, "no"], [p.verified_skills, "yes"]] as const) {
+    for (const s of list) {
+      const t = store.listKbTags(userId).find((x) => tagIs(x, s));
+      if (t?.status === "unknown") store.setKbTagStatus(t.id, status);
+    }
+    addMissingTags(store, userId, [...list], status);
+  }
+  store.saveProfile(userId, p);
+  syncProfileSkills(store, userId);
 }
 
 /** Writes withKbSkills into the stored profile; true when it changed. Call after any tag status change. */

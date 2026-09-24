@@ -73,5 +73,9 @@ describe("knowledge base API", () => {
     await h.json("PUT", "/api/users/yaroslav/profile", { ...defaultProfile(), verified_skills: [], never_claim_skills: [] });
     expect(h.store.listKbTags(u.id).map((t) => t.status)).toEqual(["unknown", "unknown"]);
     expect(h.store.getProfile(u.id)).toMatchObject({ verified_skills: [], never_claim_skills: [] });
+    // a skill no tag knows becomes a tag: the claim lives in the KB, not only in the list
+    await h.json("PUT", "/api/users/yaroslav/profile", { ...defaultProfile(), verified_skills: ["Redis"], never_claim_skills: ["PHP"] });
+    expect(h.store.listKbTags(u.id).map((t) => [t.name, t.status])).toEqual([["Go", "unknown"], ["Kafka", "unknown"], ["PHP", "no"], ["Redis", "yes"]]);
+    expect(h.store.getProfile(u.id)).toMatchObject({ verified_skills: ["Redis"], never_claim_skills: ["PHP"] });
   });
 });

@@ -361,7 +361,6 @@ export type Stage =
   | "fetch"
   | "decide"
   | "apply"
-  | "chats"
   | "touch"
   | "discover"
   | "tailor"

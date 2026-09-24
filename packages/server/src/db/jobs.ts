@@ -21,7 +21,6 @@ const mapJob = (r: Row): Job => ({
 export interface JobsRepo {
   /** A new queued job, or the open one with the same key (whose run_after moves earlier when asked, or anywhere with `replace`). */
   enqueueJob(kind: string, payload: Record<string, unknown>, opts: EnqueueOptions, nowISO: string): Job;
-  getJob(id: number): Job | null;
   /** Queued jobs due at `nowISO`, highest priority first, then oldest. */
   dueJobs(nowISO: string, limit: number): Job[];
   /** queued -> running with a lease; false when someone else took it. */
@@ -69,7 +68,6 @@ export function jobsRepo(s: Sql): JobsRepo {
         return get(lastId)!;
       });
     },
-    getJob: get,
     dueJobs(nowISO, limit) {
       return s.all("SELECT * FROM jobs WHERE state = 'queued' AND run_after <= ? ORDER BY priority DESC, run_after, id LIMIT ?", nowISO, limit).map(mapJob);
     },

@@ -159,14 +159,15 @@ function makeClient(ctx: Ctx): LLMClient {
       return guardAnswers(qs, answers, blockedTech(profile));
     },
 
-    async answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices: string[] = [], kb = ""): Promise<ChatReply> {
+    async answerChat(p: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices: string[] = [], kb?: KbBrief): Promise<ChatReply> {
+      const profile = withKbNever(p, kb);
       const prompt = renderPrompt("answer_chat", {
         never_claim: neverClaimList(profile),
         profile: profileForLLM(profile),
         vacancy: vacancy ? renderVacancy(vacancy, 1500) : "",
         history: renderHistory(history),
         choices: choices.map((c) => `- ${c}`).join("\n"),
-        kb,
+        kb: kb?.text,
       });
       const r = await call(ctx, { task: "answer_chat", tier: "write", prompt, schema: ChatReplySchema, jsonSchema: toJsonSchema(ChatReplySchema) });
       // A reply may go out together with needs_human (e.g. «да, пришлите тестовое» + ping the human);

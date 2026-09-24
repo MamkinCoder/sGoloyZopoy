@@ -465,7 +465,7 @@ function SiteRow({
 
 // ---------- Schedule / global settings
 
-const KNOWN: { key: string; label: string; kind: "text" | "number"; hint?: string }[] = [
+const KNOWN: { key: string; label: string; kind: "text" | "number"; hint?: string; options?: string[] }[] = [
   { key: "schedule_at", label: "Время запуска", kind: "text", hint: "HH:MM; пусто — расписание выключено" },
   { key: "schedule_jitter_min", label: "Случайная задержка, мин", kind: "number", hint: "0 и больше" },
   { key: "dedup_window_days", label: "Окно дедупликации, дней", kind: "number", hint: "0 и больше" },
@@ -476,7 +476,7 @@ const KNOWN: { key: string; label: string; kind: "text" | "number"; hint?: strin
   { key: "viewers_enabled", label: "Отклик тем, кто смотрел резюме", kind: "text", hint: "1 — откликаться на вакансии работодателей, открывших резюме (до 3 за запуск), 0 — выкл" },
   { key: "retro_day", label: "Итоги недели: день", kind: "text", hint: "mon…sun; пусто — выключено" },
   { key: "retro_at", label: "Итоги недели: время", kind: "text", hint: "HH:MM" },
-  { key: "kb_review_mode", label: "Карточка навыков в чатах", kind: "text", hint: "always — каждая тема вопроса, new_only — только темы без историй, off — без карточки" },
+  { key: "kb_review_mode", label: "Карточка навыков в чатах", kind: "text", options: ["always", "new_only", "off"], hint: "always — каждая тема вопроса, new_only — только темы без историй, off — без карточки" },
 ];
 
 function ScheduleEditor() {
@@ -498,13 +498,23 @@ function ScheduleEditor() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {KNOWN.map((k) =>
             <Field key={k.key} label={k.label} hint={k.hint}>
-              <input
-                className="input"
-                type={k.kind === "number" ? "number" : "text"}
-                min={k.kind === "number" ? 0 : undefined}
-                value={s[k.key] == null ? "" : String(s[k.key])}
-                onChange={(e) => set(k.key, k.kind === "number" ? Number(e.target.value) : e.target.value)}
-              />
+              {k.options ? (
+                <select className="input" value={String(s[k.key] ?? k.options[0])} onChange={(e) => set(k.key, e.target.value)}>
+                  {k.options.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="input"
+                  type={k.kind === "number" ? "number" : "text"}
+                  min={k.kind === "number" ? 0 : undefined}
+                  value={s[k.key] == null ? "" : String(s[k.key])}
+                  onChange={(e) => set(k.key, k.kind === "number" ? Number(e.target.value) : e.target.value)}
+                />
+              )}
             </Field>,
           )}
         </div>

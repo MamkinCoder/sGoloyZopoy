@@ -121,6 +121,9 @@ export const KB_BRIEF_BUDGET = 3000;
 export interface KbBriefQuery extends KbQuery {
   /** Only stories of these companies (tailor_cv: the base CV's jobs), matched by companyKey, either way contained. */
   companies?: string[];
+  /** A chat task's own answers (human or 12 h fallback): the topic shows this status, and a «no» leaves the stories
+   *  and joins `no` exactly like a status-`no` tag, even while the tag itself is still unknown. */
+  overrides?: { name: string; status: "yes" | "no" }[];
 }
 
 type KbStore = Pick<Store, "listKbTags" | "listKbStories">;
@@ -147,17 +150,21 @@ export function withoutNo(tags: KbTag[], stories: KbStory[], extraNo: string[] =
   };
 }
 
-/** KB block for an application text. Status-`no` tags never reach it: they leave story tag lists and topics,
+/** KB block for an application text or a chat reply. Status-`no` tags never reach it: they leave story tag lists,
  * sentences naming them leave the stories (a title naming one drops the story), and they come back in `no` for
- * the guards. undefined for an empty KB, and when the KB can't be read: a KB problem never blocks an application. */
+ * the guards. Their topic line stays only when asked (`q.tags`: the employer's question needs the honest «не
+ * заявлять»). undefined for an empty KB, and when the KB can't be read: a KB problem never blocks an application. */
 export function kbBrief(store: KbStore, userId: number, q: KbBriefQuery, budgetChars = KB_BRIEF_BUDGET): KbBrief | undefined {
   try {
     const tags = store.listKbTags(userId);
-    const { no, stories: all } = withoutNo(tags, store.listKbStories(userId));
+    const said = (t: KbTopic) => q.overrides?.find((o) => tagKey(o.name) === tagKey(t.name) || (!!t.tag && tagIs(t.tag, o.name)))?.status;
+    const extraNo = (q.overrides ?? []).filter((o) => o.status === "no").map((o) => o.name);
+    const { no, stories: all } = withoutNo(tags, store.listKbStories(userId), extraNo);
     const stories = all.filter((s) => !q.companies || q.companies.some((c) => sameCompany(c, s.company)));
-    if (!tags.length && !stories.length) return undefined;
+    if (!tags.length && !stories.length && !no.length) return undefined;
     const ctx = kbFor({ listKbTags: () => tags, listKbStories: () => stories }, userId, q, budgetChars);
-    const topics = ctx.topics.filter((t) => t.status !== "no");
+    const asked = (t: KbTopic) => !!q.tags?.some((n) => tagKey(n) === tagKey(t.name));
+    const topics = ctx.topics.map((t) => ({ ...t, status: said(t) ?? t.status })).filter((t) => t.status !== "no" || asked(t));
     return { text: topics.length || ctx.stories.length ? renderKb({ topics, stories: ctx.stories }) : "", no };
   } catch {
     return undefined;

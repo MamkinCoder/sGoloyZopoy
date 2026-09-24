@@ -20,6 +20,7 @@ import type {
   Tier,
   Vacancy,
 } from "@sgz/shared";
+import { withKbNever } from "../kb/context.js";
 
 export interface FakeCall {
   method: string;
@@ -52,7 +53,7 @@ export class FakeLLM implements LLMClient {
       return { idx: q.idx, text: "fake answer" };
     });
 
-  onAnswerChat: (profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], kb?: string) => ChatReply = () => ({
+  onAnswerChat: (profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], kb?: KbBrief) => ChatReply = () => ({
     reply: "Да, готов обсудить детали.",
     needs_human: false,
     reason: "fake",
@@ -117,7 +118,8 @@ export class FakeLLM implements LLMClient {
     this.record("answerQuestionnaire", [profile, vacancy, qs, kb]);
     return this.onAnswerQuestionnaire(profile, vacancy, qs);
   }
-  async answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[], kb?: string): Promise<ChatReply> {
+  async answerChat(p: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[], kb?: KbBrief): Promise<ChatReply> {
+    const profile = withKbNever(p, kb); // the profile the real client prompts with
     this.record("answerChat", [profile, vacancy, history, choices, kb]);
     return this.onAnswerChat(profile, vacancy, history, kb);
   }

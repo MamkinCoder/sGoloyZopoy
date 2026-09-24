@@ -180,8 +180,12 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
 - `PUT /users/:slug` additionally accepts `allow_other_country`, `pool_expand_per_day`, `opus_enabled`
   (bool / int ≥ 0). Unknown keys are ignored; wrong types → 400.
 - `PUT /users/:slug/profile`: every field optional; strings default `""`, numbers `0`, arrays `[]`,
-  `extra` `{}`. KB tags follow `verified_skills` / `never_claim_skills` by name (never -> `no`, verified -> `yes`,
-  dropped from both -> `unknown`) before the profile sync, so the edit sticks. Wrong types → 400 `{error:"field: message; ..."}`.
+  `extra` `{}`. The skill lists are an edit of KB tag statuses (`kb_tags.status` is the only source of skill claims):
+  tags follow `verified_skills` / `never_claim_skills` by name (never -> `no`, verified -> `yes`, dropped from both ->
+  `unknown`), a listed skill no tag knows becomes a tag with that status, then `syncProfileSkills` (the only writer
+  of the lists) rewrites them from the KB, so the edit sticks. Wrong types → 400 `{error:"field: message; ..."}`.
+- `sgz db import-profile` (every deploy): profile.yaml's lists set only tags nobody answered (no tag, or `unknown`;
+  `never_claim_skills` first), a Telegram / panel answer wins over the file; then the lists are synced from the KB.
 - `GET /users/:slug/stats`: `range` defaults to `all`; other values → 400. `chat_replies` counts only
   messages the bot sent (`direction='out'` and no `hh_message_id`); history imported from hh is excluded.
 - `GET /users/:slug/retro`: the last 7 days vs the 7 before (`RetroDTO` in `packages/shared/src/api.ts`),
@@ -296,9 +300,10 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       `prompts/triage_chat.md`, tier fast) → `kind` + `topics` (skills asked about); `ack_only` / `rejection` close
       the task without a reply. `chats.review` (none): the knowledge-base review gate (below); topics it resolves
       without the human are filled in, the rest go into ONE Telegram card per task. `chats.draft` (llm,
-      `answer_chat` with the task's answers: yes = verified, no = never claim, plus a KB block = `kbFor` over the
-      task topics + vacancy + the employer's messages, statuses as this task answered them, the best stories within
-      3000 chars) → `ready`, or back to review when the draft finds a skill triage missed; `needs_human` /
+      `answer_chat` with a KB block = `kbBrief` (the same filter as letters) over the task topics + vacancy + the
+      employer's messages with this task's answers as `overrides`: statuses as this task answered them, a «нет»
+      (also the 12 h fallback's) leaves the stories and joins the brief's `no`, which `answerChat` adds to never claim
+      via `withKbNever`; a «да» topic is a verified skill for that draft; the best stories within 3000 chars) → `ready`, or back to review when the draft finds a skill triage missed; `needs_human` /
       interview time as before. `chats.send` (browser) re-reads the thread:
       the reply already there → only marked sent (no double reply); a new employer message → the task is
       `superseded` and a fresh task covers all unanswered messages (answers carried over); else send, re-read to
@@ -322,12 +327,13 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
         stories `source: telegram, confirmed`, tag `yes`, review `expanded`, the card edited. Several «Дополнить»
         are asked one at a time, oldest first. A text the model cannot turn into a story: the bot says so, tap
         «Дополнить» again.
-      Human answers also update `skills_learned:<user>` so older code paths agree with the KB. A tap (or a story)
+      A human answer is only the tag status (then mirrored into the profile lists); the old `skills_learned:<user>`
+      setting was folded into the tags by migration `008a` and is gone. A tap (or a story)
       for a superseded task goes to the thread's open task waiting for the same tag. `chats.remind` resends the
       card once after 2 h; `chats.fallback` after 12 h expires the open reviews and drafts anyway with the
       unanswered topics treated as «нет» for that reply only (honest «в продакшене не использовал»; tag status
-      unchanged), plus an alert «Отвечаю без тебя». Phase-1 cards still work: `ct:<task id>:<topic index>:y|n`
-      (y = confirm, n = no skill) and one-skill cards `sk:y|n:<user>:<key>` (settings `skill_pending:*`).
+      unchanged), plus an alert «Отвечаю без тебя». Old phase-1 `ct:` and one-skill `sk:` cards (and any unknown
+      button) only answer «кнопка устарела».
     - Stall alert: if no `chats.sync` job finished `done` for 20 min, one Telegram alert «Чаты не проверялись N мин»,
       and one «✅ Чаты снова проверяются» when they resume (open state in setting `alert_open:chats`).
   - Career autopilot (`sgz serve`): when the main lane is idle it runs `career` stage `rotate` chunks.
@@ -379,7 +385,10 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       «Итоги недели» per active user (the `GET /users/:slug/retro` numbers as text); a user with fewer than 10
       sends that week gets nothing. Last sent day: setting `retro_last_day`. `/week` answers it on demand.
     - `kb_review_mode`: `"always"` (default) | `"new_only"` | `"off"`: which chat topics go on the KB review card
-      (see the always-on agent above).
+      (see the always-on agent above). The panel edits it with a select.
+    - `tg_offset` (internal): the Telegram `getUpdates` offset, read at start and saved before each update is
+      handled, so a restart never replays an update (at most once: a replayed story text would go to the wrong
+      KB review). Card edits (`Notifier.edit`) are retried like sends (network, 429, 5xx), then only logged.
     - `/mock [employer]`: text mock interview from the most recent thread with a prep brief (`prep_json`)
       or a study pack (optionally matching the employer; a user's own `tgChatId` sees only their threads). Up
       to 5 questions, the study pack's gap topics first, then the prep questions; each plain message is an answer, graded by one LLM call (`prompts/mock_feedback.md`, tier
