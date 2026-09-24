@@ -1,35 +1,55 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Config, Notifier, RunRequest } from "@sgz/shared";
+import { RunBusyError, type BrowserLauncher, type Config, type Notifier, type RunRequest, type User } from "@sgz/shared";
 import { openStore, type SqliteStore } from "../db/index.js";
+import type { RunContext } from "./context.js";
 import type { RunnerDeps } from "./deps.js";
 
-// The pipeline is replaced per test: `hang` resolves only on abort (cooperative) or never (wedged).
-let mode: "cooperative" | "wedged" = "cooperative";
+// The pipeline and the report are replaced per test.
+type Result = { status: string; error: string; users: [] };
+const never = () => new Promise<never>(() => undefined);
+const done = async (): Promise<Result> => ({ status: "done", error: "", users: [] });
+/** Resolves only on abort (a pipeline that honours stop / the watchdog). */
+const cooperative = (ctx: RunContext) => new Promise<Result>((resolve) => ctx.signal.addEventListener("abort", () => resolve({ status: "stopped", error: "stopped by request", users: [] })));
+let pipeline: (ctx: RunContext) => Promise<Result>;
+let reports: () => Promise<boolean>;
 vi.mock("./pipeline.js", () => ({
-  runPipeline: (ctx: { signal: AbortSignal }) =>
-    new Promise((resolve) => {
-      if (mode === "cooperative") ctx.signal.addEventListener("abort", () => resolve({ status: "stopped", error: "stopped by request", users: [] }));
-    }),
+  runPipeline: (ctx: RunContext) => pipeline(ctx),
   aggregate: () => ({ by_status: {} }),
-  sendReports: async () => false,
+  sendReports: () => reports(),
 }));
 const { createRunner, maxRunMs, repeatFailure, WATCHDOG_GRACE_MS } = await import("./service.js");
 
 let store: SqliteStore;
 let alerts: string[];
+let launches: string[];
+let launchDelayMs: number;
 const notifier: Notifier = { report: async () => undefined, alert: async (title) => void alerts.push(title) };
+// Every browser this fake launches is wedged: close() never settles.
+const launcher: BrowserLauncher = {
+  launch: async (o) => {
+    launches.push(o.userDataDir);
+    if (launchDelayMs) await new Promise((r) => setTimeout(r, launchDelayMs));
+    return { close: never } as never;
+  },
+};
+const user = { slug: "u" } as User;
 
 beforeEach(() => {
   vi.useFakeTimers();
   store = openStore(":memory:");
   alerts = [];
+  launches = [];
+  launchDelayMs = 0;
+  pipeline = cooperative;
+  reports = async () => false;
 });
 afterEach(() => {
   vi.useRealTimers();
   store.close();
 });
 
-const runner = () => createRunner({ cfg: {} as Config, store, notifier, llm: { withRun: () => ({}) }, stderr: () => undefined } as unknown as RunnerDeps);
+const runner = () => createRunner({ cfg: { dataDir: "/d" } as Config, store, notifier, launcher, llm: { withRun: () => ({}) }, stderr: () => undefined } as unknown as RunnerDeps);
+const req = (stage?: string, trigger: "schedule" | "manual" = "schedule"): RunRequest => ({ userSlug: "all", source: "all", stage, trigger, dryRun: false, limit: 0 });
 
 describe("run watchdog", () => {
   it("picks caps per stage and honours the override", () => {
@@ -43,15 +63,70 @@ describe("run watchdog", () => {
     ["cooperative", 0, "stopped"],
     ["wedged", WATCHDOG_GRACE_MS, "failed"],
   ] as const)("ends a %s run past its limit", async (m, extra, status) => {
-    mode = m;
+    pipeline = m === "cooperative" ? cooperative : never;
     const r = runner();
-    const id = await r.start({ userSlug: "all", source: "hh", stage: "chats", trigger: "schedule", dryRun: false, limit: 0 });
+    const id = await r.start(req("chats"));
     await vi.advanceTimersByTimeAsync(20 * 60_000 + extra);
     const run = await r.wait(id);
     expect(run).toMatchObject({ status, error: "watchdog: exceeded 20 min" });
     expect(store.getRun(id)?.status).toBe(status);
-    expect(r.active()).toBeNull();
+    expect(r.activeChats()).toBeNull();
     expect(alerts).toEqual([`Прогон #${id} остановлен сторожем`]);
+  });
+
+  // Production: the browser came up after the watchdog's close (a slow launch), the pipeline stayed wedged,
+  // and the runner awaited close() of that wedged Chrome forever, so active() kept the run.
+  it("frees the slot when the pipeline never settles and browser.close hangs", async () => {
+    launchDelayMs = 150 * 60_000 + 1000;
+    pipeline = async (ctx) => {
+      await ctx.browser.open(user);
+      return never();
+    };
+    const r = runner();
+    const id = await r.start(req(undefined));
+    await vi.advanceTimersByTimeAsync(150 * 60_000 + WATCHDOG_GRACE_MS + 60_000);
+    expect(r.active()).toBeNull();
+    expect(store.getRun(id)).toMatchObject({ status: "failed", error: "watchdog: exceeded 150 min" });
+    expect(await r.start(req(undefined))).toBeGreaterThan(id);
+  });
+
+  it("frees the slot when the report hangs after the pipeline gave up", async () => {
+    reports = never;
+    const r = runner();
+    const id = await r.start(req(undefined, "manual"));
+    await vi.advanceTimersByTimeAsync(150 * 60_000 + WATCHDOG_GRACE_MS);
+    expect(r.active()).toBeNull();
+    expect(store.getRun(id)).toMatchObject({ status: "stopped", error: "watchdog: exceeded 150 min" });
+  });
+});
+
+describe("run lanes", () => {
+  it("runs chat polls next to a main run, one of each at a time", async () => {
+    const r = runner();
+    const main = await r.start(req(undefined));
+    const chats = await r.start(req("chats"));
+    expect(r.active()?.id).toBe(main);
+    expect(r.activeChats()?.id).toBe(chats);
+    await expect(r.start(req("chats"))).rejects.toBeInstanceOf(RunBusyError);
+    await expect(r.start(req("touch"))).rejects.toBeInstanceOf(RunBusyError);
+    await r.stop(chats);
+    expect((await r.wait(chats)).status).toBe("stopped");
+    expect(r.activeChats()).toBeNull();
+    expect(r.active()?.id).toBe(main);
+    await r.stop(main);
+    await r.drain();
+    expect(r.active()).toBeNull();
+  });
+
+  it("the chat lane has its own Chrome profile", async () => {
+    pipeline = async (ctx) => {
+      await ctx.browser.open(user);
+      return done();
+    };
+    const r = runner();
+    await r.wait(await r.start(req("chats")));
+    await r.wait(await r.start(req(undefined)));
+    expect(launches).toEqual(["/d/users/u/chrome-profile-chat", "/d/users/u/chrome-profile"]);
   });
 });
 

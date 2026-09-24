@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planCareer, planHH } from "./pipeline.js";
+import { planCareer, planHabr, planHH } from "./pipeline.js";
 
 describe("run planning", () => {
   it("keeps pool commands isolated from apply/search stages", () => {
@@ -19,5 +19,21 @@ describe("run planning", () => {
     expect(planHH("hh", "force:7")).toMatchObject({ search: false, apply: false, force: 7 });
     expect(planCareer("hh", "force:7")).toBeNull();
     expect(planCareer("hh", undefined)).toBeNull();
+  });
+
+  it("main runs never do chats; only stage chats does (hh + habr)", () => {
+    for (const src of ["hh", "all"]) {
+      expect(planHH(src, undefined)).toMatchObject({ chats: false, apply: true });
+      expect(planHH(src, "apply")).toMatchObject({ chats: false });
+    }
+    for (const src of ["habr", "all"]) expect(planHabr(src, undefined)).toMatchObject({ chats: false, apply: true });
+    expect(planHH("all", "chats")).toMatchObject({ chats: true, apply: false, search: false });
+    expect(planHabr("all", "chats")).toMatchObject({ chats: true, apply: false });
+    expect(planCareer("all", "chats")).toBeNull();
+  });
+
+  it("the scheduled full run (all, no stage) skips career sites; --source career still runs them", () => {
+    expect(planCareer("all", undefined)).toBeNull();
+    expect(planCareer("career", undefined)).toMatchObject({ discover: true, apply: true });
   });
 });

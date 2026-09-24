@@ -263,13 +263,14 @@ export class StagehandSession implements BrowserSession {
 
   close(): Promise<void> {
     this.closing ??= (async () => {
+      // Bounded: a wedged Chrome never answers close over CDP; the SIGKILL below still frees it.
       try {
-        await this.d.stagehand.close();
+        await Promise.race([this.d.stagehand.close(), sleep(10_000)]);
       } catch {
         // the browser may already be gone
       }
       try {
-        await this.d.browser.close();
+        await Promise.race([this.d.browser.close(), sleep(10_000)]);
       } catch {
         // idem
       }

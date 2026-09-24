@@ -100,8 +100,8 @@ const card = (id: string, title = `Go developer ${id}`, company = `Co${id}`, alr
 
 describe("habr run planning", () => {
   it("runs as its own source and inside all, never inside hh or career", () => {
-    expect(planHabr("habr", undefined)).toEqual({ search: true, decide: true, apply: true, chats: true, force: null });
-    expect(planHabr("all", undefined)).toMatchObject({ search: true, apply: true, chats: true });
+    expect(planHabr("habr", undefined)).toEqual({ search: true, decide: true, apply: true, chats: false, force: null });
+    expect(planHabr("all", undefined)).toMatchObject({ search: true, apply: true, chats: false });
     expect(planHabr("all", "chats")).toEqual({ search: false, decide: false, apply: false, chats: true, force: null });
     expect(planHabr("habr", "decide")).toMatchObject({ search: true, decide: true, apply: false });
     expect(planHabr("habr", "force:7")).toMatchObject({ force: 7, search: false });

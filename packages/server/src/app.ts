@@ -96,11 +96,8 @@ export async function createAppContext(opts: { withScheduler?: boolean } = {}): 
     startedAt: new Date(),
     async close(this: AppContext) {
       this.scheduler?.stop();
-      const a = runner.active();
-      if (a) {
-        await runner.stop(a.id);
-        await runner.drain();
-      }
+      for (const a of [runner.active(), runner.activeChats()]) if (a) await runner.stop(a.id);
+      await runner.drain();
       store.close();
     },
   };

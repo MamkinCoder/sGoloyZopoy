@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { emptyRunStats, type Notifier } from "@sgz/shared";
 import { openStore, type SqliteStore } from "../db/index.js";
-import { checkHeartbeat } from "./health.js";
+import { checkChatStall, checkHeartbeat } from "./health.js";
 
 let store: SqliteStore;
 let alerts: string[];
@@ -30,6 +30,25 @@ describe("checkHeartbeat", () => {
     await check(30);
     expect(alerts).toEqual(["Нет успешных прогонов", "✅ Прогоны снова в норме"]);
     await check(29 + 27);
+    expect(alerts).toHaveLength(3);
+  });
+});
+
+describe("checkChatStall", () => {
+  it("alerts once after 20 min without a finished poll, once on recovery", async () => {
+    const M = 60_000;
+    const t = t0.getTime();
+    const check = (lastDone: number, nowMin: number) => checkChatStall(store, notifier, lastDone, "UTC", t + nowMin * M);
+    await check(t, 20);
+    expect(alerts).toEqual([]);
+    await check(t, 21);
+    await check(t, 30);
+    await check(t, 60);
+    expect(alerts).toEqual(["Чаты не проверялись 21 мин"]);
+    await check(t + 61 * M, 62);
+    await check(t + 61 * M, 63);
+    expect(alerts).toEqual(["Чаты не проверялись 21 мин", "✅ Чаты снова проверяются"]);
+    await check(t + 61 * M, 90);
     expect(alerts).toHaveLength(3);
   });
 });

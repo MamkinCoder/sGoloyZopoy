@@ -34,7 +34,8 @@ export interface RunContext {
   fileExists(path: string): boolean;
 }
 
-export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: Logger, signal: AbortSignal): RunContext {
+/** `lane` "chats": the chat bot's own Chrome profile, so it runs next to a main run (same saved cookies). */
+export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: Logger, signal: AbortSignal, lane: "main" | "chats" = "main"): RunContext {
   const now = deps.now ?? (() => new Date());
   const sleepFn = deps.sleep ?? defaultSleep;
   const random = deps.random ?? Math.random;
@@ -57,7 +58,7 @@ export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: 
     session = await deps.launcher.launch({
       executablePath: deps.cfg.chromiumBin,
       headless: true,
-      userDataDir: paths.chromeProfile(deps.cfg, user.slug),
+      userDataDir: (lane === "chats" ? paths.chatChromeProfile : paths.chromeProfile)(deps.cfg, user.slug),
       userAgent: deps.cfg.userAgent || undefined,
       snapshotDir: paths.snapshots(deps.cfg, run.id),
       blockAssets: true,

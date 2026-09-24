@@ -38,7 +38,8 @@ function chromiumTree(procs: Proc[], userDataDir: string): Proc[] {
     seen.set(p.pid, p);
     for (const k of byParent.get(p.pid) ?? []) walk(k);
   };
-  for (const p of procs) if (p.command.includes(needle)) walk(p);
+  // Whole argument: "…/chrome-profile" must not match the chat lane's "…/chrome-profile-chat".
+  for (const p of procs) if (`${p.command} `.includes(`${needle} `)) walk(p);
   return [...seen.values()];
 }
 

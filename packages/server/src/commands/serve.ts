@@ -15,7 +15,7 @@ import { askOutcomes, OUTCOME_LABEL, parseOutcomeCallback, remindInterviews } fr
 import { companyReport, refreshLessons } from "../runner/learn.js";
 import { formatBand } from "../db/salary.js";
 import { nextJob } from "../scheduler/autopilot.js";
-import { checkHeartbeat } from "../scheduler/health.js";
+import { checkChatStall, checkHeartbeat } from "../scheduler/health.js";
 import { errMessage } from "../runner/util.js";
 import type { RunRequest } from "@sgz/shared";
 import { buildRetro, MIN_SENT, retroDue } from "../notify/retro.js";
@@ -56,25 +56,27 @@ export async function serve(): Promise<void> {
   if (app.scheduler) app.scheduler.start();
   else console.error(`sgz serve: scheduler off (scheduleAt="${app.cfg.scheduleAt}", runnerEnabled=${app.cfg.runnerEnabled})`);
 
-  // Chat bot: answer employer chats (the auto «давайте пообщаемся» that follows an отклик) every few
-  // minutes while no other run is active. It shares the user's single Chrome profile, so it never
-  // overlaps a run. SGZ_CHAT_POLL_MIN=0 turns it off.
+  // Chat bot: answer employer chats (the auto «давайте пообщаемся» that follows an отклик) every
+  // SGZ_CHAT_POLL_MIN, counted from the last poll's end. It runs in the runner's chat lane with its own Chrome
+  // profile, so a long or wedged main run never holds it up. SGZ_CHAT_POLL_MIN=0 turns it off.
   const chatPollMin = Number(process.env.SGZ_CHAT_POLL_MIN ?? 5);
-  let lastChatPoll = 0;
+  const chatsOn = chatPollMin > 0;
+  let lastChatPoll = 0; // end of the last poll, any outcome
+  let lastChatDone = app.startedAt.getTime(); // end of the last successful poll (stall alert baseline)
   const start = (req: Omit<RunRequest, "dryRun" | "limit" | "trigger">) =>
     app.runner.start({ ...req, dryRun: false, limit: 0, trigger: "schedule" }).catch((e: unknown) => console.error(`sgz serve: ${req.stage}: ${errMessage(e)}`));
   const startChatPoll = () => {
-    if (!(chatPollMin > 0) || app.runner.active()) return;
-    lastChatPoll = Date.now();
-    // The interval counts from the poll's end: a slow poll must still leave room for career chunks.
-    // source "all" + stage chats = hh chats, then Habr Career conversations (career has no chats stage).
+    if (!chatsOn || app.runner.activeChats()) return;
+    // source "all" + stage chats = hh chats, then Habr Career conversations. Main runs do no chats.
     void start({ userSlug: "all", source: "all", stage: "chats" }).then(async (id) => {
-      if (typeof id === "number") await app.runner.wait(id).catch(() => undefined);
+      if (typeof id !== "number") return;
+      const run = await app.runner.wait(id).catch(() => null);
       lastChatPoll = Date.now();
+      if (run?.status === "done") lastChatDone = lastChatPoll;
     });
   };
-  // Every minute: one job when the runner is idle (see scheduler/autopilot.ts for the order).
-  // Career chunks keep a single-run runner from starving the chat bot for hours.
+  // Every minute: the chat poll when due (own lane), then one main-lane job when the main slot is idle
+  // (see scheduler/autopilot.ts for the order).
   let lastHealth = Date.now();
   let lastLearn = 0;
   let learning = false;
@@ -84,6 +86,10 @@ export async function serve(): Promise<void> {
     if (Date.now() - lastHealth >= 30 * 60_000) {
       lastHealth = Date.now();
       void checkHeartbeat(app.store, app.notifier, app.startedAt, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: heartbeat: ${errMessage(e)}`));
+    }
+    if (chatsOn) {
+      if (Date.now() - lastChatPoll >= chatPollMin * 60_000) startChatPoll();
+      void checkChatStall(app.store, app.notifier, lastChatDone, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: chat stall: ${errMessage(e)}`));
     }
     if (app.runner.active()) return;
     // «Отправить» tapped in Telegram while a run was busy: those go first.
@@ -101,8 +107,6 @@ export async function serve(): Promise<void> {
     }
     const job = nextJob({
       now: Date.now(),
-      lastChatPoll,
-      chatPollMs: chatPollMin * 60_000,
       touchLastAt: app.store.getSetting("touch_last_at") ?? "",
       careerOn: app.store.getSetting("career_autopilot") !== "0",
       careerDue: () =>
@@ -111,9 +115,8 @@ export async function serve(): Promise<void> {
           return r.budget > 0 && r.sites.length > 0;
         })?.slug ?? null,
     });
-    if (job?.kind === "chats") startChatPoll();
     // touch_last_at only once the run really started: a RunBusyError must not skip the raise for 4 h.
-    else if (job?.kind === "touch") void start({ userSlug: "all", source: "hh", stage: "touch" }).then((id) => typeof id === "number" && app.store.setSetting("touch_last_at", new Date().toISOString())); else if (job?.kind === "career") void start({ userSlug: job.userSlug, source: "career", stage: "rotate" });
+    if (job?.kind === "touch") void start({ userSlug: "all", source: "hh", stage: "touch" }).then((id) => typeof id === "number" && app.store.setSetting("touch_last_at", new Date().toISOString())); else if (job?.kind === "career") void start({ userSlug: job.userSlug, source: "career", stage: "rotate" });
   };
   // Telegram buttons: queue cards (send / skip), «📚 Чеклист» (runner/study.ts) and «есть / нет» answers for unknown skills (update the
   // profile, then answer the waiting chats). /status and /queue answer from the configured chats.

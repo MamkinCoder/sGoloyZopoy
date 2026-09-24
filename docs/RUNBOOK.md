@@ -94,7 +94,7 @@ ssh rpi-ts 'chromium --headless=new --no-sandbox --disable-gpu --dump-dom about:
 ssh rpi-ts 'df -h /; ls -la /opt/sgz/data/users/*/chrome-profile'
 ```
 
-A corrupt profile is safe to delete (`rm -rf /opt/sgz/data/users/<slug>/chrome-profile`); cookies live in
+A corrupt profile is safe to delete (`rm -rf /opt/sgz/data/users/<slug>/chrome-profile`, the chat bot's is `chrome-profile-chat`); cookies live in
 `hh-cookies.json`, not in the profile. `/dev/shm` is small on the Pi; the launcher passes
 `--disable-dev-shm-usage`; if it does not, that is the first thing to fix in `packages/server/src/browser/`.
 

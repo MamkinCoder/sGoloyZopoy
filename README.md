@@ -89,7 +89,7 @@ pnpm sgz habr-resume --user <slug>                     # proposal for the ONE Ha
 pnpm sgz habr-resume --user <slug> --apply             # only after the proposal was approved
 ```
 
-- Runs inside `--source all` (the daily scheduled run: hh, then Habr, then career sites) and in the chat poll.
+- Runs inside `--source all` (the daily scheduled run: hh, then Habr; career sites go through the autopilot's rotate chunks) and in the chat poll.
 - Daily limit: setting `habr_daily_limit` (default 20). The run stops when Habr's own response allowance
   (`createResponse.responsesLeft`) drops below 10 and says so in Telegram.
 - Cross-source dedup: the same company + title sent on hh is never sent on Habr and vice versa.

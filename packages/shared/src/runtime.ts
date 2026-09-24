@@ -29,6 +29,8 @@ export const paths = {
   habrCookies: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/habr-cookies.json`,
   habrResumeProposal: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/habr-resume.proposal.json`,
   chromeProfile: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/chrome-profile`,
+  /** The chat lane's own browser profile (runs next to the main one, same saved cookies). */
+  chatChromeProfile: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/chrome-profile-chat`,
   cvDir: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/cv`,
   texDir: (c: Config) => `${c.dataDir}/tex`,
   generatedDir: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/generated`,

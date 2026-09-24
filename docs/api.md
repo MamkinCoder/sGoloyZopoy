@@ -87,12 +87,12 @@ application row replaces the filtered one as the vacancy's newest, so it drops o
 
 ## Runs
 | GET | /runs?user=slug&limit=50 | | `[Run]` |
-| POST | /runs | `{user: slug\|"all", source: "hh"\|"habr"\|"career"\|"all"\|"pool", dry_run?:bool, limit?:int, stage?:string}` | `{run_id}` — 409 if a run is already active |
+| POST | /runs | `{user: slug\|"all", source: "hh"\|"habr"\|"career"\|"all"\|"pool", dry_run?:bool, limit?:int, stage?:string}` | `{run_id}` — 409 if a run is already active in that lane (stage `chats` = chat lane, anything else = main lane) |
 | GET | /runs/:id | | `Run` |
 | POST | /runs/:id/stop | | `{ok}` |
 | GET | /runs/:id/events?after=0 | | `[RunEvent]` |
 | GET | /runs/:id/events/stream | SSE | `event: run_event\ndata: RunEvent` ; `event: done` when the run finishes |
-| GET | /runs/active | | `Run \| null` |
+| GET | /runs/active | | `Run \| null` (main lane only; a chat poll runs beside it) |
 
 `Run`: `id, user_id, user_slug, source, trigger, started_at, finished_at, status, stats:{found, deduped,
 by_status:{}, chat_replies, invitations, rejections, top_vacancies:[], dry_run}, tg_sent, error`.
@@ -213,7 +213,9 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   `analytics.salary`) when there is enough data; the band is for the seeker only and never reaches employers.
 - `POST /runs` answers **202** `{run_id}` (docs table says `{run_id}`; status is 202, not 200).
   `user` must exist or be `"all"` (404 otherwise); `source` ∉ hh|habr|career|all|pool → 400. `habr` = Habr Career auto-apply (stages search / decide /
-  apply / chats / `force:<id>`); `all` = hh, then habr, then career; the chat poll runs `all` + stage `chats`.
+  apply / chats / `force:<id>`); `all` = hh, then habr (no stage: career sites are left to the autopilot's
+  `rotate` chunks; `source: career` still runs them); the chat poll runs `all` + stage `chats`. Only stage
+  `chats` answers employers (hh + habr); full / `apply` runs do no chats.
   Vacancies from it have `source: "habr"`; `?source=career` means career sites only (not hh, not habr).
 - `GET /runs?user=all` is the same as omitting `user`. `limit` is capped at 500.
 - `GET /runs/:id/events/stream`: replays `store` events after `?after=` **or** the `Last-Event-ID`
@@ -244,7 +246,15 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
     go through the usual filters, decide and apply (company limiter, daily budget), at most 3 sends per run, before
     cold search. One Telegram alert «Кто смотрел резюме» lists the outcome per employer. Internal keys:
     `viewers_checked_at:<user id>`, `viewer_seen:<user id>:<company key>`.
-  - Career autopilot (`sgz serve`): between chat polls it runs `career` stage `rotate` chunks.
+  - Runner lanes (`sgz serve`): the runner has two independent slots. The chat lane runs only stage `chats`
+    (source `all`: hh chats, then Habr Career) every `SGZ_CHAT_POLL_MIN` minutes (default 5, `0` = off),
+    counted from the last poll's end, whatever the main lane is doing. It uses its own Chrome profile
+    `data/users/<slug>/chrome-profile-chat` and logs in with the saved `hh-cookies.json` / `habr-cookies.json`
+    when needed. Everything else (scheduled run, panel / CLI runs, queued sends, touch, career chunks) is the
+    main lane, one run at a time; `RunBusyError` / 409 is per lane. Each lane closes its browser when its run ends.
+    If no chat poll finishes `done` for 20 min, one Telegram alert «Чаты не проверялись N мин», and one
+    «✅ Чаты снова проверяются» when they resume (open state in setting `alert_open:chats`).
+  - Career autopilot (`sgz serve`): when the main lane is idle it runs `career` stage `rotate` chunks.
     - `career_autopilot`: `"0"` turns the chunks off.
     - `career_sites_per_run`: sites per chunk, default 1 (keeps chat polls frequent); each chunk takes the
       highest-scoring sites not yet visited today: never-visited first, then any site unvisited for 7+ days,
@@ -302,8 +312,9 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   - Reliability: `run_max_min` = watchdog limit per run in minutes, `"0"` (default) = built-in caps
     (20 for `chats`/`touch`, 30 for `rotate` and `send:|inspect:|retailor:|force:`, 150 otherwise). On
     timeout the run is aborted, the browser closed and a Telegram alert sent; the run ends with
-    `error: "watchdog: exceeded N min"`. If a wedged call ignores the abort, the runner frees itself
-    after 60 s more (run `failed`).
+    `error: "watchdog: exceeded N min"`. If a wedged call ignores the abort, the lane frees itself
+    after 60 s more (run `failed`); the watchdog covers the report too, and closing a wedged browser is
+    bounded (then its processes are killed), so nothing after it can hold the lane. Per lane.
 - `sgz serve` boot closes runs left `running`/`queued` by a crash (`status: stopped`,
   `error: "orphaned by restart"`). While the runner is enabled it also checks every 30 min that some
   run finished `done` in the last 26 h (dead-man heartbeat): one Telegram alert when that breaks, one

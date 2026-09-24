@@ -17,7 +17,8 @@ export interface PipelineResult {
 
 export function planHH(source: string, stage: string | undefined): HHPlan | null {
   if (source === "career" || source === "habr") return null;
-  const full: HHPlan = { poolSync: "auto", search: true, decide: true, apply: true, chats: true, touch: true, poolExpand: true, force: null };
+  // Chats only in stage "chats": the chat lane (runner/service.ts) is the one place that talks to employers.
+  const full: HHPlan = { poolSync: "auto", search: true, decide: true, apply: true, chats: false, touch: true, poolExpand: true, force: null };
   const none: HHPlan = { poolSync: "off", search: false, decide: false, apply: false, chats: false, touch: false, poolExpand: false, force: null };
   if (source === "pool") {
     if (!stage || stage === "pool-sync" || stage === "sync") return { ...none, poolSync: "force" };
@@ -49,11 +50,11 @@ export function planHH(source: string, stage: string | undefined): HHPlan | null
   }
 }
 
-/** Habr Career: its own source, and part of "all" (the daily run and the chat poll). */
+/** Habr Career: its own source, and part of "all" (the daily run and the chat poll). Chats only in stage "chats". */
 export function planHabr(source: string, stage: string | undefined): HabrPlan | null {
   if (source !== "habr" && source !== "all") return null;
   const none: HabrPlan = { search: false, decide: false, apply: false, chats: false, force: null };
-  if (!stage) return { search: true, decide: true, apply: true, chats: true, force: null };
+  if (!stage) return { search: true, decide: true, apply: true, chats: false, force: null };
   const force = /^force:(\d+)$/.exec(stage);
   if (force) return source === "habr" ? { ...none, force: Number(force[1]) } : null;
   switch (stage) {
@@ -73,6 +74,8 @@ export function planHabr(source: string, stage: string | undefined): HabrPlan | 
 
 export function planCareer(source: string, stage: string | undefined): CareerPlan | null {
   if (source !== "career" && source !== "all") return null;
+  // "all" without a stage (the daily run) is hh + habr: career sites are covered by the autopilot's rotate chunks.
+  if (source === "all" && !stage) return null;
   const plan: CareerPlan = { onboardOnly: null, siteOnly: null, discover: true, apply: true, target: null, rotate: false };
   if (!stage) return plan;
   if (stage.startsWith("onboard:")) {

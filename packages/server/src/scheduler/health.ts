@@ -21,3 +21,20 @@ export async function checkHeartbeat(store: Store, notifier: Notifier, bootAt: D
     store.setSetting(KEY, "");
   }
 }
+
+export const CHAT_STALL_MS = 20 * 60_000;
+const CHAT_KEY = "alert_open:chats";
+
+/** Chat bot stall: one alert when no chat poll finished `done` for 20 min, one more when polls resume.
+ *  `lastDoneAt` = end of the last successful poll (or boot, when none yet). */
+export async function checkChatStall(store: Store, notifier: Notifier, lastDoneAt: number, tz: string, now = Date.now()): Promise<void> {
+  const stale = now - lastDoneAt > CHAT_STALL_MS;
+  const open = store.getSetting(CHAT_KEY) ?? "";
+  if (stale && !open) {
+    await notifier.alert(`Чаты не проверялись ${Math.round((now - lastDoneAt) / 60_000)} мин`, "бот не отвечает работодателям, проверь логи и вход в hh.ru");
+    store.setSetting(CHAT_KEY, new Date(now).toISOString());
+  } else if (!stale && open) {
+    await notifier.alert("✅ Чаты снова проверяются", `тревога была с ${shortStamp(new Date(open), tz)}`);
+    store.setSetting(CHAT_KEY, "");
+  }
+}
