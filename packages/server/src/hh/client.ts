@@ -1,6 +1,7 @@
 // hh.ru flows over BrowserSession. Deterministic helpers + InitialState where markup is known;
 // Stagehand act/extract (with stable cacheKeys) for everything fragile. Every failure path
 // snapshots "<vacancyId>-<step>" and returns FAILED_UI; blocks throw RunAbortError.
+import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
 import {
   type Answer,
@@ -57,7 +58,6 @@ const toQuestion = (q: z.infer<typeof ExtractedQuestion>, idx: number): Question
   ...(q.options?.length ? { options: q.options } : {}),
 });
 
-const sleep = (ms: number): Promise<void> => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
 const norm = (u: string): string => u.replace(/[?#].*$/, "").replace(/\/+$/, "");
 
 export const createHHClient = (opts: HHClientOptions): HHClient => {

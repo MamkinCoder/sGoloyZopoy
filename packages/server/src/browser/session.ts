@@ -1,5 +1,6 @@
 // BrowserSession over Stagehand v4. Natural-language act() goes cache → replay → observe → act;
 // everything else is deterministic Page/Locator/evaluate calls (no LLM).
+import { setTimeout as sleep } from "node:timers/promises";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page, Stagehand, StagehandBrowser, StagehandClientExtractOptions } from "@browserbasehq/stagehand";
@@ -287,4 +288,3 @@ export class StagehandSession implements BrowserSession {
   }
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));

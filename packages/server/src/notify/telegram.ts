@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import type { Notifier, Run, Store, TapReply, TgButton, User } from "@sgz/shared";
 import { chunkMessage, formatAlert, formatReport } from "./format.js";
 
@@ -9,7 +10,6 @@ export interface TelegramOptions {
 
 const RETRIES = 3;
 const BASE = "https://api.telegram.org";
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export function createTelegram(token: string, chatId: string, panelUrl: string, opts: TelegramOptions = {}): Notifier {
   const warn = opts.warn ?? ((m: string) => console.error(m));

@@ -6,6 +6,7 @@
 //                            user[user_skills_ids][] hidden inputs (max 30; ids from /api/frontend/suggestions/skills?term=)
 //   /profile/personal/edit   #user_about (redactor: hidden textarea + .redactor-in contenteditable)
 //   /profile/experiences     /profile/experiences/<id>/edit → #experience_description (redactor)
+import { setTimeout as sleep } from "node:timers/promises";
 import type { BrowserSession, Profile } from "@sgz/shared";
 import { claimRegex, stripNeverClaimSentences } from "../llm/guards.js";
 import { HABR_ORIGIN, extractSsrState, loginFromHeader, parseExperiences, parseResumeState, type HabrResumeState } from "./state.js";
@@ -199,7 +200,6 @@ const sameStart = (a: string, b: string): boolean => {
   return n(a) === n(b);
 };
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Writes an approved proposal to the Habr profile. Only called by `sgz habr-resume --apply`. Each page is

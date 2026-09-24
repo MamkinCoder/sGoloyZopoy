@@ -14,6 +14,7 @@
 // DISABLED once that source runs, or the same vacancies land in the review queue as well. Its listing URL is
 // reused by the habr client.
 // 403/429 on the listing stops listing cleanly with what was collected so far (no bypass).
+import { setTimeout as sleep } from "node:timers/promises";
 import type { Discovered } from "@sgz/shared";
 import { hostOf, httpFetch, getText, stripHtml } from "../../http.js";
 import { makeVacancy, toISO } from "../../vacancy.js";
@@ -51,7 +52,6 @@ interface JobPosting {
   baseSalary?: { currency?: string; value?: { minValue?: number; maxValue?: number } };
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 export const listUrl = (q: string, page: number): string =>
   `${ORIGIN}/api/frontend/vacancies?q=${encodeURIComponent(q)}&sort=date&type=all&page=${page}`;
