@@ -13,7 +13,7 @@
 // the Huntflow proxy route - no public apply API, so apply() is omitted; agent flow only.
 // Verified live 2026-09 (1 open vacancy: "Tech Presale 1С", id 170444641).
 import type { Discovered } from "@sgz/shared";
-import { decodeEntities, getText, hostOf, originOf, stripHtml } from "../../http.js";
+import { decodeEntities, getText, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy } from "../../vacancy.js";
 import { atsId, rawId, type ATSClientImpl } from "../types.js";
 

@@ -13,7 +13,6 @@ import { makeVacancy } from "../../vacancy.js";
 import { atsId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://www.naumen.ru";
-const LIST_URL = `${ORIGIN}/career/vacancies/`;
 const COMPANY = "Naumen";
 
 const ITEM_RE = /<a href="(\/career\/vacancies\/[a-z0-9_-]+\/)" class="vcnc-item"[\s\S]*?<\/a>/gi;

@@ -50,7 +50,7 @@ export async function runBoard<C extends Card>(ctx: RunContext, u: UserRun, b: B
     ctx.log.info("search", `${b.source === "hh" ? "" : "habr: "}daily limit reached, skipping search/apply`);
     return budget;
   }
-  const fetched = await fetchStage(ctx, u, b, await searchStage(ctx, u, b, budget, tracker), budget);
+  const fetched = await fetchStage(ctx, b, await searchStage(ctx, u, b, budget, tracker), budget);
   const approved = plan.decide ? await decideStage(ctx, u, fetched, pool) : [];
   return plan.apply && approved.length ? applyStage(ctx, u, b, approved, budget, tracker) : budget;
 }
@@ -111,7 +111,7 @@ async function searchStage<C extends Card>(ctx: RunContext, u: UserRun, b: Board
   return out;
 }
 
-export async function fetchStage<C extends Card>(ctx: RunContext, u: UserRun, b: Board<C>, candidates: Candidate<C>[], budget: number): Promise<Fetched[]> {
+export async function fetchStage<C extends Card>(ctx: RunContext, b: Board<C>, candidates: Candidate<C>[], budget: number): Promise<Fetched[]> {
   const hh = b.source === "hh";
   const s = await b.open();
   const slice = candidates.slice(0, Math.max(budget * 2, 10));

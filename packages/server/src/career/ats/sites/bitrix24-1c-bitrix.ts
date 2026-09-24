@@ -78,7 +78,7 @@ function descriptionOf(html: string): string {
   return stripHtml(html.slice(start, end));
 }
 
-async function fetchJob(origin: string, d: Discovered): Promise<ReturnType<typeof makeVacancy>> {
+async function fetchJob(_origin: string, d: Discovered): Promise<ReturnType<typeof makeVacancy>> {
   const html = await getText(d.url);
   const title = stripHtml(decodeEntities(HERO_TITLE_RE.exec(html)?.[1] ?? "")).trim() || d.title;
   return makeVacancy({

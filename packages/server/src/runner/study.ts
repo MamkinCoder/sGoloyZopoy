@@ -1,7 +1,7 @@
 // Interview study pack, built only on a button press («📚 Чеклист к собеседованию», /study, the panel):
 // an LLM checklist of what the interviewer will likely ask + a ChatGPT tutor prompt built here, in code.
 // Not a runner job: no browser, just one `claude -p` through app.llm (the global claude mutex serializes it).
-import type { ChatThread, LLMClient, Notifier, Profile, Store, StudyItem, StudyPack, Vacancy } from "@sgz/shared";
+import type { LLMClient, Notifier, Profile, Store, StudyItem, StudyPack, Vacancy } from "@sgz/shared";
 import { kbForVacancy } from "../kb/context.js";
 import { chunkMessage, escapeHtml, formatAlert } from "../notify/format.js";
 import { usersFor } from "./mock.js";

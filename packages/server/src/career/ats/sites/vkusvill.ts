@@ -9,7 +9,7 @@
 import type { Discovered } from "@sgz/shared";
 import { decodeEntities, getText, hostOf, stripHtml } from "../../http.js";
 import { makeVacancy, toISO } from "../../vacancy.js";
-import { atsId, rawId, type ATSClientImpl } from "../types.js";
+import { atsId, type ATSClientImpl } from "../types.js";
 
 const ORIGIN = "https://vkusvill.ru";
 const COMPANY = "VkusVill";

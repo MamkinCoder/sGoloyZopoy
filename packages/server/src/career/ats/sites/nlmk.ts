@@ -59,7 +59,7 @@ const FIELD_RE = (label: string) =>
 const SCHEDULE_RE = FIELD_RE("График");
 const DESCRIPTION_RE = /<div class="specialist__right-block-text">([\s\S]*?)<div id="anchor"/i;
 
-async function fetchJob(origin: string, d: Discovered) {
+async function fetchJob(_origin: string, d: Discovered) {
   const html = await getText(d.url);
   const title = text(H1_RE.exec(html)?.[1]) || d.title;
   return makeVacancy({

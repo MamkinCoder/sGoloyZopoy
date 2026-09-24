@@ -63,7 +63,7 @@ const EMPLOYMENT_RE = FIELD_RE("Тип занятости");
 const FORMAT_RE = FIELD_RE("Формат работы");
 const DETAIL_TXT_RE = /<div class="detail_txt">([\s\S]*?)<div class="detail_conditions">/i;
 
-async function fetchJob(origin: string, d: Discovered) {
+async function fetchJob(_origin: string, d: Discovered) {
   const html = await getText(d.url);
   const h1 = text(/<h1 class="page_title">([\s\S]*?)<\/h1>/i.exec(html)?.[1]);
   return makeVacancy({

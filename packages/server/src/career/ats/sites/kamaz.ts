@@ -60,7 +60,7 @@ function parseSalary(raw: string): [number, number] {
   return [nums[0] ?? 0, 0];
 }
 
-async function fetchJob(origin: string, d: Discovered) {
+async function fetchJob(_origin: string, d: Discovered) {
   const html = await getText(d.url);
   const head = VACNAME_RE.exec(html);
   const title = text(head?.[1]) || d.title;

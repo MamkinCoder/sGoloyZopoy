@@ -1,7 +1,6 @@
 import type {
   Answer,
   Application,
-  ApplicationFilter,
   ApplicationRow,
   Decision,
   Question,

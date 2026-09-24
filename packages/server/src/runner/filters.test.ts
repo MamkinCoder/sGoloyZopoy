@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { companyKey, Status, type Profile, type Store, type User, type Vacancy } from "@sgz/shared";
 import { classify, companyQuotaSkip, createRunCompanyTracker, filterOpts, recordSkip, titleScore, type CompanyLimitSettings } from "./filters.js";
 

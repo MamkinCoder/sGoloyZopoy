@@ -11,7 +11,6 @@ import {
   type HHClient,
   type HHResume,
   type Question,
-  type ResumeEdit,
   type SearchParams,
   type ThreadDetail,
   type Vacancy,

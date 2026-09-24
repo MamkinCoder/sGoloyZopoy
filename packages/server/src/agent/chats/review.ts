@@ -106,7 +106,7 @@ export function kbReviewGate(store: ChatStore, notifier: Pick<Notifier, "ask" | 
       return { tp, review, tag, stories: tag && tp.answer === null ? store.listKbStories(task.userId, tag.id) : [] };
     });
     const pending = views.filter((v): v is TopicView & { review: KbReview } => v.tp.answer === null && !!v.review);
-    const buttons: TgButton[][] = pending.map(({ tp, review, tag, stories }) => [
+    const buttons: TgButton[][] = pending.map(({ tp, review, stories }) => [
       // Nothing to cite = nothing to confirm: a bare «да» is worthless to the employer, so ask for a story instead.
       ...(stories.length ? [{ text: `Подтвердить ${tp.name}`, data: kbCallback(review.id, "c") }] : []),
       { text: `Дополнить ${tp.name}`, data: kbCallback(review.id, "e") },

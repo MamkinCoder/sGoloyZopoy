@@ -81,7 +81,7 @@ export async function viewersStage(ctx: RunContext, u: UserRun, pool: HHResume[]
   if (candidates.length) {
     const cap = Math.min(budget, MAX_APPLIES);
     const board = hhBoard(ctx, u, pool);
-    const approved = await decideStage(ctx, u, await fetchStage(ctx, u, board, candidates, cap), pool);
+    const approved = await decideStage(ctx, u, await fetchStage(ctx, board, candidates, cap), pool);
     sent = cap - (await applyStage(ctx, u, board, approved.slice(0, cap), cap, tracker));
   }
 
