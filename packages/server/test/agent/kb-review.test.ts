@@ -177,20 +177,23 @@ describe("KB review card", () => {
     expect(h.store.listKbStories(h.user.id)).toHaveLength(0);
   });
 
-  it("new_only: topics with stories and denied tags are not shown", async () => {
+  it("new_only: topics with confirmed stories and denied tags are not shown; unconfirmed seed stories are asked", async () => {
     h = chatHarness();
     h.store.setSetting("kb_review_mode", "new_only");
-    h.story("Jest");
-    await ask(["Jest", "Kafka", "Vitest"]);
+    const jest = h.story("Jest");
+    h.store.saveKbStory({ ...jest, confirmed: true, tagIds: jest.tags.map((t) => t.id) });
+    h.story("Docker"); // seed only, tag unknown: not proof of experience
+    await ask(["Jest", "Kafka", "Vitest", "Docker"]);
     expect(h.tasks()[0]!.topics).toEqual([
       { name: "Jest", answer: "yes", by: "profile" },
       { name: "Kafka", answer: "no", by: "profile" }, // never_claim_skills -> tag no
       { name: "Vitest", answer: null, by: null },
+      { name: "Docker", answer: null, by: null },
     ]);
-    expect(h.labels()).toEqual([["Дополнить Vitest", "Нет навыка Vitest"]]);
+    expect(h.labels()[0]).toEqual(["Дополнить Vitest", "Нет навыка Vitest"]);
     expect(h.asks[0]!.text).toContain("<b>Jest</b>: ✅ есть в базе");
     expect(h.asks[0]!.text).toContain("<b>Kafka</b>: ❌ нет в базе, не заявляю");
-    expect(reviews().map((r) => r.topic)).toEqual(["Vitest"]);
+    expect(reviews().map((r) => r.topic)).toEqual(["Vitest", "Docker"]);
   });
 
   it("an alias resolves to the existing tag", async () => {
@@ -218,6 +221,19 @@ describe("KB review card", () => {
     expect(tag("Rust").status).toBe("unknown"); // not the human's answer
     // A tap on the old card changes nothing.
     expect(h.tap("Нет навыка Rust", h.asks[0])).toMatchObject({ note: "уже учтено" });
+  });
+
+  it("a denied tag's aliases and story sentences never reach the draft; its aliases reach the reply guard", async () => {
+    h = chatHarness();
+    h.store.upsertKbTag(h.user.id, { name: "PostgreSQL", aliases: ["postgres"] });
+    h.story("PostgreSQL", { title: "Отчёты", did: "Поднял postgres-реплику для отчётов. Настроил выгрузку в CSV." });
+    await ask(["PostgreSQL"]);
+    h.tap("Нет навыка PostgreSQL");
+    await h.drain();
+    expect(draftKb()).toContain("- PostgreSQL: нет в опыте, не заявлять");
+    expect(draftKb()).not.toContain("postgres-реплику");
+    const profile = h.llm.calls.filter((c) => c.method === "answerChat").at(-1)!.args[0] as { never_claim_skills: string[] };
+    expect(profile.never_claim_skills).toEqual(expect.arrayContaining(["PostgreSQL", "postgres"]));
   });
 
   it("phase-1 ct: buttons still resolve the topic (y = confirm, n = no skill)", async () => {

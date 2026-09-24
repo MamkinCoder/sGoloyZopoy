@@ -145,9 +145,11 @@ export function kbReviewGate(store: ChatStore, notifier: Pick<Notifier, "ask" | 
         if (tp.answer) return tp;
         const tag = topicTag(store, task.userId, tp.name);
         if (mode === "off") return { ...tp, answer: tag.status === "yes" ? "yes" : "no", by: "profile" };
-        // new_only: a topic with stories is not shown; a tag the human already denied is not asked again.
+        // new_only: a topic with stories is not shown; a tag the human already denied is not asked again. Unconfirmed
+        // seed stories of a tag nobody confirmed are not proof: the human is asked.
         if (mode === "new_only" && tag.status === "no") return { ...tp, answer: "no", by: "profile" };
-        if (mode === "new_only" && tag.storyCount > 0) return { ...tp, answer: "yes", by: "profile" };
+        if (mode === "new_only" && tag.storyCount > 0 && (tag.status === "yes" || store.listKbStories(task.userId, tag.id).some((s) => s.confirmed)))
+          return { ...tp, answer: "yes", by: "profile" };
         return tp;
       });
     },

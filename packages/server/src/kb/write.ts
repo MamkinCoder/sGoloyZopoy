@@ -41,11 +41,35 @@ export function storyHash(s: KbStoryDraft): string {
 /** Numbers as they may be written: «2,5» == «2.5», «1 000» stays two numbers (rare, still conservative). */
 export const numbersIn = (text: string): string[] => (text.match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => n.replace(",", "."));
 
-/** Drops every sentence carrying a number that the sources do not contain. */
+// Quantities written in words: «вдвое», «в три раза», «в разы», «десятки», «сотни тысяч», «миллион».
+const QTY_WORD_RE =
+  /(?<!\p{L})(?:вдвое|втрое|вчетверо|впятеро|вдесятеро|в\s+разы|(?:два|три|четыре|пять|шесть|семь|восемь|девять|десять|несколько|много)\s+раз\p{L}*|десят(?:ки|ков|ками)|сот(?:ни|ен|нями)|тысяч\p{L}*|миллион\p{L}*|миллиард\p{L}*)(?!\p{L})/giu;
+
+/**
+ * What a text claims numerically: every digit number with its unit («3|раз», «30|%»; years and unit-less numbers
+ * bare) and every quantity word. A story's claim must appear with the same unit in the sources: «Python 3» or
+ * «3 года» there do not allow «в 3 раза» here.
+ */
+export function numberClaims(text: string): string[] {
+  const t = text.toLowerCase().replace(/ё/g, "е");
+  const out: string[] = [];
+  for (const m of t.matchAll(/(\d+(?:[.,]\d+)?)(?:\s*(%)|\s+(\p{L}{3,}))?/gu)) {
+    const n = m[1]!.replace(",", ".");
+    const unit = /^(?:19|20)\d\d$/.test(n) ? "" : (m[2] ?? m[3]?.slice(0, 3) ?? "");
+    out.push(unit ? `${n}|${unit}` : n);
+  }
+  for (const m of t.matchAll(QTY_WORD_RE)) out.push(`~${m[0].split(/\s+/).map((w) => w.slice(0, 4)).join(" ")}`);
+  return out;
+}
+
+/** The claims the sources allow: their numbers with units, bare, and their quantity words. */
+export const allowedNumbers = (sources: string): Set<string> => new Set([...numberClaims(sources), ...numbersIn(sources)]);
+
+/** Drops every sentence carrying a number (digits or words) the sources do not contain with the same unit. */
 export function stripInventedNumbers(text: string, allowed: Set<string>): string {
-  if (!numbersIn(text).length) return text;
+  if (!numberClaims(text).length) return text;
   return splitSentences(text)
-    .filter((s) => numbersIn(s).every((n) => allowed.has(n)))
+    .filter((s) => numberClaims(s).every((n) => allowed.has(n)))
     .join(" ")
     .trim();
 }
@@ -86,18 +110,18 @@ const tagIds = (store: Store, userId: number, names: string[]): number[] =>
   names.map((name) => store.listKbTags(userId).find((t) => tagIs(t, name))?.id ?? store.upsertKbTag(userId, { name }).id);
 
 /** Inserts stories whose hash is not stored yet; never touches existing rows. */
-export function addStories(store: Store, userId: number, drafts: KbStoryDraft[], o: { source: KbStorySource; confirmed: boolean }): { added: KbStory[]; skipped: number } {
+export function addStories(store: Store, userId: number, drafts: (KbStoryDraft & { hash?: string })[], o: { source: KbStorySource; confirmed: boolean }): { added: KbStory[]; skipped: number } {
   const known = new Set(store.listKbStories(userId).map((s) => s.hash).filter(Boolean));
   const added: KbStory[] = [];
   let skipped = 0;
   for (const d of drafts) {
-    const hash = storyHash(d);
+    const hash = d.hash ?? storyHash(d);
     if (known.has(hash)) {
       skipped++;
       continue;
     }
     known.add(hash);
-    const { tags, ...fields } = d;
+    const { tags, hash: _h, ...fields } = d;
     added.push(store.saveKbStory({ ...fields, userId, source: o.source, confirmed: o.confirmed, hash, tagIds: tagIds(store, userId, tags) }));
   }
   return { added, skipped };
@@ -106,20 +130,48 @@ export function addStories(store: Store, userId: number, drafts: KbStoryDraft[],
 /**
  * Seed import. New tags get the seed's status; an existing tag only gains aliases/category, and its status only
  * while it is still `unknown` (a human's yes/no wins). Stories are added by hash, nothing is deleted or edited.
+ * A story is skipped when its hash was ever imported (a story the human deleted stays deleted) or a story with the
+ * same company + title exists (a re-run of the LLM words the same story differently). The hash is taken before
+ * `no` tags leave the draft, so marking a tag `no` between runs does not re-import its stories.
  */
 export function applySeed(store: Store, userId: number, seed: KbSeed): ApplyResult {
   const before = store.listKbTags(userId).length;
   for (const t of seed.tags) {
-    const cur = store.listKbTags(userId).find((x) => tagIs(x, t.name));
+    const cur = store.listKbTags(userId).find((x) => [t.name, ...t.aliases].some((n) => tagIs(x, n))); // as upsertKbTag matches
     const status = !cur || cur.status === "unknown" ? t.status : undefined;
     store.upsertKbTag(userId, { name: t.name, aliases: t.aliases, category: t.category, status });
   }
   const noTags = store.listKbTags(userId).filter((t) => t.status === "no");
-  const drafts = seed.stories.map((s) => ({ ...s, tags: s.tags.filter((n) => !noTags.some((t) => tagIs(t, n))) }));
+  const ledgerKey = `kb_seed_hashes:${userId}`;
+  const imported = new Set<string>(parseList(store.getSetting(ledgerKey)));
+  const titleKey = (s: { company: string; title: string }) => `${norm(s.company)}\u0001${norm(s.title)}`;
+  const titles = new Set(store.listKbStories(userId).map(titleKey));
+  const drafts: (KbStoryDraft & { hash: string })[] = [];
+  let dup = 0;
+  for (const s of seed.stories) {
+    const hash = storyHash(s);
+    if (imported.has(hash) || titles.has(titleKey(s))) {
+      dup++;
+      continue;
+    }
+    titles.add(titleKey(s));
+    drafts.push({ ...s, hash, tags: s.tags.filter((n) => !noTags.some((t) => tagIs(t, n))) });
+  }
   const { added, skipped } = addStories(store, userId, drafts, { source: "seed", confirmed: false });
+  for (const d of drafts) imported.add(d.hash);
+  store.setSetting(ledgerKey, JSON.stringify([...imported]));
   syncProfileSkills(store, userId);
-  return { tagsAdded: store.listKbTags(userId).length - before, storiesAdded: added.length, storiesSkipped: skipped };
+  return { tagsAdded: store.listKbTags(userId).length - before, storiesAdded: added.length, storiesSkipped: skipped + dup };
 }
+
+const parseList = (raw: string | null): string[] => {
+  try {
+    const v = JSON.parse(raw ?? "[]") as unknown;
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+};
 
 // ---- profile sync
 
@@ -130,11 +182,26 @@ export function applySeed(store: Store, userId: number, seed: KbSeed): ApplyResu
 export function withKbSkills<P extends Pick<Profile, "verified_skills" | "never_claim_skills">>(p: P, tags: Pick<KbTag, "name" | "aliases" | "status">[]): P {
   const yes = tags.filter((t) => t.status === "yes");
   const no = tags.filter((t) => t.status === "no");
-  const hit = (list: typeof tags, s: string) => list.some((t) => tagIs(t, s));
+  // Removal by name only: an alias must never delete an entry from the human's lists.
+  const hit = (list: typeof tags, s: string) => list.some((t) => tagKey(t.name) === tagKey(s));
   const missing = (list: typeof tags, have: string[]) => list.filter((t) => !have.some((s) => tagIs(t, s))).map((t) => t.name);
   const verified = p.verified_skills.filter((s) => !hit(no, s));
   const never = p.never_claim_skills.filter((s) => !hit(yes, s));
   return { ...p, verified_skills: [...verified, ...missing(yes, verified)], never_claim_skills: [...never, ...missing(no, never)] };
+}
+
+/**
+ * The reverse direction, for a human editing the profile lists (panel): tags follow the edit, or the next
+ * syncProfileSkills would revert it. By tag name: in never_claim -> no, in verified -> yes, in neither -> unknown;
+ * a tag the lists only name by an alias keeps its status.
+ */
+export function applyProfileSkills(store: Store, userId: number, p: Pick<Profile, "verified_skills" | "never_claim_skills">): void {
+  const has = (list: string[], n: string) => list.some((s) => norm(s) === norm(n));
+  const all = [...p.verified_skills, ...p.never_claim_skills];
+  for (const t of store.listKbTags(userId)) {
+    const next: KbTagStatus = has(p.never_claim_skills, t.name) ? "no" : has(p.verified_skills, t.name) ? "yes" : all.some((s) => tagIs(t, s)) ? t.status : "unknown";
+    if (next !== t.status) store.setKbTagStatus(t.id, next);
+  }
 }
 
 /** Writes withKbSkills into the stored profile; true when it changed. Call after any tag status change. */

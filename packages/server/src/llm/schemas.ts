@@ -3,7 +3,8 @@ import { z } from "zod";
 
 export const DecisionSchema = z.object({
   vacancy_id: z.coerce.number().int(),
-  apply: z.boolean(),
+  // One `"apply": "true"` must not fail the whole batch (every vacancy in it would get "no decision").
+  apply: z.preprocess((v) => (v === "true" ? true : v === "false" ? false : v), z.boolean()),
   reason: z.string().default(""),
   resume_id: z.string().default(""),
   cover_letter: z.string().default(""),
@@ -119,6 +120,8 @@ export function unwrapArray(v: unknown): unknown {
       const inner = (v as Record<string, unknown>)[key];
       if (Array.isArray(inner)) return inner;
     }
+    // A one-vacancy / one-question batch answered with the bare item.
+    if ("vacancy_id" in v || "idx" in v) return [v];
   }
   return v;
 }
@@ -129,9 +132,11 @@ export const LessonsSchema = z.object({ lessons: z.array(z.string()).default([])
 export const MockFeedbackSchema = z.object({ feedback: z.string().min(1), follow_up: z.string().nullable().catch(null).default(null) });
 export const MockSummarySchema = z.object({ tighten: z.array(z.string()).default([]) });
 
-/** Knowledge base (src/kb/llm.ts): kb_seed returns tags + stories, kb_ingest only stories. */
+/** Knowledge base (src/kb/llm.ts): kb_seed returns tags + stories, kb_ingest only stories. Parsed outside `call`
+ * (no retry), so every field is tolerant: one bad story must not throw away a long seed pass; guardStory drops
+ * a story without `did` and titles one without a title. */
 export const KbStoryOutSchema = z.object({
-  title: z.string(),
+  title: z.string().catch(""),
   company: z.string().catch(""),
   period: z.string().catch(""),
   context: z.string().catch(""),
@@ -139,8 +144,9 @@ export const KbStoryOutSchema = z.object({
   result: z.string().catch(""),
   tags: z.array(z.string()).catch([]),
 });
+const EMPTY_STORY = { title: "", company: "", period: "", context: "", did: "", result: "", tags: [] as string[] };
 export const KbSeedSchema = z.object({
-  tags: z.array(z.object({ name: z.string(), aliases: z.array(z.string()).catch([]), category: z.string().catch("") })).default([]),
-  stories: z.array(KbStoryOutSchema).default([]),
+  tags: z.array(z.object({ name: z.string().catch(""), aliases: z.array(z.string()).catch([]), category: z.string().catch("") }).catch({ name: "", aliases: [], category: "" })).default([]),
+  stories: z.array(KbStoryOutSchema.catch(EMPTY_STORY)).default([]),
 });
-export const KbIngestSchema = z.object({ stories: z.array(KbStoryOutSchema).default([]) });
+export const KbIngestSchema = z.object({ stories: z.array(KbStoryOutSchema.catch(EMPTY_STORY)).default([]) });

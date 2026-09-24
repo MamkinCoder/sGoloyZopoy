@@ -6,6 +6,7 @@ import { parseBody, ProfileSchema, UserPatchSchema } from "../validate.js";
 import { userOr404 } from "./common.js";
 import { readLessons, writeLessons } from "../../runner/learn.js";
 import { weeklyRetro } from "../../notify/retro.js";
+import { applyProfileSkills, syncProfileSkills } from "../../kb/write.js";
 
 const EMPTY_PROFILE: ProfileDTO = ProfileSchema.parse({});
 
@@ -60,8 +61,9 @@ export function userRoutes({ store }: ApiDeps): Hono {
   r.put("/users/:slug/profile", async (c) => {
     const u = userOr404(store, c.req.param("slug"));
     const profile = await parseBody(c, ProfileSchema);
+    applyProfileSkills(store, u.id, profile); // the KB tags follow the edited skill lists
     store.saveProfile(u.id, profile);
-    return c.json(profile);
+    return c.json(syncProfileSkills(store, u.id) ? (store.getProfile(u.id) ?? profile) : profile);
   });
 
   r.get("/users/:slug/stats", (c) => {

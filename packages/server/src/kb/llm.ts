@@ -4,7 +4,7 @@ import { tagIs, tagKey, type CV, type KbStory, type LLMClient, type Profile, typ
 import { neverClaimList, profileForLLM } from "../llm/format.js";
 import { KbIngestSchema, KbSeedSchema } from "../llm/schemas.js";
 import { renderPrompt } from "../llm/template.js";
-import { addStories, guardStory, numbersIn, syncProfileSkills, type KbSeed, type KbSeedTag, type KbStoryDraft } from "./write.js";
+import { addStories, allowedNumbers as allowedIn, guardStory, syncProfileSkills, type KbSeed, type KbSeedTag, type KbStoryDraft } from "./write.js";
 
 export interface SeedSources {
   profile: Profile;
@@ -50,23 +50,33 @@ export function seedPrompt(src: SeedSources): string {
 export function guardSeed(raw: { tags: Omit<KbSeedTag, "status">[]; stories: KbStoryDraft[] }, src: SeedSources): KbSeed {
   const p = src.profile;
   const tags: KbSeedTag[] = [];
+  const has = (list: string[], n: string) => list.some((s) => tagKey(s) === tagKey(n));
+  const skills = [...p.verified_skills, ...p.never_claim_skills];
   const add = (t: Omit<KbSeedTag, "status">) => {
     const name = t.name.trim();
     if (!name) return;
-    const cur = tags.find((x) => tagIs(x, name) || t.aliases.some((a) => tagIs(x, a)));
+    // An alias naming another profile skill («Docker Swarm» on «Docker») is a different skill: it must neither decide
+    // this tag's status nor later make the profile sync treat the two as one. It survives only as the one alias that
+    // names this tag («Go» on «Golang») when the name itself is not in the profile.
+    const aliases = t.aliases.map((a) => a.trim()).filter(Boolean);
+    const named = aliases.filter((a) => has(skills, a) && tagKey(a) !== tagKey(name));
+    const decider = !has(skills, name) && named.length === 1 ? named[0]! : undefined;
+    const safe = aliases.filter((a) => a === decider || !named.includes(a));
+    const cur = tags.find((x) => tagIs(x, name) || safe.some((a) => tagIs(x, a)));
     if (cur) {
-      cur.aliases = [...new Set([...cur.aliases, ...t.aliases])];
+      cur.aliases = [...new Set([...cur.aliases, ...safe.filter((a) => !has(skills, a) || tagKey(a) === tagKey(cur.name))])];
       return;
     }
-    const probe = { name, aliases: t.aliases };
-    const status = p.never_claim_skills.some((s) => tagIs(probe, s)) ? "no" : p.verified_skills.some((s) => tagIs(probe, s)) ? "yes" : "unknown";
-    tags.push({ name, aliases: t.aliases.map((a) => a.trim()).filter(Boolean).slice(0, 8), category: t.category.trim(), status });
+    const key = decider ?? name;
+    const status = has(p.never_claim_skills, key) ? "no" : has(p.verified_skills, key) ? "yes" : "unknown";
+    tags.push({ name, aliases: safe.slice(0, 8), category: t.category.trim(), status });
   };
   raw.tags.forEach(add);
   for (const s of p.verified_skills) add({ name: s, aliases: [], category: "" });
   for (const s of p.never_claim_skills) add({ name: s, aliases: [], category: "" });
 
-  const allowedNumbers = new Set(numbersIn(JSON.stringify(src)));
+  // JSON escapes («\n») would glue a newline to the next unit word.
+  const allowedNumbers = allowedIn(JSON.stringify(src).replace(/\\[nrt]/g, " "));
   const companies = sourceCompanies(src);
   const stories = raw.stories
     .map((s) => guardStory(s, { allowedNumbers, never: p.never_claim_skills, companies }))
@@ -106,7 +116,7 @@ export async function ingestKb(llm: LLMClient, input: IngestInput): Promise<KbSt
     companies: companies.map((c) => `- ${c}`).join("\n"),
   });
   const raw = KbIngestSchema.parse(await llm.json<unknown>("kb_ingest", "write", prompt, INGEST_SCHEMA));
-  const allowedNumbers = new Set(numbersIn(`${text} ${companies.join(" ")} ${input.tag}`));
+  const allowedNumbers = allowedIn(`${text} ${companies.join(" ")} ${input.tag}`);
   return raw.stories
     .map((s) => guardStory(s, { allowedNumbers, never: [] }))
     .filter((s): s is KbStoryDraft => !!s)

@@ -97,7 +97,7 @@ React, TypeScript, Redux. Верстка адаптивных интерфейс
 
 ## Как решать
 
-Цель соискателя - собеседования. Любая техническая роль рядом с его стеком подходит: backend, frontend, fullstack, DevOps, SRE, platform / infra, data engineering, ML / AI engineering, QA automation с кодом. Senior, «Старший» и «Ведущий разработчик» (в крупных компаниях это грейд senior, не руководитель) - откликайся (опыт 5 лет).
+Цель соискателя - собеседования. Любая техническая роль рядом с его стеком подходит: backend, frontend, fullstack, DevOps, SRE, platform / infra, data engineering, ML / AI engineering, QA automation с кодом. Senior, «Старший» и «Ведущий разработчик» (в крупных компаниях это грейд senior, не руководитель) - откликайся, если `profile.experience` это допускает.
 
 Отказ (`apply: false`) только если хотя бы одно:
 - Lead / Head / Architect / Тимлид / руководитель, или явно требуют 7+ лет опыта.
