@@ -51,7 +51,7 @@ export class FakeLLM implements LLMClient {
       return { idx: q.idx, text: "fake answer" };
     });
 
-  onAnswerChat: (profile: Profile, vacancy: Vacancy | null, history: ChatMessage[]) => ChatReply = () => ({
+  onAnswerChat: (profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], kb?: string) => ChatReply = () => ({
     reply: "Да, готов обсудить детали.",
     needs_human: false,
     reason: "fake",
@@ -116,9 +116,9 @@ export class FakeLLM implements LLMClient {
     this.record("answerQuestionnaire", [profile, vacancy, qs]);
     return this.onAnswerQuestionnaire(profile, vacancy, qs);
   }
-  async answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[]): Promise<ChatReply> {
-    this.record("answerChat", [profile, vacancy, history, choices]);
-    return this.onAnswerChat(profile, vacancy, history);
+  async answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[], kb?: string): Promise<ChatReply> {
+    this.record("answerChat", [profile, vacancy, history, choices, kb]);
+    return this.onAnswerChat(profile, vacancy, history, kb);
   }
   async triageChat(profile: Profile, history: ChatMessage[], fresh: ChatMessage[]): Promise<ChatTriage> {
     this.record("triageChat", [profile, history, fresh]);

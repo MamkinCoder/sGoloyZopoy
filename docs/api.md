@@ -287,22 +287,39 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       brief, rejection feedback request, forwarding feedback after a rejection, hh bot surveys, follow-ups), then
       opens a reply task (`chat_tasks`) for every thread with unanswered employer messages. `chats.triage` (llm,
       `prompts/triage_chat.md`, tier fast) → `kind` + `topics` (skills asked about); `ack_only` / `rejection` close
-      the task without a reply. `chats.review` (none): topics known from `verified_skills` / `never_claim_skills` /
-      learned answers are filled in; the rest go into ONE Telegram card per task. `chats.draft` (llm, `answer_chat`
-      with the task's answers: ✅ = verified, ❌ = never claim) → `ready`, or back to review when the draft finds
-      a skill triage missed; `needs_human` / interview time as before. `chats.send` (browser) re-reads the thread:
+      the task without a reply. `chats.review` (none): the knowledge-base review gate (below); topics it resolves
+      without the human are filled in, the rest go into ONE Telegram card per task. `chats.draft` (llm,
+      `answer_chat` with the task's answers: yes = verified, no = never claim, plus a KB block = `kbFor` over the
+      task topics + vacancy + the employer's messages, statuses as this task answered them, the best stories within
+      3000 chars) → `ready`, or back to review when the draft finds a skill triage missed; `needs_human` /
+      interview time as before. `chats.send` (browser) re-reads the thread:
       the reply already there → only marked sent (no double reply); a new employer message → the task is
       `superseded` and a fresh task covers all unanswered messages (answers carried over); else send, re-read to
       confirm, mark the messages handled, and `chats.sync` again 30 s later. A task whose job failed stays
       `failed` until the employer writes again.
-    - Review card (callback `ct:<task id>:<topic index>:y|n`): one row «✅ Jest» «❌ Jest» per unknown topic. A tap
-      writes the answer into the task (and `skills_learned:<user>` + the profile lists, as before), and the same
-      card is edited (answered rows gone). The task drafts only when every topic is answered, any mix. A tap on a
-      superseded task's card goes to the thread's open task. `chats.remind` resends the card once after 2 h;
-      `chats.fallback` after 12 h drafts anyway with the unanswered topics treated as «нет» for that reply only
-      (honest «в продакшене не использовал»), plus an alert «Отвечаю без тебя». Old one-skill cards
-      (`sk:y|n:<user>:<key>`, settings `skill_pending:*`) still work: the tap answers that topic on the user's open
-      tasks, or is only remembered.
+    - KB review card (`agent/chats/review.ts`, setting `kb_review_mode`: `always` (default) = every topic |
+      `new_only` = only topics without stories (a tag already `no` is not asked either) | `off` = no card, a `yes`
+      tag counts as yes, anything else as not claimed). Every topic resolves to a KB tag by name or alias; a topic
+      the KB does not know becomes a tag (`yes`/`no` when the profile lists it, else `unknown`). One `kb_reviews` row
+      per shown topic (`pending` → `confirmed` | `expanded` | `denied` | `expired`, `tg_message_id` of the card).
+      The card: «<employer> спрашивает: «…»», then per topic its stories (title, company, short did / result, at
+      most 3, fewer when the card would pass ~3900 chars; HTML-escaped) and a button row «Подтвердить X» (only with
+      stories or a `yes` tag) «Дополнить X» «Нет навыка X» (callback `kr:<review id>:c|e|d`). A tap edits the same
+      card to show each topic's resolution; the task drafts once every topic is resolved.
+      - «Подтвердить»: tag `yes`, the shown stories `confirmed`, review `confirmed`.
+      - «Нет навыка»: tag `no` (mirrored into `never_claim_skills`), review `denied`.
+      - «Дополнить»: the bot writes «Напиши, что ты делал с X: где, что именно, какой результат.» in the tapped chat
+        and marks the review as waiting for text there (`kb_reviews.awaiting_chat`, in the DB). The next plain
+        message in that chat is the story (before `/mock` answers): job `kb.ingest` (llm, `kb_ingest`) →
+        stories `source: telegram, confirmed`, tag `yes`, review `expanded`, the card edited. Several «Дополнить»
+        are asked one at a time, oldest first. A text the model cannot turn into a story: the bot says so, tap
+        «Дополнить» again.
+      Human answers also update `skills_learned:<user>` so older code paths agree with the KB. A tap (or a story)
+      for a superseded task goes to the thread's open task waiting for the same tag. `chats.remind` resends the
+      card once after 2 h; `chats.fallback` after 12 h expires the open reviews and drafts anyway with the
+      unanswered topics treated as «нет» for that reply only (honest «в продакшене не использовал»; tag status
+      unchanged), plus an alert «Отвечаю без тебя». Phase-1 cards still work: `ct:<task id>:<topic index>:y|n`
+      (y = confirm, n = no skill) and one-skill cards `sk:y|n:<user>:<key>` (settings `skill_pending:*`).
     - Stall alert: if no `chats.sync` job finished `done` for 20 min, one Telegram alert «Чаты не проверялись N мин»,
       and one «✅ Чаты снова проверяются» when they resume (open state in setting `alert_open:chats`).
   - Career autopilot (`sgz serve`): when the main lane is idle it runs `career` stage `rotate` chunks.
@@ -353,6 +370,8 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
     - `retro_day` (`"sun"` default, `"mon"`…`"sat"`, `""` = off) + `retro_at` (`"19:00"`): once a week,
       «Итоги недели» per active user (the `GET /users/:slug/retro` numbers as text); a user with fewer than 10
       sends that week gets nothing. Last sent day: setting `retro_last_day`. `/week` answers it on demand.
+    - `kb_review_mode`: `"always"` (default) | `"new_only"` | `"off"`: which chat topics go on the KB review card
+      (see the always-on agent above).
     - `/mock [employer]`: text mock interview from the most recent thread with a prep brief (`prep_json`)
       or a study pack (optionally matching the employer; a user's own `tgChatId` sees only their threads). Up
       to 5 questions, the study pack's gap topics first, then the prep questions; each plain message is an answer, graded by one LLM call (`prompts/mock_feedback.md`, tier

@@ -79,14 +79,14 @@ task: instant, restart-proof, independent of any run.
   went out. State changes are compare-and-set, so a sync superseding a task while its draft is written is safe.
 - The review step is job `chats.review` behind `ReviewGate` (`agent/chats/review.ts`: `prefill / ask / record /
   card`); phase 1's gate reads `verified_skills` / `never_claim_skills` + learned answers and sends one grouped
-  card (`ct:<task>:<topic>:y|n`). Phase 3 replaces the gate with the KB review without touching `tasks.ts`.
+  card (`ct:<task>:<topic>:y|n`). Phase 3 replaced the gate with the KB review (§4 as built); `tasks.ts` only gained the KB block for the draft, `expire` on fallback and carrying answers into the fresh task when `chats.send` supersedes.
   The 2 h reminder and 12 h fallback are delayed jobs `chats.remind` / `chats.fallback`; the invitation brief is
   `chats.prep` (llm). A task whose job failed is not reopened until the employer writes again.
 - The re-sync after a send is the normal full `chats.sync` pulled to +30 s (key dedupe), not a per-thread sync:
   unchanged threads cost one list read.
 - hh chat-bot surveys (the questionnaire widget) are still answered inside `chats.sync` (one LLM call inside a
   browser job); a job of their own if they get frequent.
-- The agent's tables are on `SqliteStore` (`db/jobs.ts`, `db/chat-tasks.ts`), not on the shared `Store` contract:
+- The agent's tables are on `SqliteStore` (`db/jobs.ts`, `db/chat-tasks.ts`, `db/kb-reviews.ts`), not on the shared `Store` contract:
   only the agent and the API view (`ApiDeps.agent`) use them. Stage `chats` is gone from runs entirely.
 
 ## 4. Knowledge base (the seeker's experience, replacing "master CV" as the source of truth)
@@ -130,6 +130,18 @@ kb_reviews(id, user_id, task_id NULL, tag_id, state: pending|confirmed|expanded|
   «Дополнить» -> the bot asks for a story about the tag; the next free-text message in that chat is the
   answer -> `kb.ingest` (llm) turns it into a structured story (never inventing numbers) -> saved, card updated.
   «Нет навыка» -> tag status `no`. When every topic is resolved the task moves to drafting.
+  As built (phase 3, `agent/chats/review.ts` `kbReviewGate`, the phase-1 skills gate is deleted): the step is still
+  job `chats.review` behind `ReviewGate` (+ `expire(taskId)` for the fallback, `record` takes the task id). Buttons
+  are one row per topic «Подтвердить X» «Дополнить X» «Нет навыка X» (`kr:<review id>:c|e|d`; «Подтвердить» only
+  with stories or a `yes` tag, it also confirms the ≤3 stories shown). `kb_reviews` gained `topic` (the task's
+  name for it), `awaiting_chat` / `awaiting_at` (migration `007c`): «Дополнить» marks the review as waiting in the
+  tapped chat (`TapReply.say` sends the question there), `kbText` routes the next plain message of that chat to
+  job `kb.ingest` (llm) before `/mock`, and asks the next waiting review, oldest first. After the ingest the card is
+  edited via `Notifier.edit`. A topic the KB does not know becomes a tag with the profile's yes/no when listed,
+  else `unknown`. `new_only` also skips tags already `no`; `off` answers from the tag status (unknown = not
+  claimed). Human answers also write `skills_learned:<user>` so `withLearnedSkills` never contradicts the KB.
+  `chats.draft` passes `renderKb(kbFor(topics + vacancy + question))` with this task's answers as statuses into
+  `answer_chat` (`{{kb}}` block). Old `ct:` taps map to confirm / no skill.
 - **Consumers** (all through one module `kb/context.ts`: `kbFor(userId, {tags?, text?}, budget)` returning
   ranked stories + tag statuses, rendered for prompts):
   chat drafting, questionnaire answers, cover letters, interview prep/study packs, `tailor_cv` (LaTeX CVs are

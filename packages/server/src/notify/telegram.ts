@@ -71,6 +71,14 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
     report: (user: User, run: Run) => send(user.tgChatId || chatId, formatReport(user, run, panelUrl, opts.tz)),
     alert: (title: string, body: string) => send(chatId, formatAlert(title, body)),
     ask: async (text: string, buttons: TgButton[] | TgButton[][]) => (await sendOne(chatId, text, buttons.length ? { reply_markup: keyboard(buttons) } : {})) ?? undefined,
+    edit: async (messageId: number, text: string, buttons: TgButton[][]) => {
+      const res = await doFetch(`${BASE}/bot${token}/editMessageText`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, message_id: messageId, text, parse_mode: "HTML", disable_web_page_preview: true, reply_markup: keyboard(buttons) }),
+      });
+      if (!res.ok) warn(`telegram: editMessageText ${res.status}`);
+    },
   };
 }
 
@@ -91,10 +99,11 @@ export interface TelegramCommands {
 /**
  * Long-polls getUpdates for inline-button taps and hands each callback's data to `onTap`. A string answer is
  * appended to the original message (its buttons go away); a TapReply replaces the message text and buttons
- * (a grouped card that stays tappable). With `commands`, also answers «/command» messages.
+ * (a grouped card that stays tappable), its `say` follows as a new message. `onTap` gets the tapped chat's id.
+ * With `commands`, also answers «/command» messages.
  * Returns a stop function. One consumer per bot token.
  */
-export function startTelegramCallbacks(token: string, onTap: (data: string) => Promise<string | TapReply>, opts: TelegramOptions & { commands?: TelegramCommands } = {}): () => void {
+export function startTelegramCallbacks(token: string, onTap: (data: string, chatId: string) => Promise<string | TapReply>, opts: TelegramOptions & { commands?: TelegramCommands } = {}): () => void {
   const doFetch = opts.fetch ?? fetch;
   const warn = opts.warn ?? ((m: string) => console.error(m));
   const api = async <T>(method: string, body: unknown): Promise<T> => {
@@ -131,13 +140,16 @@ export function startTelegramCallbacks(token: string, onTap: (data: string) => P
           }
           const q = u.callback_query;
           if (!q?.data) continue;
-          const r = await onTap(q.data).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`);
+          const r = await onTap(q.data, q.message ? String(q.message.chat.id) : "").catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`);
           const note = typeof r === "string" ? r : r.note;
           await api("answerCallbackQuery", { callback_query_id: q.id, text: note.slice(0, 190) }).catch(() => undefined);
           if (!q.message) continue;
           const at = { chat_id: q.message.chat.id, message_id: q.message.message_id };
           if (typeof r === "string") await api("editMessageText", { ...at, text: `${q.message.text ?? ""}\n\n${note}` }).catch(() => undefined);
-          else await api("editMessageText", { ...at, text: r.text, parse_mode: "HTML", disable_web_page_preview: true, reply_markup: keyboard(r.buttons) }).catch(() => undefined);
+          else {
+            await api("editMessageText", { ...at, text: r.text, parse_mode: "HTML", disable_web_page_preview: true, reply_markup: keyboard(r.buttons) }).catch(() => undefined);
+            if (r.say) await api("sendMessage", { chat_id: at.chat_id, text: r.say, parse_mode: "HTML", disable_web_page_preview: true }).catch(() => undefined);
+          }
         }
       } catch (e) {
         warn(`telegram callbacks: ${e instanceof Error ? e.message : String(e)}`);

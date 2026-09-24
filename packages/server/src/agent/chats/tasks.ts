@@ -5,8 +5,9 @@
 //   failed: a job exhausted its retries (alerted by the queue)
 // Every step is a job keyed by the task id, reads the task from the DB and moves it with compare-and-set,
 // so repeats, restarts and a sync racing a draft are harmless.
-import { OPEN_TASK_STATES, type ChatMessage, type ChatTask, type ChatThread, type ChatTopic, type Profile, type TapReply } from "@sgz/shared";
+import { OPEN_TASK_STATES, type ChatMessage, type ChatTask, type ChatThread, type ChatTopic, type Profile, type TapReply, type Vacancy } from "@sgz/shared";
 import { conversationUrl } from "../../habr/state.js";
+import { kbFor, renderKb } from "../../kb/context.js";
 import { asksQuestion } from "../../hh/state.js";
 import { learnedSkills, legacySkillName, skillKey, withLearnedSkills } from "../../runner/skills.js";
 import { shortStamp } from "../../scheduler/tz.js";
@@ -15,6 +16,8 @@ import { userById, type ChatEnv } from "./env.js";
 export const SEND_RESYNC_MS = 30_000;
 export const REMIND_AFTER_MS = 2 * 3600_000;
 export const FALLBACK_AFTER_MS = 12 * 3600_000;
+const KB_BUDGET = 3000;
+export const READY_FOOTER = "Все ответы есть, готовлю ответ работодателю.";
 
 export const isHabrThread = (t: Pick<ChatThread, "hhNegotiationId">): boolean => t.hhNegotiationId.startsWith("habr:");
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -34,9 +37,9 @@ const link = (thread: ChatThread, task: ChatTask) => (isHabrThread(thread) ? con
 /**
  * After a thread's messages were stored: make sure exactly the right task is open. Unanswered employer messages
  * not covered by the open task supersede it (unless it is being sent right now) and open a fresh task over all
- * of them, carrying the topics the human already answered. No unanswered messages: an open task is closed.
+ * of them, carrying the topics the human already answered (`superseded`: the task chats.send just gave up). No unanswered messages: an open task is closed.
  */
-export function reconcileThread(env: ChatEnv, thread: ChatThread, target: string, choices: string[] = []): ChatTask | null {
+export function reconcileThread(env: ChatEnv, thread: ChatThread, target: string, choices: string[] = [], superseded?: ChatTask): ChatTask | null {
   const ids = unansweredIds(env.store.listChatMessages(thread.id));
   const open = env.store.openChatTask(thread.id);
   if (!ids.length) {
@@ -55,7 +58,7 @@ export function reconcileThread(env: ChatEnv, thread: ChatThread, target: string
     if (!env.store.moveChatTask(open.id, from, "superseded", { lastError: "работодатель написал ещё, ответ пересобран" }, iso(env))) return env.store.openChatTask(thread.id);
     env.log.info("chats", `${thread.employer}: task #${open.id} superseded by new messages`, { thread_id: thread.id });
   }
-  const carried = open?.topics.filter((t) => t.answer !== null && t.by !== "fallback") ?? [];
+  const carried = (open ?? superseded)?.topics.filter((t) => t.answer !== null && t.by !== "fallback") ?? [];
   const task = env.store.insertChatTask({ userId: thread.userId, threadId: thread.id, messageIds: ids, target, choices, topics: carried }, iso(env));
   env.enqueue("chats.triage", { taskId: task.id }, { key: `triage:${task.id}` });
   return task;
@@ -119,13 +122,14 @@ export async function remindTask(env: ChatEnv, taskId: number): Promise<void> {
 }
 
 /** chats.fallback (12 h): stop waiting. Unanswered topics count as «нет» for this reply only: the draft says
- *  honestly it is not in production experience and never claims them. Not recorded as the human's answer. */
+ *  honestly it is not in production experience and never claims them. Not recorded as the human's answer; the open KB reviews expire. */
 export async function fallbackTask(env: ChatEnv, taskId: number): Promise<void> {
   const task = env.store.getChatTask(taskId);
   if (!task || task.state !== "awaiting_review") return;
   const pending = task.topics.filter((t) => t.answer === null).map((t) => t.name);
   const topics = task.topics.map((t): ChatTopic => (t.answer === null ? { ...t, answer: "no", by: "fallback" } : t));
   if (!env.store.moveChatTask(task.id, "awaiting_review", "drafting", { topics }, iso(env))) return;
+  env.review.expire(task.id);
   env.enqueue("chats.draft", { taskId: task.id }, { key: `draft:${task.id}` });
   const thread = threadOf(env, task);
   await env.notifier.alert(`Отвечаю без тебя: ${thread?.employer ?? ""}`, `12 часов без ответа по навыкам: ${pending.join(", ")}. Отвечу честно, без заявлений об этих навыках.`).catch(() => undefined);
@@ -133,7 +137,7 @@ export async function fallbackTask(env: ChatEnv, taskId: number): Promise<void> 
 
 // ------------------------------------------------------------ Telegram taps
 
-/** A tap on a grouped card: the answer goes into the task, the same card is edited. Only when every topic
+/** A tap on a phase-1 grouped card (`ct:`, ✅ = confirm, ❌ = no skill; KB cards use review.ts onKbTap): the answer goes into the task, the same card is edited. Only when every topic
  *  has an answer (any mix of ✅/❌) the task moves on to drafting. */
 export function onCardTap(env: ChatEnv, tap: { taskId: number; idx: number; has: boolean }): TapReply | string {
   const task = env.store.getChatTask(tap.taskId);
@@ -148,7 +152,7 @@ export function onCardTap(env: ChatEnv, tap: { taskId: number; idx: number; has:
   }
   const done = answerTopic(env, target, topic.name, tap.has);
   if (!done) return { note: "уже учтено", ...env.review.card(task, stateFooter(task)) };
-  return { note: `${tap.has ? "✅" : "❌"} ${topic.name}`, ...env.review.card(done, done.state === "awaiting_review" ? undefined : "Все ответы есть, готовлю ответ работодателю.") };
+  return { note: `${tap.has ? "✅" : "❌"} ${topic.name}`, ...env.review.card(done, done.state === "awaiting_review" ? undefined : READY_FOOTER) };
 }
 
 /** Old one-skill cards (`sk:y|n:<user>:<key>`): the answer goes to every open task of that user waiting for
@@ -169,11 +173,11 @@ export function onLegacySkillTap(env: ChatEnv, cb: { has: boolean; userId: numbe
 }
 
 /** Writes the answer (and remembers it via the gate); returns the updated task, null when nothing changed. */
-function answerTopic(env: ChatEnv, task: ChatTask, name: string, has: boolean): ChatTask | null {
+export function answerTopic(env: ChatEnv, task: ChatTask, name: string, has: boolean): ChatTask | null {
   if (!task.topics.some((t) => same(t.name, name) && t.answer === null)) return null;
   const topics = task.topics.map((t): ChatTopic => (same(t.name, name) && t.answer === null ? { ...t, answer: has ? "yes" : "no", by: "human" } : t));
   if (!env.store.patchChatTask(task.id, "awaiting_review", { topics }, iso(env))) return null;
-  env.review.record(task.userId, name, has);
+  env.review.record(task.userId, name, has, task.id);
   const next = { ...task, topics };
   if (topics.every((t) => t.answer !== null)) {
     toDrafting(env, next);
@@ -182,11 +186,11 @@ function answerTopic(env: ChatEnv, task: ChatTask, name: string, has: boolean): 
   return next;
 }
 
-function stateFooter(task: ChatTask): string {
+export function stateFooter(task: ChatTask): string {
   if (task.state === "sent") return "Ответ отправлен.";
   if (task.state === "superseded") return "Работодатель написал ещё, ответ пересобирается.";
   if (task.state === "closed" || task.state === "failed") return "Больше не ждёт ответа.";
-  return "Ответы есть, готовлю ответ работодателю.";
+  return READY_FOOTER;
 }
 
 // ------------------------------------------------------------ chats.draft (llm)
@@ -205,6 +209,19 @@ export function draftProfile(p: Profile, topics: ChatTopic[]): Profile {
   return withLearnedSkills(p, { yes, no });
 }
 
+/** KB block for the draft: the task topics + tags named in the vacancy / question, statuses as this task
+ *  answered them (a fallback «нет» is not claimed even while the tag is unknown), the best stories. */
+export function draftKb(env: ChatEnv, task: ChatTask, vacancy: Vacancy | null, history: ChatMessage[]): string {
+  const asked = history.filter((m) => task.messageIds.includes(m.id)).map((m) => m.text);
+  const text = [vacancy ? `${vacancy.title}\n${vacancy.descriptionText}` : "", ...asked].join("\n");
+  const kb = kbFor(env.store, task.userId, { tags: task.topics.map((t) => t.name), text }, KB_BUDGET);
+  const topics = kb.topics.map((t) => {
+    const answer = task.topics.find((x) => same(x.name, t.name))?.answer;
+    return answer ? { ...t, status: answer } : t;
+  });
+  return renderKb({ ...kb, topics });
+}
+
 export async function draftTask(env: ChatEnv, taskId: number): Promise<void> {
   const task = env.store.getChatTask(taskId);
   if (!task || task.state !== "drafting") return;
@@ -212,7 +229,7 @@ export async function draftTask(env: ChatEnv, taskId: number): Promise<void> {
   if (!thread) throw new Error(`thread ${task.threadId} not found`);
   const history = env.store.listChatMessages(thread.id);
   const vacancy = thread.vacancyId === null ? null : env.store.getVacancy(thread.vacancyId);
-  const reply = await env.llm.answerChat(draftProfile(knownProfile(env, task.userId), task.topics), vacancy, history, task.choices);
+  const reply = await env.llm.answerChat(draftProfile(knownProfile(env, task.userId), task.topics), vacancy, history, task.choices, draftKb(env, task, vacancy, history));
   const unknown = (reply.unknown_skills ?? []).filter((s) => !task.topics.some((t) => same(t.name, s)));
   if (unknown.length) {
     // A skill triage missed: back to the gate with it.
@@ -286,7 +303,7 @@ export async function sendTask(env: ChatEnv, taskId: number): Promise<void> {
     const extra = unansweredIds(env.store.listChatMessages(thread.id)).filter((id) => !task.messageIds.includes(id));
     if (extra.length) {
       // Supersede: the employer wrote again after the draft; answer everything in one fresh reply.
-      if (env.store.moveChatTask(task.id, "sending", "superseded", { lastError: "работодатель написал ещё до отправки" }, iso(env))) reconcileThread(env, thread, task.target, page.choices);
+      if (env.store.moveChatTask(task.id, "sending", "superseded", { lastError: "работодатель написал ещё до отправки" }, iso(env))) reconcileThread(env, thread, task.target, page.choices, task);
       return;
     }
     if (habr) await env.habr!.sendMessage(s, task.target, task.draft);

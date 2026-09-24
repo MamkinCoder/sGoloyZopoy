@@ -10,6 +10,7 @@ import { chatsRepo } from "./chats.js";
 import { intelRepo } from "./intel.js";
 import { jobsRepo, type JobsRepo } from "./jobs.js";
 import { kbRepo } from "./kb.js";
+import { kbReviewsRepo, type KbReviewsRepo } from "./kb-reviews.js";
 import { applyMigrations } from "./migrate.js";
 import { resumesRepo } from "./resumes.js";
 import { runsRepo } from "./runs.js";
@@ -20,7 +21,7 @@ import { usersRepo } from "./users.js";
 import { vacanciesRepo } from "./vacancies.js";
 
 /** The agent's tables live next to the Store contract, not in it: only the always-on agent uses them. */
-export interface SqliteStore extends Store, JobsRepo, ChatTasksRepo {
+export interface SqliteStore extends Store, JobsRepo, ChatTasksRepo, KbReviewsRepo {
   readonly db: DatabaseSync;
   readonly path: string;
 }
@@ -52,5 +53,6 @@ export function openStore(path: string): SqliteStore {
     ...jobsRepo(s),
     ...chatTasksRepo(s),
     ...kbRepo(s),
+    ...kbReviewsRepo(s),
   };
 }

@@ -4,7 +4,9 @@ import { vi } from "vitest";
 import type { Profile, Question, TgButton, ThreadDetail } from "@sgz/shared";
 import type { ChatEnv } from "../../src/agent/chats/env.js";
 import { chatHandlers } from "../../src/agent/chats/index.js";
-import { skillsReviewGate } from "../../src/agent/chats/review.js";
+import { kbReviewGate, onKbTap, parseCardCallback, parseKbCallback } from "../../src/agent/chats/review.js";
+import { onCardTap } from "../../src/agent/chats/tasks.js";
+import { addStories, type KbStoryDraft } from "../../src/kb/write.js";
 import { createAgent } from "../../src/agent/queue.js";
 import { openStore } from "../../src/db/index.js";
 import type { HabrClient } from "../../src/habr/client.js";
@@ -13,6 +15,7 @@ import { fakeConfig } from "../api/fakes.js";
 
 type Msg = ThreadDetail["messages"][number];
 export const inMsg = (id: string, text: string): Msg => ({ hhMessageId: id, direction: "in", author: "employer", text, isQuestion: false, answered: false });
+export const TG_CHAT = "42";
 export const outMsg = (id: string, text: string): Msg => ({ hhMessageId: id, direction: "out", author: "me", text, isQuestion: false, answered: false });
 
 export const baseProfile = {
@@ -85,6 +88,7 @@ export function chatHarness(o: { habr?: HabrClient | null } = {}) {
       asks.push({ text, buttons: (Array.isArray(b[0]) ? b : [b]) as TgButton[][] });
       return 1000 + asks.length;
     }),
+    edit: vi.fn(async (_id: number, _text: string, _b: TgButton[][]) => undefined),
   };
   let agent: ReturnType<typeof createAgent> | null = null;
   const env: ChatEnv = {
@@ -99,7 +103,7 @@ export function chatHarness(o: { habr?: HabrClient | null } = {}) {
     throttle: { afterMutation: async () => {}, afterRead: async () => {} },
     browser: { openHH: async () => ({}) as never, openHabr: async () => ({}) as never },
     enqueue: (kind, payload, opts) => agent!.enqueue(kind, payload, opts),
-    review: skillsReviewGate(store, notifier),
+    review: kbReviewGate(store, notifier, now),
   };
   agent = createAgent({ store, handlers: chatHandlers(env), notifier, now, log: silent, browserIdleMs: 60_000 });
 
@@ -123,5 +127,16 @@ export function chatHarness(o: { habr?: HabrClient | null } = {}) {
   const tasks = () => store.db.prepare("SELECT id FROM chat_tasks ORDER BY id").all().map((r) => store.getChatTask(Number(r.id))!);
   const alerts = (prefix: string) => notifier.alert.mock.calls.filter((c) => String(c[0]).startsWith(prefix));
   const sends = (text?: string) => hh.sendMessage.mock.calls.filter((c) => text === undefined || c[2] === text).length;
-  return { store, user, page, hh, llm, notifier, asks, env, agent, drain, sync, advance, thread, tasks, alerts, sends, now };
+  /** A KB story (seed, unconfirmed) linked to `tag`. */
+  const story = (tag: string, o: Partial<KbStoryDraft> = {}) =>
+    addStories(store, user.id, [{ title: `${tag} в проде`, company: "Яндекс", period: "2022-2024", context: "", did: `Писал на ${tag}.`, result: "", tags: [tag], ...o }], { source: "seed", confirmed: false }).added[0]!;
+  /** Taps a button of a card (the latest by default) by its label. */
+  const tap = (label: string, card = asks.at(-1)!) => {
+    const b = card.buttons.flat().find((x) => x.text === label);
+    if (!b) throw new Error(`no button ${label} in ${card.buttons.flat().map((x) => x.text).join(", ")}`);
+    const kr = parseKbCallback(b.data);
+    return kr ? onKbTap(env, kr, TG_CHAT) : onCardTap(env, parseCardCallback(b.data)!);
+  };
+  const labels = (card = asks.at(-1)!) => card.buttons.map((row) => row.map((b) => b.text));
+  return { store, user, page, hh, llm, notifier, asks, env, agent, drain, sync, advance, thread, tasks, alerts, sends, now, story, tap, labels };
 }
