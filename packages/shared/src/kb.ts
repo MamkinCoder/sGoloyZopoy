@@ -64,6 +64,13 @@ export const mergeAliases = (name: string, ...lists: string[][]): string[] => {
   return out;
 };
 
+/** A knowledge-base block for one generated text (letter, questionnaire, CV, prep) plus what it must never claim:
+ * names and aliases of the status-`no` tags (they extend never_claim_skills in every guard). */
+export interface KbBrief {
+  text: string;
+  no: string[];
+}
+
 export type NewKbStory = Omit<KbStory, "id" | "createdAt" | "updatedAt" | "tags"> & { tagIds: number[] };
 
 export type KbReviewState = "pending" | "confirmed" | "expanded" | "denied" | "expired";

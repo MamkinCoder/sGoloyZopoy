@@ -10,6 +10,8 @@ import { alertWithStudy } from "../../runner/study.js";
 import { errMessage } from "../../runner/util.js";
 import type { ChatEnv } from "./env.js";
 import { closeTask, reconcileThread, unansweredIds } from "./tasks.js";
+import { kbForVacancy } from "../../kb/context.js";
+import { renderQuestions } from "../../llm/format.js";
 
 export const CHAT_TRACK_SINCE_DEFAULT = "2026-09-23";
 
@@ -130,7 +132,7 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
       const surveyKey = `survey_done:${thread.id}`;
       const surveySig = JSON.stringify(detail.survey.map((q) => q.text));
       if (detail.survey.length && env.store.getSetting(surveyKey) !== surveySig) {
-        const answers = await env.llm.answerQuestionnaire(env.store.getProfile(user.id)!, vacancy, detail.survey);
+        const answers = await env.llm.answerQuestionnaire(env.store.getProfile(user.id)!, vacancy, detail.survey, kbForVacancy(env.store, user.id, vacancy, renderQuestions(detail.survey)));
         await env.hh.submitSurvey(s, t.chatUrl, answers);
         env.store.setSetting(surveyKey, surveySig);
         handled("опрос заполнен");

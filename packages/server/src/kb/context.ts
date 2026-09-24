@@ -1,8 +1,8 @@
 // The one read path into the knowledge base for every consumer (chat drafts, letters, questionnaires, CVs):
 // kbFor() picks the stories relevant to a set of tags and/or a free text within a char budget, renderKb()
 // turns that into a prompt block. docs/ARCHITECTURE.md section 4.
-import { tagIs, tagKey, type KbStory, type KbTag, type KbTagStatus, type Store } from "@sgz/shared";
-import { claimRegex } from "../llm/guards.js";
+import { companyKey, tagIs, tagKey, type KbBrief, type KbStory, type KbTag, type KbTagStatus, type Store, type Vacancy } from "@sgz/shared";
+import { claimRegex, stripNeverClaimSentences } from "../llm/guards.js";
 
 export interface KbQuery {
   /** Topic names (tag names or aliases), e.g. triage topics. */
@@ -101,4 +101,63 @@ export function renderKb(ctx: KbContext): string {
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+// ---- Application material (letters, questionnaires, CVs, prep): docs/ARCHITECTURE.md section 4 "Consumers".
+
+/** Keeps Pi prompts fast: about a page of stories per generated text. */
+export const KB_BRIEF_BUDGET = 3000;
+
+export interface KbBriefQuery extends KbQuery {
+  /** Only stories of these companies (tailor_cv: the base CV's jobs), matched by companyKey, either way contained. */
+  companies?: string[];
+}
+
+type KbStore = Pick<Store, "listKbTags" | "listKbStories">;
+
+const sameCompany = (a: string, b: string): boolean => {
+  const x = companyKey(a);
+  const y = companyKey(b);
+  return !!x && !!y && (x.includes(y) || y.includes(x));
+};
+
+/** KB block for an application text. Status-`no` tags never reach it: they leave story tag lists and topics,
+ * sentences naming them leave the stories (a title naming one drops the story), and they come back in `no` for
+ * the guards. undefined for an empty KB, and when the KB can't be read: a KB problem never blocks an application. */
+export function kbBrief(store: KbStore, userId: number, q: KbBriefQuery, budgetChars = KB_BRIEF_BUDGET): KbBrief | undefined {
+  try {
+    const tags = store.listKbTags(userId);
+    const noTags = tags.filter((t) => t.status === "no");
+    const noIds = new Set(noTags.map((t) => t.id));
+    const no = [...new Set(noTags.flatMap((t) => [t.name, ...t.aliases]))];
+    const noRe = claimRegex(no);
+    const clean = (s: string) => stripNeverClaimSentences(s, no);
+    const stories = store
+      .listKbStories(userId)
+      .filter((s) => !noRe?.test(s.title) && (!q.companies || q.companies.some((c) => sameCompany(c, s.company))))
+      .map((s) => ({ ...s, tags: s.tags.filter((t) => !noIds.has(t.id)), context: clean(s.context), did: clean(s.did), result: clean(s.result) }));
+    if (!tags.length && !stories.length) return undefined;
+    const ctx = kbFor({ listKbTags: () => tags, listKbStories: () => stories }, userId, q, budgetChars);
+    const topics = ctx.topics.filter((t) => t.status !== "no");
+    return { text: topics.length || ctx.stories.length ? renderKb({ topics, stories: ctx.stories }) : "", no };
+  } catch {
+    return undefined;
+  }
+}
+
+const vacancyText = (v: Vacancy): string => `${v.title}\n${v.descriptionText}`;
+
+/** kbBrief for one or more vacancies (a decide batch), plus optional extra text (questionnaire questions, an invitation). */
+export function kbForVacancy(store: KbStore, userId: number, vacancies: Vacancy | Vacancy[] | null, extra = "", budgetChars = KB_BRIEF_BUDGET): KbBrief | undefined {
+  const vs = vacancies === null ? [] : Array.isArray(vacancies) ? vacancies : [vacancies];
+  return kbBrief(store, userId, { text: [...vs.map(vacancyText), extra].filter(Boolean).join("\n\n") }, budgetChars);
+}
+
+/** Profile whose never_claim_skills also carries the KB's status-`no` tags, so every existing guard (blockedTech,
+ * stripNeverClaimSentences, guardTailoredCV, validateCV, guardStudy) enforces them too. */
+export function withKbNever<P extends { never_claim_skills: string[] }>(profile: P, kb: KbBrief | undefined): P {
+  if (!kb?.no.length) return profile;
+  const have = new Set(profile.never_claim_skills.map(tagKey));
+  const add = kb.no.filter((n) => !have.has(tagKey(n)) && !!have.add(tagKey(n)));
+  return add.length ? { ...profile, never_claim_skills: [...profile.never_claim_skills, ...add] } : profile;
 }

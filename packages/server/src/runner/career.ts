@@ -10,6 +10,8 @@ import type { RunContext } from "./context.js";
 import { classify, titleScore, companyLimitSettings, createRunCompanyTracker, dedupWindowDays, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
 import { newApp } from "./hh.js";
 import { decideExtras, readLessons } from "./learn.js";
+import { kbBrief, kbForVacancy, withKbNever } from "../kb/context.js";
+import { renderQuestions } from "../llm/format.js";
 import { dayInTz } from "../scheduler/tz.js";
 import { formatQueueCard, queueButtons } from "./queue-cards.js";
 import type { UserRun } from "./user.js";
@@ -291,11 +293,13 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
   try {
     await ctx.memoryGuard("tailor");
     ctx.log.info("tailor", `${vacancy.title} @ ${vacancy.company}: tailoring (${tier})`, { vacancy_id: vacancy.id });
-    const t = await ctx.llm.tailorCV(profile, base, vacancy, tier);
+    // The KB for the CV: only stories of the base CV's own companies (bullet material, never a new job).
+    const tailorKb = kbBrief(ctx.store, user.id, { text: `${vacancy.title}\n${vacancy.descriptionText}`, companies: base.jobs.map((j) => j.company) });
+    const t = await ctx.llm.tailorCV(profile, base, vacancy, tier, tailorKb);
     stats.llmCall();
     ctx.checkAbort(); // stopped / watchdog-abandoned while tailoring: no xelatex, no QUEUED row next to the next run
     cv = t.cv;
-    const violations = resume.validateCV(base, cv, profile.never_claim_skills);
+    const violations = resume.validateCV(base, cv, withKbNever(profile, tailorKb).never_claim_skills);
     if (violations.length) {
       stats.record(Status.FAILED_LLM);
       ctx.store.insertApplication(newApp(ctx, user.id, vacancy.id, Status.FAILED_LLM, `cv validation: ${violations.join("; ")}`));
@@ -315,7 +319,7 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
     pdfPath = built.pdfPath;
     generatedId = ctx.store.insertGeneratedResume({ userId: user.id, vacancyId: vacancy.id, texPath: built.texPath, pdfPath, model: tier }).id;
     ctx.log.info("build", `${vacancy.title}: pdf ready`, { vacancy_id: vacancy.id, pdf: pdfPath });
-    coverLetter = await ctx.llm.coverLetterCareer(profile, cv, vacancy, readLessons(ctx.store, user.id).lessons);
+    coverLetter = await ctx.llm.coverLetterCareer(profile, cv, vacancy, readLessons(ctx.store, user.id).lessons, kbForVacancy(ctx.store, user.id, vacancy));
     stats.llmCall();
     ctx.checkAbort();
   } catch (e) {
@@ -391,7 +395,7 @@ async function reviewQueued(ctx: RunContext, u: UserRun, review: NonNullable<Car
       dryRun: inspect,
       answerQuestions: async (qs) => {
         questions = qs;
-        answers = await ctx.llm.answerQuestionnaire(profile, vacancy, qs);
+        answers = await ctx.llm.answerQuestionnaire(profile, vacancy, qs, kbForVacancy(ctx.store, user.id, vacancy, renderQuestions(qs)));
         stats.llmCall();
         return answers;
       },

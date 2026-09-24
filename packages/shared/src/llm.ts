@@ -1,6 +1,7 @@
 // LLM contract. Workstream D implements over `claude -p` (Claude Code headless, subscription).
 import type { ChatTurnKind } from "./agent.js";
 import type { StagehandLLM } from "./browser.js";
+import type { KbBrief } from "./kb.js";
 import type { Answer, CV, ChatMessage, Decision, HHResume, InterviewPrep, Profile, Question, ResumeSummary, StudyItem, Vacancy } from "./model.js";
 
 export type Tier = "fast" | "write" | "tailor"; // haiku | sonnet | opus
@@ -15,6 +16,8 @@ export interface DecideInput {
   resumeStats?: string[];
   /** Letter style lessons learned from past outcomes (settings letter_lessons:<userId>). */
   lessons?: string[];
+  /** Knowledge-base block for one decide batch: letters and tailored resume copies draw on it. */
+  kb?: (vacancies: Vacancy[]) => KbBrief | undefined;
 }
 
 export interface PoolVariant {
@@ -43,7 +46,8 @@ export interface ChatTriage {
 
 export interface LLMClient {
   decide(input: DecideInput): Promise<Decision[]>;
-  answerQuestionnaire(profile: Profile, vacancy: Vacancy | null, qs: Question[]): Promise<Answer[]>;
+  /** `kb` (optional everywhere below): the knowledge-base block for this text; its `no` tags join never_claim. */
+  answerQuestionnaire(profile: Profile, vacancy: Vacancy | null, qs: Question[], kb?: KbBrief): Promise<Answer[]>;
   /** `choices`: quick-reply buttons on the employer's last message; the reply must be exactly one of them. */
   /** `kb`: the knowledge-base block for the asked topics (kb/context.ts renderKb), the only material about experience. */
   answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[], kb?: string): Promise<ChatReply>;
@@ -51,12 +55,12 @@ export interface LLMClient {
   triageChat(profile: Profile, history: ChatMessage[], fresh: ChatMessage[]): Promise<ChatTriage>;
   summarizeResume(resumeText: string): Promise<ResumeSummary>;
   proposePoolVariants(profile: Profile, existing: HHResume[], max: number): Promise<PoolVariant[]>;
-  tailorCV(profile: Profile, base: CV, vacancy: Vacancy, tier?: Tier): Promise<{ cv: CV; changes: string[] }>;
-  coverLetterCareer(profile: Profile, cv: CV, vacancy: Vacancy, lessons?: string[]): Promise<string>;
+  tailorCV(profile: Profile, base: CV, vacancy: Vacancy, tier?: Tier, kb?: KbBrief): Promise<{ cv: CV; changes: string[] }>;
+  coverLetterCareer(profile: Profile, cv: CV, vacancy: Vacancy, lessons?: string[], kb?: KbBrief): Promise<string>;
   /** Prep brief for the seeker on an invitation; `invitation` is the employer's last message. */
-  interviewPrep(profile: Profile, vacancy: Vacancy, invitation: string): Promise<InterviewPrep>;
+  interviewPrep(profile: Profile, vacancy: Vacancy, invitation: string, kb?: KbBrief): Promise<InterviewPrep>;
   /** Interview study checklist (10-20 topics) for the vacancy, on a button press; `prep` is the thread's brief. */
-  interviewStudy(profile: Profile, vacancy: Vacancy, prep: InterviewPrep | null): Promise<StudyItem[]>;
+  interviewStudy(profile: Profile, vacancy: Vacancy, prep: InterviewPrep | null, kb?: KbBrief): Promise<StudyItem[]>;
   /** Free-form JSON task used by the browser layer's agent flows (career onboarding etc.). */
   json<T>(task: string, tier: Tier, prompt: string, schemaDescription: string): Promise<T>;
   /** Adapter for Stagehand's `model: { generate }`. */

@@ -5,7 +5,9 @@
 // With --apply: writes that proposal to the Habr edit pages. Run it only after the human approved the proposal.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { paths, type BrowserSession, type Cookie } from "@sgz/shared";
+import { paths, type BrowserSession, type Cookie, type KbBrief } from "@sgz/shared";
+import { openStore } from "../db/index.js";
+import { kbBrief, withKbNever } from "../kb/context.js";
 import { getJson } from "../career/http.js";
 import { loadConfig, loadProfileYaml } from "../config/index.js";
 import { createHabrClient } from "../habr/client.js";
@@ -26,6 +28,9 @@ const SCHEMA = `\`\`\`json
   "notes": string[]
 }
 \`\`\``;
+
+/** One call on the Mac with the tailor tier: room for more stories than a Pi letter gets. */
+const HABR_KB_BUDGET = 6000;
 
 async function openHabr(slug: string, bin: string): Promise<BrowserSession> {
   const cfg = loadConfig();
@@ -51,6 +56,19 @@ async function openHabr(slug: string, bin: string): Promise<BrowserSession> {
   return s;
 }
 
+/** The whole KB (best stories first, one universal profile) when this machine has the DB; none otherwise. */
+function readKb(slug: string): KbBrief | undefined {
+  const db = paths.db(loadConfig());
+  if (!existsSync(db)) return undefined;
+  const store = openStore(db);
+  try {
+    const user = store.getUserBySlug(slug);
+    return user ? kbBrief(store, user.id, {}, HABR_KB_BUDGET) : undefined;
+  } finally {
+    store.close();
+  }
+}
+
 export const habrResume = async (args: string[]): Promise<void> => {
   const a = parseArgs(args);
   const slug = str(a.user);
@@ -70,7 +88,7 @@ export const habrResume = async (args: string[]): Promise<void> => {
     return;
   }
 
-  const profile = loadProfileYaml(paths.profile(cfg, slug));
+  const yamlProfile = loadProfileYaml(paths.profile(cfg, slug));
   const cvDir = paths.cvDir(cfg, slug);
   const cvs = existsSync(cvDir)
     ? readdirSync(cvDir)
@@ -87,7 +105,10 @@ export const habrResume = async (args: string[]): Promise<void> => {
   } finally {
     await s.close();
   }
+  const kb = readKb(slug);
+  const profile = withKbNever(yamlProfile, kb);
   const prompt = renderPrompt("habr_resume", {
+    kb: kb?.text,
     never_claim: neverClaimList(profile),
     profile: profileForLLM(profile),
     cvs,

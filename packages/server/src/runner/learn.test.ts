@@ -75,7 +75,8 @@ describe("decide context", () => {
   it("min-N gates for company history and resume stats", () => {
     const v = [{ company: "Ozon" }] as never;
     const low = decideExtras(fakeStore({ intel: { ozon: intel(2) }, stats: [{ hhResumeId: "h", title: "Go", sent: 9, resp: 1, inv: 1 }] }), 1, v);
-    expect(low).toEqual({ companyHistory: {}, resumeStats: [], lessons: [] });
+    expect(low).toMatchObject({ companyHistory: {}, resumeStats: [], lessons: [] });
+    expect(low.kb?.(v)).toBeUndefined(); // a store without the KB never blocks decide
     const hi = decideExtras(fakeStore({ intel: { ozon: intel(5) }, stats: [{ hhResumeId: "h", title: "Go", sent: 40, resp: 6, inv: 5 }] }), 1, v);
     expect(hi.companyHistory).toEqual({ ozon: "Ozon: 5 откликов, 0 ответов" });
     expect(hi.resumeStats).toEqual(["Резюме Go (id h): 40 откликов, 6 ответов, 5 приглашений"]);

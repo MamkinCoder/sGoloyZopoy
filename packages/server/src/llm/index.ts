@@ -11,6 +11,7 @@ import type {
   Decision,
   HHResume,
   InterviewPrep,
+  KbBrief,
   LLMClient,
   PoolVariant,
   Profile,
@@ -42,6 +43,7 @@ import {
 import { stagehandAdapter, stagehandTier } from "./stagehand.js";
 import { guardTailoredCV } from "./tailor.js";
 import { renderPrompt } from "./template.js";
+import { withKbNever } from "../kb/context.js";
 
 export { renderPrompt } from "./template.js";
 
@@ -143,13 +145,15 @@ function makeClient(ctx: Ctx): LLMClient {
       return results.flat();
     },
 
-    async answerQuestionnaire(profile: Profile, vacancy: Vacancy | null, qs: Question[]): Promise<Answer[]> {
+    async answerQuestionnaire(p: Profile, vacancy: Vacancy | null, qs: Question[], kb?: KbBrief): Promise<Answer[]> {
       if (!qs.length) return [];
+      const profile = withKbNever(p, kb);
       const prompt = renderPrompt("answer_questionnaire", {
         never_claim: neverClaimList(profile),
         profile: profileForLLM(profile, { contacts: true }),
         vacancy: vacancy ? renderVacancy(vacancy) : "",
         questions: renderQuestions(qs),
+        kb: kb?.text,
       });
       const answers = await call(ctx, { task: "answer_questionnaire", tier: "write", prompt, schema: AnswersSchema, array: true });
       return guardAnswers(qs, answers, blockedTech(profile));
@@ -221,12 +225,14 @@ function makeClient(ctx: Ctx): LLMClient {
       return guardVariants(profile, existing, variants, max);
     },
 
-    async tailorCV(profile: Profile, base: CV, vacancy: Vacancy, tier: Tier = "write"): Promise<{ cv: CV; changes: string[] }> {
+    async tailorCV(p: Profile, base: CV, vacancy: Vacancy, tier: Tier = "write", kb?: KbBrief): Promise<{ cv: CV; changes: string[] }> {
+      const profile = withKbNever(p, kb);
       const prompt = renderPrompt("tailor_cv", {
         never_claim: neverClaimList(profile),
         profile: profileForLLM(profile),
         cv: base,
         vacancy: renderVacancy(vacancy, 6000),
+        kb: kb?.text,
       });
       const r = await call(ctx, { task: "tailor_cv", tier, prompt, schema: TailorSchema, jsonSchema: toJsonSchema(TailorSchema) });
       const { cv, dropped } = guardTailoredCV(profile, base, r.cv);
@@ -235,24 +241,28 @@ function makeClient(ctx: Ctx): LLMClient {
       return { cv, changes };
     },
 
-    async coverLetterCareer(profile: Profile, cv: CV, vacancy: Vacancy, lessons?: string[]): Promise<string> {
+    async coverLetterCareer(p: Profile, cv: CV, vacancy: Vacancy, lessons?: string[], kb?: KbBrief): Promise<string> {
+      const profile = withKbNever(p, kb);
       const prompt = renderPrompt("cover_letter_career", {
         lessons: bullets(lessons),
         never_claim: neverClaimList(profile),
         profile: profileForLLM(profile),
         cv: { ...cv, contacts: undefined }, // no email/phone/github for the model to copy into the letter
         vacancy: renderVacancy(vacancy, 6000),
+        kb: kb?.text,
       });
       const r = await call(ctx, { task: "cover_letter_career", tier: "write", prompt, schema: CoverLetterSchema, jsonSchema: toJsonSchema(CoverLetterSchema) });
       return sanitizeLetter(r.cover_letter, blockedTech(profile), LIMITS.coverLetterCareer);
     },
 
-    async interviewPrep(profile: Profile, vacancy: Vacancy, invitation: string): Promise<InterviewPrep> {
+    async interviewPrep(p: Profile, vacancy: Vacancy, invitation: string, kb?: KbBrief): Promise<InterviewPrep> {
+      const profile = withKbNever(p, kb);
       const prompt = renderPrompt("interview_prep", {
         never_claim: neverClaimList(profile),
         profile: profileForLLM(profile),
         vacancy: renderVacancy(vacancy, 3000),
         invitation: invitation.slice(0, 1500) || "(без текста)",
+        kb: kb?.text,
       });
       const r = await call(ctx, { task: "interview_prep", tier: "write", prompt, schema: InterviewPrepSchema, jsonSchema: toJsonSchema(InterviewPrepSchema) });
       // Read by the seeker only, still no invented experience: stories lose never-claim sentences.
@@ -269,12 +279,14 @@ function makeClient(ctx: Ctx): LLMClient {
       };
     },
 
-    async interviewStudy(profile: Profile, vacancy: Vacancy, prep: InterviewPrep | null): Promise<StudyItem[]> {
+    async interviewStudy(p: Profile, vacancy: Vacancy, prep: InterviewPrep | null, kb?: KbBrief): Promise<StudyItem[]> {
+      const profile = withKbNever(p, kb);
       const prompt = renderPrompt("interview_study", {
         never_claim: neverClaimList(profile),
         profile: profileForLLM(profile),
         vacancy: renderVacancy(vacancy, 4000),
         prep: prep ? renderPrep(prep) : "(нет)",
+        kb: kb?.text,
       });
       const r = await call(ctx, { task: "interview_study", tier: "write", prompt, schema: StudyChecklistSchema, jsonSchema: toJsonSchema(StudyChecklistSchema) });
       return guardStudy(profile, r.checklist);
@@ -300,8 +312,10 @@ function makeClient(ctx: Ctx): LLMClient {
 }
 
 async function decideBatch(ctx: Ctx, input: DecideInput, vacancies: Vacancy[]): Promise<Decision[]> {
-  const { profile, resumes } = input;
   if (!vacancies.length) return [];
+  const { resumes } = input;
+  const kb = input.kb?.(vacancies);
+  const profile = withKbNever(input.profile, kb);
   // Only the employers of this batch; the map already holds just the ones past the min-N gate.
   const history = [...new Set(vacancies.map((v) => input.companyHistory?.[companyKey(v.company)]).filter(Boolean))];
   const prompt = renderPrompt("decide_hh", {
@@ -313,6 +327,7 @@ async function decideBatch(ctx: Ctx, input: DecideInput, vacancies: Vacancy[]): 
     company_history: bullets(history),
     resume_stats: bullets(input.resumeStats),
     lessons: bullets(input.lessons),
+    kb: kb?.text,
   });
   let decisions: Decision[] = [];
   try {

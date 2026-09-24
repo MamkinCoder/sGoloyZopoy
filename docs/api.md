@@ -131,6 +131,11 @@ a missing tag is created, and a tag that is new or `unknown` becomes `yes` (a hu
 explicit `no` stays). Every status change is mirrored into `profile.verified_skills` / `never_claim_skills`
 (`kb/write.ts` `syncProfileSkills`).
 
+What these endpoints change also changes generated material (phase 4): hh/Habr letters and tailored resume copies,
+career letters and LaTeX CVs, questionnaire answers, interview prep and study packs, and the `sgz habr-resume`
+proposal read the stories relevant to the vacancy on their next generation; a tag set to `no` disappears from them
+and is stripped from their output. Nothing already sent or queued is regenerated.
+
 ## System
 | GET | /health | | `{ok, version, uptime_s, mem_rss_mb, active_run_id, scheduler_next, users:[{slug, hh_login_ok:bool\|null, cookies_age_h}]}` |
 | GET | /settings | | `{[key]:value}` |

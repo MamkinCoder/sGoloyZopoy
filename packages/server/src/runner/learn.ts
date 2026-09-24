@@ -3,6 +3,7 @@
 import { companyKey, type DecideInput, type LLMClient, type LetterOutcome, type Store, type User, type Vacancy } from "@sgz/shared";
 import { INTEL_MIN_SENT, RESUME_STATS_MIN_SENT, formatIntel, formatResumeStat } from "../db/intel.js";
 import { blockedTech, enforceMax, normalizeProse, stripLinkSentences, stripNeverClaimSentences } from "../llm/guards.js";
+import { kbForVacancy } from "../kb/context.js";
 import { LessonsSchema } from "../llm/schemas.js";
 import { renderPrompt } from "../llm/template.js";
 
@@ -81,11 +82,17 @@ export function companyReport(store: Store, name: string): string {
   return lines.length ? lines.join("\n") : `В «${name.trim()}» откликов ещё не было`;
 }
 
-/** Advisory context for decide: employer history past the min-N gate, resume conversion, letter lessons. */
-export function decideExtras(store: Store, userId: number, vacancies: Vacancy[], now = new Date()): Pick<DecideInput, "companyHistory" | "resumeStats" | "lessons"> {
+/** Context for decide: employer history past the min-N gate, resume conversion, letter lessons, the KB per batch. */
+export function decideExtras(store: Store, userId: number, vacancies: Vacancy[], now = new Date()): Pick<DecideInput, "companyHistory" | "resumeStats" | "lessons" | "kb"> {
   const intel = store.companyIntel(userId, vacancies.map((v) => companyKey(v.company)));
   const companyHistory = Object.fromEntries(Object.entries(intel).filter(([, i]) => i.sent >= INTEL_MIN_SENT).map(([k, i]) => [k, formatIntel(i)]));
   const since = new Date(now.getTime() - 30 * DAY_MS).toISOString();
   const resumeStats = store.resumeStats(userId, since).filter((r) => r.sent >= RESUME_STATS_MIN_SENT).map(formatResumeStat);
-  return { companyHistory, resumeStats, lessons: readLessons(store, userId).lessons };
+  return { companyHistory, resumeStats, lessons: readLessons(store, userId).lessons, kb: decideKb(store, userId) };
 }
+
+/** DecideInput.kb for this user: the KB block for each decide batch's vacancies. */
+export const decideKb =
+  (store: Store, userId: number): DecideInput["kb"] =>
+  (vs) =>
+    kbForVacancy(store, userId, vs);
