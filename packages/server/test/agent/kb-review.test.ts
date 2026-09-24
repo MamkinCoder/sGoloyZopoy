@@ -24,7 +24,7 @@ async function ask(topics: string[], text = `Есть опыт с ${topics.join(
 }
 
 describe("KB review card", () => {
-  it("lists every topic with up to 3 stories, escapes HTML and shows «Подтвердить» only with stories or a yes tag", async () => {
+  it("lists every topic with up to 3 stories, escapes HTML and shows «Подтвердить» only when there are stories to cite", async () => {
     h = chatHarness();
     for (let i = 1; i <= 4; i++) h.story("Jest", { title: `Тесты <${i}>`, did: `Писал тесты & моки ${i}.`, result: "Меньше багов" });
     await ask(["Jest", "Go", "Vitest"], "Писали <script>тесты</script>?");
@@ -38,7 +38,7 @@ describe("KB review card", () => {
     expect(text).toContain("<b>Vitest</b>: историй нет");
     expect(h.labels()).toEqual([
       ["Подтвердить Jest", "Дополнить Jest", "Нет навыка Jest"],
-      ["Подтвердить Go", "Дополнить Go", "Нет навыка Go"],
+      ["Дополнить Go", "Нет навыка Go"], // a yes tag without stories: nothing to cite, so ask for one
       ["Дополнить Vitest", "Нет навыка Vitest"],
     ]);
     // One pending review per topic, the unknown topic became a tag, all carry the card's message id.
