@@ -10,6 +10,13 @@ let h: ReturnType<typeof chatHarness>;
 afterEach(() => h?.store.close());
 
 describe("chats.sync (hh)", () => {
+  it("skips a placeholder user without a profile instead of failing the job", async () => {
+    h = chatHarness();
+    h.store.upsertUser({ slug: "ghost", name: "G", tgChatId: "", dailyLimitHH: 10, dailyLimitCareer: 5, active: true, allowOtherCountry: true, poolExpandPerDay: 0, opusEnabled: false });
+    await h.sync();
+    expect(h.hh.listThreads).toHaveBeenCalledTimes(1);
+  });
+
   it("links an invitation's vacancy that was never stored, fetching it only once, and preps once", async () => {
     h = chatHarness();
     h.page.state = "INVITATION";

@@ -8,6 +8,8 @@ import type { ChatEnv } from "./env.js";
 import { syncHabrChats } from "./habr.js";
 import { syncHHChats } from "./hh.js";
 import { draftTask, failTask, fallbackTask, remindTask, reviewTask, sendTask, triageTask } from "./tasks.js";
+import { existsSync } from "node:fs";
+import { paths } from "@sgz/shared";
 
 const taskId = (job: Job): number => Number(job.payload.taskId);
 
@@ -15,10 +17,14 @@ const taskId = (job: Job): number => Number(job.payload.taskId);
 async function syncAll(env: ChatEnv): Promise<void> {
   const errors: string[] = [];
   for (const u of env.store.listUsers(true)) {
+    // A user row without a profile is a placeholder (never set up): nothing to answer with.
+    if (!env.store.getProfile(u.id)) continue;
     for (const [name, sync] of [
       ["hh", syncHHChats],
       ["habr", syncHabrChats],
     ] as const) {
+      // Habr is opt-in: no saved login (`sgz habr-login`) means the user doesn't use it.
+      if (name === "habr" && !existsSync(paths.habrCookies(env.cfg, u.slug))) continue;
       try {
         await sync(env, u);
       } catch (e) {

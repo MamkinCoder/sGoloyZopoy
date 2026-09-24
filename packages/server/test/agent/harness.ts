@@ -10,6 +10,10 @@ import { openStore } from "../../src/db/index.js";
 import type { HabrClient } from "../../src/habr/client.js";
 import { FakeLLM } from "../../src/llm/fake.js";
 import { fakeConfig } from "../api/fakes.js";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { paths } from "@sgz/shared";
 
 type Msg = ThreadDetail["messages"][number];
 export const inMsg = (id: string, text: string): Msg => ({ hhMessageId: id, direction: "in", author: "employer", text, isQuestion: false, answered: false });
@@ -35,6 +39,13 @@ export function chatHarness(o: { habr?: HabrClient | null } = {}) {
   const store = openStore(":memory:");
   const user = store.upsertUser({ slug: "y", name: "Y", tgChatId: "", dailyLimitHH: 10, dailyLimitCareer: 5, active: true, allowOtherCountry: true, poolExpandPerDay: 0, opusEnabled: false });
   store.saveProfile(user.id, baseProfile);
+  // A Habr client in the test means the user set Habr up: chats.sync only reads Habr with a saved login.
+  const cfg = fakeConfig(mkdtempSync(join(tmpdir(), "sgz-agent-"))); // per harness: test files run in parallel
+  if (o.habr) {
+    const habrCookies = paths.habrCookies(cfg, "y");
+    mkdirSync(dirname(habrCookies), { recursive: true });
+    writeFileSync(habrCookies, "[]");
+  }
   let clock = Date.parse("2026-09-25T10:00:00Z");
   const now = () => new Date(clock);
   let sent = 0;
@@ -88,7 +99,7 @@ export function chatHarness(o: { habr?: HabrClient | null } = {}) {
   };
   let agent: ReturnType<typeof createAgent> | null = null;
   const env: ChatEnv = {
-    cfg: fakeConfig("/tmp/sgz-agent-test"),
+    cfg,
     store,
     hh: hh as unknown as ChatEnv["hh"],
     habr: o.habr ?? null,
