@@ -1,6 +1,6 @@
 ---
 name: sgz-onboarding
-description: First-run onboarding interview for the sGoloyZopoy job bot. Asks the new user about their stack, experience, salary, hh.ru setup and consent, writes data/users/<slug>/profile.yaml against the real schema and prints the next commands. Use when the user says "set up sgz", "onboard a new user", "first-time setup", "fill my profile", "new profile", "настрой sgz", "заполнить профиль", "новый пользователь".
+description: First-run onboarding interview for the sGoloyZopoy job bot. Asks the new user about their stack, experience, salary, hh.ru setup and consent, writes data/users/<slug>/profile.yaml against the real schema and prints the next commands. Use when the user says "set up sgz", "onboard a new user", "first-time setup", "fill my profile", "new profile", "настрой sgz", "заполнить профиль". For a newcomer who needs the whole guided path (CV, gaps, KB, login, hand-off), use onboard-seeker instead.
 ---
 
 # sGoloyZopoy onboarding
