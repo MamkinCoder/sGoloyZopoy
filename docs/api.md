@@ -287,8 +287,20 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       `SGZ_CLAUDE_PARALLEL`, `none` freely. A throw retries after 30 s, 1, 2, 4 min … (cap 30 min); after
       `max_attempts` (5) the job is `failed` and Telegram gets one «Агент: задача <kind> не выполнена» per kind
       until a job of that kind succeeds (open state `alert_open:job:<kind>`). A job running past its lease
-      (default 10 min, sync 20) counts as a failed attempt. Boot requeues every job a dead process left `running`.
-      Finished jobs are pruned after 7 days. Logs go to stderr (`[agent] …`), not to run events.
+      (default 10 min, sync 20) counts as a failed attempt; for an `llm` job the clock starts when it gets its
+      first claude slot, and agent jobs wait ahead of batch runs for that slot. A timed-out job's `claude` child is
+      killed. No `browser` job starts while MemAvailable < `SGZ_MEMORY_GUARD_MB` (it stays queued, no attempt used).
+      Boot requeues every job a dead process left `running`. Finished jobs are pruned after 7 days. Logs go to
+      stderr (`[agent] …`), not to run events.
+    - Serve jobs (`scheduler/jobs.ts`): every recurring job of `sgz serve` is an agent schedule that is checked on
+      its cadence and enqueued only when there is work, so each shows in `/agent/jobs`. With the runner enabled:
+      `interviews.remind` (none, every min: interview reminders + outcome questions), `health.heartbeat` (none,
+      every 30 min, only when the alert opens or closes), `health.chats` (none, every min, chat stall, only when
+      chat polling is on), `learn.lessons` (llm, hourly while the runner is idle and no daily run is owed),
+      `runner.autopilot` (none, every min while the runner is idle: a parked «Отправить» first, then touch /
+      career `rotate` via `runner.start`). With a bot token: `digest.day` and `digest.week` (none, at `digest_at` /
+      `retro_day` + `retro_at`, day keys `digest_last_day` / `retro_last_day`). With `SGZ_RUNNER=false` only the
+      last two run; chat jobs stay queued (not failed) for a process that runs them.
     - Chat jobs: `chats.sync` (browser, every `SGZ_CHAT_POLL_MIN` min, default 5, `0` = off; hh then Habr for every
       active user) reads the chats, stores messages and keeps the old side effects (invitation alert + `chats.prep`
       brief, rejection feedback request, forwarding feedback after a rejection, hh bot surveys, follow-ups), then
@@ -369,7 +381,7 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
     - decide (hh and career) gets `company_history` for batch employers with 3+ SENT applications,
       `resume_stats` for pool resumes with 10+ SENT hh applications in 30 days (tie-breaker within one
       direction), and the letter lessons below.
-    - `letter_lessons:<user id>` (internal, JSON `{lessons, at}`): checked hourly by the serve tick, rebuilt
+    - `letter_lessons:<user id>` (internal, JSON `{lessons, at}`): checked hourly by agent job `learn.lessons`, rebuilt
       at most weekly with one `fast` call (`prompts/learn_letters.md`) once there are 5+ invited and 15+
       not invited hh letters (rejected, or no invite 14 days after SENT). Lessons are style-only: sentences
       with links or unverified / never-claim tech are dropped. They feed `_letter_craft.md`, so both the

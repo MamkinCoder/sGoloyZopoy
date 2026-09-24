@@ -39,7 +39,7 @@ export function formatQueueCard(
     .join("\n");
 }
 
-const readPending = (store: Pick<Store, "getSetting">): number[] =>
+export const readPending = (store: Pick<Store, "getSetting">): number[] =>
   (store.getSetting(PENDING) ?? "").split(",").filter(Boolean).map(Number);
 
 const startSend = (store: Store, runner: Pick<RunService, "start">, id: number, userId: number) => {

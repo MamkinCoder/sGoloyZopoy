@@ -3,7 +3,8 @@
 // Resources: at most one browser job (one agent Chrome), at most `llmSlots` LLM jobs, `none` jobs freely.
 import type { EnqueueOptions, Job, JobState, Logger, Notifier, Store } from "@sgz/shared";
 import type { JobsRepo } from "../db/jobs.js";
-import { CLAUDE_PARALLEL } from "../llm/mutex.js";
+import { CLAUDE_PARALLEL, llmCaller } from "../llm/mutex.js";
+import { alertOnce, closeAlert } from "../notify/alert.js";
 import { errMessage } from "../runner/util.js";
 
 export type Resource = "browser" | "llm" | "none";
@@ -12,26 +13,31 @@ export interface JobContext {
   now(): Date;
   enqueue: Agent["enqueue"];
   log: Logger;
+  /** Aborted when the job times out; `claude` calls made by the job are killed with it (llmCaller). */
+  signal: AbortSignal;
 }
 
 export interface JobHandler {
   needs: Resource;
   /** Idempotent: reads its state from the DB. A throw retries with backoff until max attempts. */
   run(job: Job, ctx: JobContext): Promise<void>;
-  /** Longest run before the job counts as hung (timeout = failed attempt) and its lease as expired. Default 10 min. */
+  /** Longest run before the job counts as hung (timeout = failed attempt) and its lease as expired. Default 10 min.
+   *  An `llm` job's clock starts when it gets its first claude slot (batch runs may hold both for a while). */
   leaseMs?: number;
   /** Once, when the job exhausted its attempts. With it the handler alerts itself (per task, naming the employer);
    *  without it the queue alerts once per kind until a job of that kind succeeds again. */
   onFailed?(job: Job, error: string): void | Promise<void>;
 }
 
-/** A recurring job: enqueued by key every `everyMs` (the first one right at start). No due work, no job. */
+/** A recurring job: checked every `everyMs` (the first time right at start) and enqueued by key. No due work, no job. */
 export interface Schedule {
   kind: string;
   everyMs: number;
   payload?: Record<string, unknown>;
   /** Default: the kind. */
   key?: string;
+  /** Cheap check: enqueue only when it returns true (default: always). The handler re-checks what it needs. */
+  due?(now: Date): boolean;
 }
 
 export type AgentStore = JobsRepo & Pick<Store, "getSetting" | "setSetting">;
@@ -48,6 +54,9 @@ export interface AgentOptions {
   memAvailableMB?: () => number;
   memoryGuardMB?: number;
   llmSlots?: number;
+  /** Leave jobs without a handler queued instead of failing them (SGZ_RUNNER=false: the chat kinds wait for a
+   *  process that runs them). */
+  keepUnknown?: boolean;
   pollMs?: number;
   now?: () => Date;
   log?: Logger;
@@ -97,7 +106,7 @@ export function createAgent(o: AgentOptions): Agent {
   let stopped = false;
 
   const enqueue: Agent["enqueue"] = (kind, payload = {}, opts = {}) => store.enqueueJob(kind, payload, opts, now().toISOString());
-  const ctx: JobContext = { now, enqueue, log };
+  const ctx = { now, enqueue, log };
   const count = (r: Resource) => [...running.values()].filter((x) => x === r).length;
 
   const memOk = () => !o.memAvailableMB || o.memAvailableMB() >= (o.memoryGuardMB ?? 0);
@@ -109,16 +118,20 @@ export function createAgent(o: AgentOptions): Agent {
       await Promise.resolve(h.onFailed(job, error)).catch((fe: unknown) => log.error(job.kind, `onFailed: ${errMessage(fe)}`));
       return;
     }
-    // Once per kind until a job of that kind succeeds again (like scheduler/health.ts alerts).
-    if (store.getSetting(alertKey(job.kind))) return;
-    store.setSetting(alertKey(job.kind), now().toISOString());
-    await o.notifier.alert(`Агент: задача ${job.kind} не выполнена`, `${job.attempts} попыток, последняя ошибка: ${error}`).catch(() => undefined);
+    // Once per kind until a job of that kind succeeds again.
+    await alertOnce(store, o.notifier, alertKey(job.kind), { now: now(), title: `Агент: задача ${job.kind} не выполнена`, body: `${job.attempts} попыток, последняя ошибка: ${error}` }).catch(() => undefined);
   }
 
   async function execute(job: Job, h: JobHandler): Promise<void> {
     const leaseMs = h.leaseMs ?? DEFAULT_LEASE_MS;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     let settled = false;
+    const ac = new AbortController();
+    let expire: (e: Error) => void = () => undefined;
+    const expired = new Promise<never>((_, reject) => (expire = reject));
+    const startClock = () => {
+      if (timeout === undefined && !settled) timeout = setTimeout(() => expire(new Error(`timeout: ran longer than ${Math.round(leaseMs / 1000)} s`)), leaseMs);
+    };
     // The resource stays taken until the handler really returns, even past a timeout: a wedged chats.sync must
     // not share the agent Chrome with the next browser job. ponytail: not cancelled; closing the browser below
     // makes a hung page call throw, a handler stuck elsewhere keeps its slot until it returns.
@@ -126,13 +139,20 @@ export function createAgent(o: AgentOptions): Agent {
       running.delete(job.id);
       if (h.needs === "browser") browserUsedAt = now().getTime();
     };
-    const runP = (async () => h.run(job, ctx))().finally(() => (settled = true));
+    // ponytail: an llm job that hangs before any claude call has no clock; every llm handler calls claude first.
+    if (h.needs !== "llm") startClock();
+    const jobCtx: JobContext = { ...ctx, signal: ac.signal };
+    const call = async () => h.run(job, jobCtx);
+    // Agent jobs wait ahead of batch runs for a claude slot. `none` jobs run plain: the autopilot's runner.start
+    // must not hand the whole batch run the agent's priority.
+    const runP = (h.needs === "none" ? call() : llmCaller.run({ priority: true, signal: ac.signal, onAcquire: startClock }, call)).finally(() => (settled = true));
     try {
-      await Promise.race([runP, new Promise<never>((_, reject) => (timeout = setTimeout(() => reject(new Error(`timeout: ran longer than ${Math.round(leaseMs / 1000)} s`)), leaseMs)))]);
+      await Promise.race([runP, expired]);
       store.finishJob(job.id, now().toISOString());
-      if (store.getSetting(alertKey(job.kind))) store.setSetting(alertKey(job.kind), "");
+      await closeAlert(store, alertKey(job.kind));
     } catch (e) {
       const error = errMessage(e);
+      if (error.startsWith("timeout:")) ac.abort(); // kills its claude child
       // A hung page keeps its Chrome busy: close it, the next browser job opens a fresh one.
       if (h.needs === "browser" && error.startsWith("timeout:")) await o.browser?.close().catch(() => undefined);
       const at = now();
@@ -164,6 +184,12 @@ export function createAgent(o: AgentOptions): Agent {
     for (const s of o.schedules ?? []) {
       if (t.getTime() < (nextAt.get(s) ?? 0)) continue;
       nextAt.set(s, t.getTime() + s.everyMs);
+      try {
+        if (s.due && !s.due(t)) continue;
+      } catch (e) {
+        log.error(s.kind, `due: ${errMessage(e)}`);
+        continue;
+      }
       enqueue(s.kind, s.payload ?? {}, { key: s.key ?? s.kind });
     }
     if (t.getTime() - lastPrune >= PRUNE_EVERY_MS) {
@@ -177,6 +203,7 @@ export function createAgent(o: AgentOptions): Agent {
     for (const due of store.dueJobs(iso, 50)) {
       const h = handlers[due.kind];
       if (!h) {
+        if (o.keepUnknown) continue;
         // An unknown kind (renamed or removed handler) would sit in the queue forever.
         if (store.claimJob(due.id, iso, iso)) store.failJob(due.id, `no handler for ${due.kind}`, iso, iso, true);
         continue;

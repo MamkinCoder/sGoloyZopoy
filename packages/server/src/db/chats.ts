@@ -41,7 +41,14 @@ type ChatsRepo = Pick<
   | "claimInterviewReminders"
   | "claimOutcomeAsks"
   | "setInterviewOutcome"
->;
+> &
+  InterviewPeek;
+
+/** Read-only twin of claimInterviewReminders / claimOutcomeAsks: the agent enqueues the reminder job only when
+ *  one of them has a row (`ask` null = outcome questions off). */
+export interface InterviewPeek {
+  hasInterviewWork(nowISO: string, untilISO: string, ask: { fromISO: string; toISO: string } | null): boolean;
+}
 
 export function chatsRepo(s: Sql): ChatsRepo {
   return {
@@ -179,6 +186,16 @@ export function chatsRepo(s: Sql): ChatsRepo {
         for (const r of rows) s.run("UPDATE chat_threads SET outcome_asked = 1 WHERE id = ?", r.id);
         return rows.map(mapThread);
       });
+    },
+    hasInterviewWork(nowISO, untilISO, ask) {
+      const remind = s.get("SELECT 1 AS x FROM chat_threads WHERE interview_reminded = 0 AND interview_at > ? AND interview_at <= ? LIMIT 1", nowISO, untilISO);
+      if (remind || !ask) return !!remind;
+      return !!s.get(
+        `SELECT 1 AS x FROM chat_threads WHERE outcome_asked = 0 AND interview_outcome IS NULL AND state <> 'rejected'
+           AND interview_at >= ? AND interview_at <= ? LIMIT 1`,
+        ask.fromISO,
+        ask.toISO,
+      );
     },
     setInterviewOutcome(threadId, outcome) {
       s.run("UPDATE chat_threads SET interview_outcome = ?, outcome_asked = 1 WHERE id = ?", outcome, threadId);

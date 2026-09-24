@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openStore, type SqliteStore } from "../db/index.js";
+import { createMutex, llmCaller } from "../llm/mutex.js";
 import { backoffMs, createAgent, type JobHandler } from "./queue.js";
 
 const silent = { info: () => undefined, warn: () => undefined, error: () => undefined };
@@ -166,10 +167,11 @@ describe("agent queue", () => {
     let mem = 300;
     const ran: number[] = [];
     const agent = createAgent({ store, handlers: { b: { needs: "browser", run: async (j) => void ran.push(j.id) } }, notifier, now, log: silent, memAvailableMB: () => mem, memoryGuardMB: 450 });
-    agent.enqueue("b");
+    const j = agent.enqueue("b");
     agent.tick();
     await agent.settle();
     expect(ran).toHaveLength(0);
+    expect(store.getJob(j.id)).toMatchObject({ state: "queued", attempts: 0 }); // no attempt burnt
     mem = 900;
     agent.tick();
     await agent.settle();
@@ -269,5 +271,71 @@ describe("agent queue", () => {
     const j = agent.enqueue("gone");
     agent.tick();
     expect(store.getJob(j.id)).toMatchObject({ state: "failed", lastError: "no handler for gone" });
+  });
+
+  it("an llm job's timeout starts when it gets a claude slot, and it waits ahead of batch calls", async () => {
+    const m = createMutex(1); // stands in for claudeMutex: runClaude passes llmCaller's options the same way
+    const claude = (name: string, order: string[]) => m.run(async () => void order.push(name), llmCaller.getStore());
+    const order: string[] = [];
+    let releaseBatch = () => undefined as void;
+    void m.run(() => new Promise<void>((r) => (releaseBatch = r))); // a decide batch holds the slot
+    const batchNext = m.run(async () => void order.push("batch-2")); // and another waits
+    const h: JobHandler = { needs: "llm", leaseMs: 60_000, run: () => claude("chat", order) };
+    const agent = createAgent({ store, handlers: { "chats.draft": h }, notifier, now, log: silent });
+    const job = agent.enqueue("chats.draft", {}, { maxAttempts: 1 });
+    agent.tick();
+    await vi.advanceTimersByTimeAsync(5 * 60_000); // far past the lease while waiting: no timeout
+    expect(store.getJob(job.id)!.state).toBe("running");
+    releaseBatch();
+    await agent.settle();
+    await batchNext;
+    expect(store.getJob(job.id)!.state).toBe("done");
+    expect(order).toEqual(["chat", "batch-2"]); // the agent job jumped the batch queue
+  });
+
+  it("a timed-out job's signal aborts (runClaude kills its child with it)", async () => {
+    let signal: AbortSignal | undefined;
+    const h: JobHandler = { needs: "llm", leaseMs: 1000, run: (_j, ctx) => new Promise<void>((_, reject) => {
+      signal = llmCaller.getStore()?.signal;
+      llmCaller.getStore()?.onAcquire?.(); // the claude slot is taken: the clock runs
+      ctx.signal.addEventListener("abort", () => reject(new Error("killed")));
+    }) };
+    const agent = createAgent({ store, handlers: { l: h }, notifier, now, log: silent });
+    const job = agent.enqueue("l", {}, { maxAttempts: 1 });
+    agent.tick();
+    await vi.advanceTimersByTimeAsync(1000);
+    await agent.settle();
+    expect(signal?.aborted).toBe(true);
+    expect(store.getJob(job.id)!.lastError).toContain("timeout");
+  });
+
+  it("none jobs run outside the llm caller context (the autopilot's run keeps batch priority)", async () => {
+    let inside: unknown = "unset";
+    const agent = createAgent({ store, handlers: { n: { needs: "none", run: async () => void (inside = llmCaller.getStore()) } }, notifier, now, log: silent });
+    agent.enqueue("n");
+    agent.tick();
+    await agent.settle();
+    expect(inside).toBeUndefined();
+  });
+
+  it("a schedule with due enqueues only when there is work; keepUnknown leaves foreign kinds queued", async () => {
+    let work = false;
+    const ran: number[] = [];
+    const agent = createAgent({ store, handlers: { d: { needs: "none", run: async (j) => void ran.push(j.id) } }, schedules: [{ kind: "d", everyMs: 60_000, due: () => work }], keepUnknown: true, notifier, now, log: silent });
+    const foreign = agent.enqueue("chats.send");
+    agent.tick();
+    await agent.settle();
+    expect(ran).toHaveLength(0);
+    expect(store.getJob(foreign.id)!.state).toBe("queued");
+    work = true;
+    clock += 30_000;
+    agent.tick(); // checked every everyMs only
+    await agent.settle();
+    expect(ran).toHaveLength(0);
+    clock += 30_000;
+    agent.tick();
+    await agent.settle();
+    expect(ran).toHaveLength(1);
+    expect(store.listJobs(undefined, 10)).toHaveLength(2);
   });
 });

@@ -2,6 +2,7 @@
 // after employer silence. All hh-internal; the follow-up is a fixed text (no LLM, no links).
 import { INTERVIEW_OUTCOMES, type BrowserSession, type ChatMessage, type ChatThread, type HHClient, type InterviewOutcome, type InterviewPrep, type Notifier, type Store, type User, type Vacancy } from "@sgz/shared";
 import type { ChatEnv } from "../agent/chats/env.js";
+import type { InterviewPeek } from "../db/chats.js";
 import { formatBand } from "../db/salary.js";
 import { mapNegotiationState } from "../hh/state.js";
 import { kbForVacancy } from "../kb/context.js";
@@ -92,6 +93,12 @@ export function formatPrep(p: InterviewPrep): string {
 }
 
 /** Telegram ping for interviews starting within REMIND_BEFORE_MS; each time is reminded once. */
+/** True when remindInterviews / askOutcomes have something to send now (a cheap read, no claim). */
+export function interviewsDue(store: InterviewPeek, notifier: Pick<Notifier, "ask">, now: Date): boolean {
+  const ask = notifier.ask ? { fromISO: new Date(now.getTime() - ASK_UNTIL_MS).toISOString(), toISO: new Date(now.getTime() - ASK_AFTER_MS).toISOString() } : null;
+  return store.hasInterviewWork(now.toISOString(), new Date(now.getTime() + REMIND_BEFORE_MS).toISOString(), ask);
+}
+
 export async function remindInterviews(store: Store, notifier: Notifier, tz: string, now = new Date()): Promise<void> {
   const due = store.claimInterviewReminders(now.toISOString(), new Date(now.getTime() + REMIND_BEFORE_MS).toISOString());
   for (const t of due) {
