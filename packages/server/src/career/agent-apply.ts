@@ -41,6 +41,18 @@ const TICK_CONSENT_JS = `(() => {
   return n;
 })()`;
 
+// The character limit of the cover-letter field: maxlength, or a counter / hint near it («0 / 500», «до 1000
+// символов»). The field is the textarea labelled like a letter / message / comment, else the only textarea.
+export const LETTER_LIMIT_JS = `(() => {
+  const areas = [...document.querySelectorAll("textarea")].filter((t) => t.offsetParent !== null);
+  const ctx = (t) => { let n = t, s = ""; for (let i = 0; i < 3 && n; i++, n = n.parentElement) s = n.textContent || ""; return (s + " " + (t.placeholder || "") + " " + (t.name || "") + " " + (t.getAttribute("aria-label") || "")).slice(0, 600); };
+  const t = areas.find((a) => /сопровод|письм|cover|letter|сообщени|message|комментар|comment|о себе|about/i.test(ctx(a))) || (areas.length === 1 ? areas[0] : null);
+  if (!t) return 0;
+  if (t.maxLength > 0) return t.maxLength;
+  const m = ctx(t).match(/\\d+\\s*\\/\\s*(\\d{2,5})|(?:до|не более|максимум|max(?:imum)?)\\s*(\\d{2,5})\\s*(?:символ|знак|char)/i);
+  return m ? Number(m[1] || m[2]) : 0;
+})()`;
+
 /** «Петров_Иван_CV.pdf» instead of the internal «5.pdf» that recruiters would otherwise see. */
 export const cvFileName = (fullName: string): string => {
   const { first, last } = splitName(fullName);
@@ -102,6 +114,12 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
     const phoneRes = req.profile.phone
       ? await s.act("Fill the phone number field with %phone%", { cacheKey: "career.apply.phone", variables })
       : { success: false };
+    const limit = req.coverLetter ? await s.evaluate<number>(LETTER_LIMIT_JS).catch(() => 0) : 0;
+    if (limit && req.coverLetter.length > limit) {
+      variables.cover_letter = req.fitLetter ? await req.fitLetter(limit) : req.coverLetter;
+      if (variables.cover_letter.length > limit) variables.cover_letter = variables.cover_letter.slice(0, limit).trimEnd();
+      learned.push(`cover letter limit ${limit} chars`);
+    }
     const coverRes = req.coverLetter
       ? await s.act("If there is a cover letter / message / comment / about-you text area, fill it with %cover_letter%", {
           cacheKey: "career.apply.cover",

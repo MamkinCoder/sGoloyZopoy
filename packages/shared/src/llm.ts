@@ -57,6 +57,8 @@ export interface LLMClient {
   proposePoolVariants(profile: Profile, existing: HHResume[], max: number): Promise<PoolVariant[]>;
   tailorCV(profile: Profile, base: CV, vacancy: Vacancy, tier?: Tier, kb?: KbBrief): Promise<{ cv: CV; changes: string[] }>;
   coverLetterCareer(profile: Profile, cv: CV, vacancy: Vacancy, lessons?: string[], kb?: KbBrief): Promise<string>;
+  /** Rewrites a letter to fit a form's character limit (`max`); the result is at most `max` chars. */
+  shortenLetter(profile: Profile, letter: string, max: number): Promise<string>;
   /** Prep brief for the seeker on an invitation; `invitation` is the employer's last message. */
   interviewPrep(profile: Profile, vacancy: Vacancy, invitation: string, kb?: KbBrief): Promise<InterviewPrep>;
   /** Interview study checklist (10-20 topics) for the vacancy, on a button press; `prep` is the thread's brief. */

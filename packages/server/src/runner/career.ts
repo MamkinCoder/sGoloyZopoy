@@ -391,6 +391,13 @@ async function reviewQueued(ctx: RunContext, u: UserRun, review: NonNullable<Car
       resumePdfPath: pdf.pdfPath,
       coverLetter: app.coverLetter,
       dryRun: inspect,
+      fitLetter: async (max) => {
+        const letter = await ctx.llm.shortenLetter(profile, app.coverLetter, max);
+        stats.llmCall();
+        ctx.store.updateApplicationCoverLetter(id, letter);
+        ctx.log.info("apply", `${vacancy.title}: letter shortened to ${letter.length}/${max} chars for the form`, { vacancy_id: vacancy.id });
+        return letter;
+      },
       answerQuestions: async (qs) => {
         questions = qs;
         answers = await ctx.llm.answerQuestionnaire(profile, vacancy, qs, kbForVacancy(ctx.store, user.id, vacancy, renderQuestions(qs)));

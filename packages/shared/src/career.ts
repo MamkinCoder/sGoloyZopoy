@@ -20,6 +20,8 @@ export interface CareerApplyRequest {
   coverLetter: string;
   dryRun: boolean;
   answerQuestions: (qs: Question[]) => Promise<Answer[]>;
+  /** The form's letter field takes at most `max` chars: returns the letter rewritten to fit (and stores it). */
+  fitLetter?: (max: number) => Promise<string>;
 }
 
 export interface CareerApplyResult {

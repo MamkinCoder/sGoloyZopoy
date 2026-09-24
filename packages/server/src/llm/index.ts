@@ -257,6 +257,12 @@ function makeClient(ctx: Ctx): LLMClient {
       return sanitizeLetter(r.cover_letter, blockedTech(profile), LIMITS.coverLetterCareer);
     },
 
+    async shortenLetter(p: Profile, letter: string, max: number): Promise<string> {
+      const prompt = renderPrompt("shorten_letter", { never_claim: neverClaimList(p), letter, max, max_target: Math.floor(max * 0.9) });
+      const r = await call(ctx, { task: "shorten_letter", tier: "write", prompt, schema: CoverLetterSchema, jsonSchema: toJsonSchema(CoverLetterSchema) });
+      return sanitizeLetter(r.cover_letter, blockedTech(p), max);
+    },
+
     async interviewPrep(p: Profile, vacancy: Vacancy, invitation: string, kb?: KbBrief): Promise<InterviewPrep> {
       const profile = withKbNever(p, kb);
       const prompt = renderPrompt("interview_prep", {

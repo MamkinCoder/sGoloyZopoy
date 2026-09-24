@@ -143,6 +143,10 @@ export class FakeLLM implements LLMClient {
     this.record("coverLetterCareer", [profile, cv, vacancy, lessons, kb]);
     return this.onCoverLetterCareer(profile, cv, vacancy);
   }
+  async shortenLetter(profile: Profile, letter: string, max: number): Promise<string> {
+    this.record("shortenLetter", [profile, letter, max]);
+    return letter.slice(0, max);
+  }
   async interviewPrep(profile: Profile, vacancy: Vacancy, invitation: string, kb?: KbBrief): Promise<InterviewPrep> {
     this.record("interviewPrep", [profile, vacancy, invitation, kb]);
     return this.onInterviewPrep(profile, vacancy, invitation);

@@ -33,6 +33,7 @@ const outputs: Record<string, unknown> = {
   propose_pool_variants: [],
   tailor_cv: { cv, changes: [] },
   cover_letter_career: { cover_letter: "Здравствуйте. Готов обсудить детали." },
+  shorten_letter: { cover_letter: "Привет! Go-разработчик." },
   interview_prep: { questions: [], stories: [], gaps: [], ask_them: [] },
   interview_study: { checklist: [{ topic: "Go", why: "x", level: "must", gap: false, study: "x" }] },
 };
@@ -63,6 +64,7 @@ describe("prompt templates", () => {
   it("propose_pool_variants", async () => check("propose_pool_variants", await capture("propose_pool_variants", (l) => l.proposePoolVariants(profile, resumes, 2))));
   it("tailor_cv", async () => check("tailor_cv", await capture("tailor_cv", (l) => l.tailorCV(profile, cv, vacancies[1]!))));
   it("cover_letter_career", async () => check("cover_letter_career", await capture("cover_letter_career", (l) => l.coverLetterCareer(profile, cv, vacancies[0]!))));
+  it("shorten_letter", async () => check("shorten_letter", await capture("shorten_letter", (l) => l.shortenLetter(profile, "Привет! Я Go-разработчик. Писал биллинг. Готов обсудить детали.", 100))));
 
   it("interview_prep", async () => check("interview_prep", await capture("interview_prep", (l) => l.interviewPrep(profile, vacancies[0]!, "Приглашаем на техническое собеседование в четверг."))));
 
