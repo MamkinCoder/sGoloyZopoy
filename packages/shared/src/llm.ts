@@ -45,7 +45,8 @@ export interface LLMClient {
   decide(input: DecideInput): Promise<Decision[]>;
   answerQuestionnaire(profile: Profile, vacancy: Vacancy | null, qs: Question[]): Promise<Answer[]>;
   /** `choices`: quick-reply buttons on the employer's last message; the reply must be exactly one of them. */
-  answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[]): Promise<ChatReply>;
+  /** `kb`: the knowledge-base block for the asked topics (kb/context.ts renderKb), the only material about experience. */
+  answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[], kb?: string): Promise<ChatReply>;
   /** Decides what an employer turn needs (no reply text): kind + asked-about skills. `fresh` = the new messages. */
   triageChat(profile: Profile, history: ChatMessage[], fresh: ChatMessage[]): Promise<ChatTriage>;
   summarizeResume(resumeText: string): Promise<ResumeSummary>;

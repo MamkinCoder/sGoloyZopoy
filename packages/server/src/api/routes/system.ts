@@ -54,6 +54,7 @@ export function systemRoutes(deps: ApiDeps): Hono {
     habr_daily_limit: "20",
     retro_day: "sun",
     retro_at: "19:00",
+    kb_review_mode: "always",
   };
   const readSettings = (): Record<string, string> =>
     Object.fromEntries(SETTING_KEYS.map((k) => [k, store.getSetting(k) ?? defaults[k]]));

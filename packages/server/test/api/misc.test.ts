@@ -134,6 +134,7 @@ describe("system", () => {
       viewers_enabled: "1",
       retro_day: "sun",
       retro_at: "19:00",
+      kb_review_mode: "always",
     });
     const put = await h.json("PUT", "/api/settings", { schedule_at: "09:30", dedup_window_days: 45 });
     expect(await put.json()).toMatchObject({ schedule_at: "09:30", dedup_window_days: "45" });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultProfile } from "../config/profile.js";
 import { openStore, seedDefaultUsers } from "../db/index.js";
-import { knownSkill, learnedSkills, learnSkill, legacySkillName, parseSkillCallback, withLearnedSkills } from "./skills.js";
+import { learnedSkills, learnSkill, legacySkillName, parseSkillCallback, withLearnedSkills } from "./skills.js";
 
 describe("skill answers", () => {
   it("moves a skill between the lists and keeps the answers for a later profile.yaml import", () => {
@@ -14,9 +14,6 @@ describe("skill answers", () => {
     expect(store.getProfile(user.id)!.verified_skills).toEqual(["Go", "Kafka"]);
     learnSkill(store, user.id, "ClickHouse", false);
     expect(store.getProfile(user.id)!.never_claim_skills).toEqual(["ClickHouse"]);
-    expect(knownSkill(store.getProfile(user.id)!, "kafka")).toBe("yes");
-    expect(knownSkill(store.getProfile(user.id)!, "clickhouse")).toBe("no");
-    expect(knownSkill(store.getProfile(user.id)!, "Vitest")).toBeNull();
 
     const reimported = withLearnedSkills({ ...defaultProfile(), verified_skills: ["Go"], never_claim_skills: [] }, learnedSkills(store, user.id));
     expect(reimported.verified_skills).toEqual(["Go", "Kafka"]);

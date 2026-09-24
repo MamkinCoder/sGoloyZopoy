@@ -47,6 +47,12 @@ describe("prompt templates", () => {
   it("decide_hh", async () => check("decide_hh", await capture("decide_hh", (l) => l.decide({ profile, resumes, vacancies }))));
   it("answer_questionnaire", async () => check("answer_questionnaire", await capture("answer_questionnaire", (l) => l.answerQuestionnaire(profile, vacancies[0]!, questions))));
   it("answer_chat", async () => check("answer_chat", await capture("answer_chat", (l) => l.answerChat(profile, vacancies[0]!, history))));
+  it("answer_chat with a knowledge-base block", async () => {
+    const kb = "Навыки по теме:\n- Jest: есть опыт (историй: 1)\n- Vitest: нет в опыте, не заявлять\n\nИстории из опыта (единственный материал об опыте):\n\n### Тесты биллинга [Jest]\nЯндекс, 2022-2024\nЧто сделал: Писал unit-тесты на Jest.";
+    const prompt = await capture("answer_chat", (l) => l.answerChat(profile, vacancies[0]!, history, [], kb));
+    check("answer_chat_kb", prompt);
+    expect(prompt).toContain("## База знаний: опыт по темам вопроса\n\nНавыки по теме:");
+  });
   it("triage_chat", async () => check("triage_chat", await capture("triage_chat", (l) => l.triageChat(profile, history, history.slice(-1))), false));
   it("triage_chat keeps one entry per skill", async () => {
     const llm = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", outputs.triage_chat) });

@@ -9,7 +9,7 @@ import { telegramFetch } from "../notify/proxy.js";
 import { startTelegramCallbacks } from "../notify/telegram.js";
 import { parseSkillCallback } from "../runner/skills.js";
 import { onCardTap, onLegacySkillTap } from "../agent/chats/tasks.js";
-import { parseCardCallback } from "../agent/chats/review.js";
+import { kbText, onKbTap, parseCardCallback, parseKbCallback } from "../agent/chats/review.js";
 import { chatSchedules } from "../agent/chats/index.js";
 import { handleQueueTap, parseQueueCallback, startPendingSend } from "../runner/queue-cards.js";
 import { buildDigest, digestDue, queueList } from "../notify/digest.js";
@@ -113,7 +113,7 @@ export async function serve(): Promise<void> {
     if (job?.kind === "touch") void start({ userSlug: "all", source: "hh", stage: "touch" }).then((id) => typeof id === "number" && app.store.setSetting("touch_last_at", new Date().toISOString())); else if (job?.kind === "career") void start({ userSlug: job.userSlug, source: "career", stage: "rotate" });
   };
   // Telegram buttons: queue cards (send / skip), «📚 Чеклист» (runner/study.ts) and the chat reply cards'
-  // ✅/❌ per skill (agent/chats: the answer goes into the task, the card is edited in place; old one-skill
+  // KB review buttons «Подтвердить / Дополнить / Нет навыка» per topic (agent/chats/review.ts: the answer goes into the task, the card is edited in place; phase-1 «ct:» ✅/❌ and old one-skill
   // «sk:» cards map to the open task). /status and /queue answer from the configured chats.
   const digestAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
   const retroAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildRetro(app.store, u, app.cfg.tz, new Date()) ?? `Мало данных: за неделю меньше ${MIN_SENT} откликов`}`).join("\n\n");
@@ -132,9 +132,12 @@ export async function serve(): Promise<void> {
     if (cmd === "/study") return studyCommand(app, chatId, args, new Date());
     return "Команды: /status - итоги дня, /queue - очередь, /week - итоги недели, /company <название> - история откликов, /salary <слово> - рынок зарплат, /study [компания] - чеклист и промпт к собеседованию, /mock [компания] - тренировка собеседования, /stop - закончить тренировку";
   };
-  const onText = (chatId: string, text: string) => mockAnswer(app.store, app.llm, chatId, text, new Date());
+  // Free text: a story for a KB review that asked for one («Дополнить») first, otherwise a /mock answer.
+  const onText = async (chatId: string, text: string) => (app.chats ? kbText(app.chats, chatId, text) : null) ?? mockAnswer(app.store, app.llm, chatId, text, new Date());
   const stopCallbacks = app.cfg.tgBotToken
-    ? startTelegramCallbacks(app.cfg.tgBotToken, async (data) => {
+    ? startTelegramCallbacks(app.cfg.tgBotToken, async (data, chatId) => {
+        const kr = parseKbCallback(data);
+        if (kr && app.chats) return onKbTap(app.chats, kr, chatId);
         const q = parseQueueCallback(data);
         if (q) return handleQueueTap(app.store, app.runner, q);
         const st = parseStudyCallback(data);

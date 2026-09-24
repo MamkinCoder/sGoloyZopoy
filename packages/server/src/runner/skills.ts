@@ -1,5 +1,5 @@
 // The seeker's yes/no skill answers. An employer asks about a skill the profile doesn't list: the chat reply
-// task waits for a ✅/❌ tap on its Telegram card (src/agent/chats/review.ts). «есть» adds the skill to
+// task waits for the human on its Telegram card (src/agent/chats/review.ts). «есть» adds the skill to
 // verified_skills, «нет» to never_claim_skills, and both are kept in `skills_learned:<user>` so a profile.yaml
 // re-import (deploy) keeps them.
 import type { Profile, Store } from "@sgz/shared";
@@ -9,13 +9,6 @@ export const skillKey = (skill: string): string =>
   skill.trim().toLowerCase().replace(/[^a-z0-9а-яё+#.]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 24);
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-
-/** What the stored profile (with the learned answers applied) already says about a skill; null = unknown. */
-export function knownSkill(p: Pick<Profile, "verified_skills" | "never_claim_skills">, skill: string): "yes" | "no" | null {
-  if (p.never_claim_skills.some((s) => same(s, skill))) return "no";
-  if (p.verified_skills.some((s) => same(s, skill))) return "yes";
-  return null;
-}
 
 /** Applies the human's answer to the stored profile and remembers it for later profile.yaml imports. */
 export function learnSkill(store: Pick<Store, "getProfile" | "saveProfile" | "getSetting" | "setSetting">, userId: number, skill: string, has: boolean): void {

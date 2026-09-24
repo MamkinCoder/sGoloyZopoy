@@ -178,6 +178,7 @@ export const SETTING_KEYS = [
   "habr_daily_limit",
   "retro_day",
   "retro_at",
+  "kb_review_mode",
 ] as const;
 const numish = z.union([z.number().int().min(0), z.string().regex(/^\d+$/)]).transform(String);
 const boolish = z.union([z.literal("0"), z.literal("1"), z.literal(0), z.literal(1)]).transform(String);
@@ -206,6 +207,7 @@ export const SettingsSchema = z
     viewers_enabled: boolish, // "0" = no warm-lead applies to employers who opened a resume
     retro_day: z.enum(["", "mon", "tue", "wed", "thu", "fri", "sat", "sun"]), // weekly Telegram retro, "" = off
     retro_at: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM"),
+    kb_review_mode: z.enum(["always", "new_only", "off"]), // chat topics shown on the Telegram KB card: every topic | only topics without stories | none
   })
   .partial()
   .refine((o) => Object.keys(o).length > 0, "no settings given");

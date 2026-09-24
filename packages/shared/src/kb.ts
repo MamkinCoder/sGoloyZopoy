@@ -64,4 +64,25 @@ export const mergeAliases = (name: string, ...lists: string[][]): string[] => {
   return out;
 };
 
-export type NewKbStory =Omit<KbStory, "id" | "createdAt" | "updatedAt" | "tags"> & { tagIds: number[] };
+export type NewKbStory = Omit<KbStory, "id" | "createdAt" | "updatedAt" | "tags"> & { tagIds: number[] };
+
+export type KbReviewState = "pending" | "confirmed" | "expanded" | "denied" | "expired";
+
+/** One topic of a chat reply task on the Telegram review card (docs/ARCHITECTURE.md section 4). */
+export interface KbReview {
+  id: number;
+  userId: number;
+  taskId: number | null;
+  tagId: number;
+  /** The topic as the task names it (may be an alias of the tag). */
+  topic: string;
+  state: KbReviewState;
+  tgMessageId: string;
+  /** The employer's question the topic came from. */
+  prompt: string;
+  /** «Дополнить» tapped: the Telegram chat whose next free text is the story; "" = not waiting. */
+  awaitingChat: string;
+  awaitingAt: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+}

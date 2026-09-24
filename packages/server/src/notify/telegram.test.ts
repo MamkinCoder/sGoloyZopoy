@@ -88,6 +88,37 @@ describe("telegram cards", () => {
     expect(calls.find((c) => c.method === "answerCallbackQuery")!.body.text).toBe("✅ Jest");
   });
 
+  it("onTap gets the tapped chat; a TapReply's `say` follows the edit as a new message there", async () => {
+    const calls: { method: string; body: Record<string, unknown> }[] = [];
+    let polls = 0;
+    const fakeFetch = (async (url: string, init: { body: string }) => {
+      const method = url.split("/").at(-1)!;
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      if (method === "getUpdates") {
+        if (polls++) return new Promise(() => undefined);
+        return new Response(JSON.stringify({ ok: true, result: [{ update_id: 1, callback_query: { id: "q", data: "kr:1:e", message: { chat: { id: 42 }, message_id: 9, text: "card" } } }] }));
+      }
+      calls.push({ method, body });
+      return new Response(JSON.stringify({ ok: true, result: true }));
+    }) as unknown as typeof fetch;
+    const chats: string[] = [];
+    const stop = startTelegramCallbacks("t", async (_d, chatId) => (chats.push(chatId), { note: "Жду", text: "card", buttons: [], say: "Напиши про <b>Jest</b>" }), { fetch: fakeFetch });
+    await vi.waitFor(() => expect(calls.some((c) => c.method === "sendMessage")).toBe(true));
+    stop();
+    expect(chats).toEqual(["42"]);
+    expect(calls.map((c) => c.method)).toEqual(["answerCallbackQuery", "editMessageText", "sendMessage"]);
+    expect(calls[2]!.body).toMatchObject({ chat_id: 42, text: "Напиши про <b>Jest</b>", parse_mode: "HTML" });
+  });
+
+  it("edit replaces a sent message's text and buttons", async () => {
+    const sent: { url: string; body: Record<string, unknown> }[] = [];
+    const fakeFetch = (async (url: string, init: { body: string }) => (sent.push({ url, body: JSON.parse(init.body) as Record<string, unknown> }), new Response(JSON.stringify({ ok: true, result: true })))) as unknown as typeof fetch;
+    const tg = createTelegram("t", "42", "", { fetch: fakeFetch });
+    await tg.edit!(7, "<b>x</b>", [[{ text: "a", data: "1" }]]);
+    expect(sent[0]!.url).toMatch(/\/editMessageText$/);
+    expect(sent[0]!.body).toMatchObject({ chat_id: "42", message_id: 7, text: "<b>x</b>", parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "a", callback_data: "1" }]] } });
+  });
+
   it("ask sends one row per list (a flat list is one row) and returns the message id", async () => {
     const sent: Record<string, unknown>[] = [];
     const fakeFetch = (async (_u: string, init: { body: string }) => (sent.push(JSON.parse(init.body) as Record<string, unknown>), new Response(JSON.stringify({ ok: true, result: { message_id: 5 } })))) as unknown as typeof fetch;

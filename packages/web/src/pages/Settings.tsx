@@ -476,6 +476,7 @@ const KNOWN: { key: string; label: string; kind: "text" | "number"; hint?: strin
   { key: "viewers_enabled", label: "Отклик тем, кто смотрел резюме", kind: "text", hint: "1 — откликаться на вакансии работодателей, открывших резюме (до 3 за запуск), 0 — выкл" },
   { key: "retro_day", label: "Итоги недели: день", kind: "text", hint: "mon…sun; пусто — выключено" },
   { key: "retro_at", label: "Итоги недели: время", kind: "text", hint: "HH:MM" },
+  { key: "kb_review_mode", label: "Карточка навыков в чатах", kind: "text", hint: "always — каждая тема вопроса, new_only — только темы без историй, off — без карточки" },
 ];
 
 function ScheduleEditor() {

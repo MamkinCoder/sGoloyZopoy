@@ -76,6 +76,8 @@ export interface TapReply {
   note: string;
   text: string;
   buttons: TgButton[][];
+  /** Sent as a new HTML message to the same chat after the edit (e.g. a question to answer in free text). */
+  say?: string;
 }
 
 export interface Notifier {
@@ -85,6 +87,8 @@ export interface Notifier {
    *  through the callback poller. A flat list is one row; a list of lists is one row each. Resolves to the
    *  Telegram message id when known. Optional (tests, no token). */
   ask?(text: string, buttons: TgButton[] | TgButton[][]): Promise<number | void>;
+  /** Replaces the text and buttons of a message sent by `ask` (same chat). Optional like `ask`. */
+  edit?(messageId: number, text: string, buttons: TgButton[][]): Promise<void>;
 }
 
 export interface Logger {
