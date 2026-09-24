@@ -1,7 +1,7 @@
 // Warm leads: employers who opened one of the seeker's hh resumes («Кто смотрел резюме»). A new viewer's
 // own open IT vacancies go through the normal filters -> fetch -> decide -> apply path (company limiter,
 // daily budget, the usual honest letter that never mentions the view), at most MAX_APPLIES per run.
-import { RunAbortError, Status, companyKey, type HHResume } from "@sgz/shared";
+import { notifierFor, RunAbortError, Status, companyKey, type HHResume } from "@sgz/shared";
 import type { RunContext } from "./context.js";
 import { applyStage, decideStage, fetchStage, type Candidate } from "./board.js";
 import { classify, ensureVacancy, filterOpts, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
@@ -99,6 +99,6 @@ export async function viewersStage(ctx: RunContext, u: UserRun, pool: HHResume[]
     return budget;
   }
   for (const key of done) ctx.store.setSetting(viewerSeenKey(user.id, key), ctx.now().toISOString());
-  if (lines.length) await ctx.deps.notifier.alert("Кто смотрел резюме", `${user.name}:\n${lines.join("\n")}`).catch(() => undefined);
+  if (lines.length) await notifierFor(ctx.deps.notifier, user).alert("Кто смотрел резюме", `${user.name}:\n${lines.join("\n")}`).catch(() => undefined);
   return budget - sent;
 }

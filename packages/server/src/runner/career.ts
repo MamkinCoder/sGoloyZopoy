@@ -2,7 +2,7 @@
 // closed) → build PDF → cover letter → QUEUED for human review. Nothing is submitted automatically:
 // the panel starts stage send:<id> (submit) or inspect:<id> (fill the form, don't submit) per item.
 import { mkdirSync } from "node:fs";
-import { paths, RunAbortError, Status, type ATSKind, type Answer, type CV, type CareerSite, type Decision, type Discovered, type Question, type Vacancy } from "@sgz/shared";
+import { notifierFor, paths, RunAbortError, Status, type ATSKind, type Answer, type CV, type CareerSite, type Decision, type Discovered, type Question, type Vacancy } from "@sgz/shared";
 import { dailyBudget } from "./budget.js";
 import { atsClientFor } from "../career/ats/index.js";
 import { manualApplyOnly } from "../career/agent.js";
@@ -344,8 +344,8 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
   if (status === Status.QUEUED && ctx.store.getSetting("queue_tg_cards") !== "0") {
     const queueUrl = ctx.cfg.panelUrl ? `${ctx.cfg.panelUrl}/u/${user.slug}/queue#app-${queued.id}` : "";
     const site = ctx.store.listCareerSites(user.id).find((x) => x.slug === vacancy.source);
-    await ctx.deps.notifier
-      ?.ask?.(formatQueueCard(vacancy, decision?.reason ?? "", coverLetter, queueUrl, decision), queueButtons(queued.id, !site || !manualApplyOnly(site.ats)))
+    await notifierFor(ctx.deps.notifier, user)
+      .ask?.(formatQueueCard(vacancy, decision?.reason ?? "", coverLetter, queueUrl, decision), queueButtons(queued.id, !site || !manualApplyOnly(site.ats)))
       .catch((e: unknown) => ctx.log.warn("apply", `telegram card failed: ${errMessage(e)}`));
   }
   return { status, direction: picked.direction, id: queued.id };

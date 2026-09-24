@@ -149,6 +149,19 @@ describe("telegram cards", () => {
     expect(sent[0]!.body).toMatchObject({ chat_id: "42", message_id: 7, text: "<b>x</b>", parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "a", callback_data: "1" }]] } });
   });
 
+  it("forUser binds ask / edit / alert to the seeker's chat, the owner's chat when she has none", async () => {
+    const sent: { url: string; body: Record<string, unknown> }[] = [];
+    const fakeFetch = (async (url: string, init: { body: string }) => (sent.push({ url, body: JSON.parse(init.body) as Record<string, unknown> }), new Response(JSON.stringify({ ok: true, result: { message_id: 3 } })))) as unknown as typeof fetch;
+    const tg = createTelegram("t", "42", "", { fetch: fakeFetch });
+    const her = tg.forUser!({ tgChatId: "555" });
+    expect(await her.ask!("card", [])).toBe(3);
+    await her.edit!(3, "card v2", []);
+    await her.alert("t", "b");
+    await tg.forUser!({ tgChatId: "" }).alert("t", "b");
+    await tg.alert("ops", "b");
+    expect(sent.map((s) => `${s.url.split("/").at(-1)}:${String(s.body.chat_id)}`)).toEqual(["sendMessage:555", "editMessageText:555", "sendMessage:555", "sendMessage:42", "sendMessage:42"]);
+  });
+
   it("edit is retried like a send, a final failure is only logged", async () => {
     let n = 0;
     const fakeFetch = (async () => (n++ ? new Response(JSON.stringify({ ok: true, result: true })) : new Response("{}", { status: 502 }))) as unknown as typeof fetch;

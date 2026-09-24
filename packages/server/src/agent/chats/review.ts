@@ -4,11 +4,11 @@
 // task lists the topics with their stories and per-topic buttons «Подтвердить» / «Дополнить» / «Нет навыка»,
 // one kb_reviews row per shown topic. «Дополнить» asks for a story; the next free text in that chat is ingested
 // by the `kb.ingest` job. Setting kb_review_mode: always (default) | new_only | off.
-import { tagIs, type ChatTask, type ChatTopic, type KbReview, type KbStory, type KbTag, type KbTagStatus, type Notifier, type TapReply, type TgButton } from "@sgz/shared";
+import { notifierFor, tagIs, type ChatTask, type ChatTopic, type KbReview, type KbStory, type KbTag, type KbTagStatus, type Notifier, type TapReply, type TgButton } from "@sgz/shared";
 import { ingestKb, saveIngested } from "../../kb/llm.js";
 import { syncProfileSkills } from "../../kb/write.js";
 import { escapeHtml } from "../../notify/format.js";
-import type { ChatEnv, ChatStore } from "./env.js";
+import { userById, userNotifier, type ChatEnv, type ChatStore } from "./env.js";
 import { answerTopic, READY_FOOTER, stateFooter } from "./tasks.js";
 
 export interface ReviewGate {
@@ -86,7 +86,7 @@ function topicLines(v: TopicView, max: number): string {
   return `${head}: ${tp.answer === "yes" ? "✅ подтверждено" : "❌ нет навыка"}`;
 }
 
-export function kbReviewGate(store: ChatStore, notifier: Pick<Notifier, "ask" | "alert">, now: () => Date = () => new Date()): ReviewGate {
+export function kbReviewGate(store: ChatStore, notifier: Pick<Notifier, "ask" | "alert" | "forUser">, now: () => Date = () => new Date()): ReviewGate {
   const iso = () => now().toISOString();
   const thread = (task: ChatTask) => store.getChatThread(task.threadId);
   const asked = (task: ChatTask) =>
@@ -155,13 +155,14 @@ export function kbReviewGate(store: ChatStore, notifier: Pick<Notifier, "ask" | 
     },
     async ask(task, reminder) {
       ensureReviews(task);
-      if (!notifier.ask) {
+      const n = notifierFor(notifier, userById(store, task.userId));
+      if (!n.ask) {
         // No Telegram buttons (no token): the 12 h fallback answers honestly without the human.
-        await notifier.alert("Навыки ждут ответа", `${thread(task)?.employer ?? ""}: ${task.topics.filter((t) => !t.answer).map((t) => t.name).join(", ")}`).catch(() => undefined);
+        await n.alert("Навыки ждут ответа", `${thread(task)?.employer ?? ""}: ${task.topics.filter((t) => !t.answer).map((t) => t.name).join(", ")}`).catch(() => undefined);
         return null;
       }
       const c = card(task);
-      const id = await notifier.ask(reminder ? `⏰ Напоминание: работодатель ждёт ответа уже 2 часа\n\n${c.text}` : c.text, c.buttons);
+      const id = await n.ask(reminder ? `⏰ Напоминание: работодатель ждёт ответа уже 2 часа\n\n${c.text}` : c.text, c.buttons);
       if (typeof id !== "number") return null;
       store.setKbReviewMessage(task.id, String(id));
       return id;
@@ -251,14 +252,14 @@ async function refreshCard(env: ChatEnv, review: KbReview): Promise<void> {
   const task = liveTarget(env, review)?.task ?? (review.taskId === null ? null : env.store.getChatTask(review.taskId));
   if (task?.tgMessageId == null) return;
   const c = env.review.card(task, task.state === "awaiting_review" ? undefined : stateFooter(task));
-  await env.notifier.edit?.(task.tgMessageId, c.text, c.buttons).catch(() => undefined);
+  await userNotifier(env, task.userId).edit?.(task.tgMessageId, c.text, c.buttons).catch(() => undefined);
 }
 
 /** kb.ingest gave up (LLM down): say so per topic and show the card's buttons again. */
 export async function ingestFailed(env: ChatEnv, reviewId: number): Promise<void> {
   const review = env.store.getKbReview(reviewId);
   if (!review) return;
-  await env.notifier.alert("Не записал историю", `Не получилось записать историю про ${review.topic}. Нажми «Дополнить» ещё раз и пришли её снова.`).catch(() => undefined);
+  await userNotifier(env, review.userId).alert("Не записал историю", `Не получилось записать историю про ${review.topic}. Нажми «Дополнить» ещё раз и пришли её снова.`).catch(() => undefined);
   await refreshCard(env, review);
 }
 
@@ -274,7 +275,7 @@ export async function ingestReview(env: ChatEnv, reviewId: number, text: string)
   const review = env.store.getKbReview(reviewId);
   if (!review || review.state === "denied") return;
   if (!drafts.length) {
-    await env.notifier.ask?.(`Не получилось собрать историю про <b>${escapeHtml(tag.name)}</b> из этого текста. Нажми «Дополнить» ещё раз и напиши подробнее: где, что делал, какой результат.`, []).catch(() => undefined);
+    await userNotifier(env, review.userId).ask?.(`Не получилось собрать историю про <b>${escapeHtml(tag.name)}</b> из этого текста. Нажми «Дополнить» ещё раз и напиши подробнее: где, что делал, какой результат.`, []).catch(() => undefined);
     await refreshCard(env, review);
     return;
   }
@@ -287,6 +288,6 @@ export async function ingestReview(env: ChatEnv, reviewId: number, text: string)
   const done = answerTopic(env, live.task, live.review.topic, true);
   if (done?.tgMessageId != null) {
     const c = env.review.card(done, done.state === "awaiting_review" ? undefined : READY_FOOTER);
-    await env.notifier.edit?.(done.tgMessageId, c.text, c.buttons).catch(() => undefined);
+    await userNotifier(env, done.userId).edit?.(done.tgMessageId, c.text, c.buttons).catch(() => undefined);
   }
 }

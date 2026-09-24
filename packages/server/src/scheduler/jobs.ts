@@ -2,7 +2,7 @@
 // questions, heartbeat and chat-stall alerts, the evening digest, the weekly retro, letter lessons and the runner
 // autopilot (parked Telegram sends, then the touch / career rotate chunks). Every schedule is a cheap `due`
 // check, so a job exists only when there is work and shows in /api/agent/jobs.
-import type { Config, LLMClient, Notifier, RunRequest, RunService } from "@sgz/shared";
+import { notifierFor, type Config, type LLMClient, type Notifier, type RunRequest, type RunService } from "@sgz/shared";
 import type { JobHandler, Schedule } from "../agent/queue.js";
 import type { SqliteStore } from "../db/index.js";
 import { buildDigest, digestDue } from "../notify/digest.js";
@@ -114,7 +114,7 @@ export function serveJobs(d: ServeJobsDeps): { handlers: Record<string, JobHandl
           const day = digestDay(now);
           if (!day) return;
           store.setSetting("digest_last_day", day);
-          for (const u of users()) await notifier.alert(`Итоги дня · ${u.name}`, buildDigest(store, u, cfg.tz, now, cfg.panelUrl)).catch(warn("digest"));
+          for (const u of users()) await notifierFor(notifier, u).alert(`Итоги дня · ${u.name}`, buildDigest(store, u, cfg.tz, now, cfg.panelUrl)).catch(warn("digest"));
         },
       },
       "digest.week": {
@@ -126,7 +126,7 @@ export function serveJobs(d: ServeJobsDeps): { handlers: Record<string, JobHandl
           store.setSetting("retro_last_day", day);
           for (const u of users()) {
             const text = buildRetro(store, u, cfg.tz, now);
-            if (text) await notifier.alert(`Итоги недели · ${u.name}`, text).catch(warn("retro"));
+            if (text) await notifierFor(notifier, u).alert(`Итоги недели · ${u.name}`, text).catch(warn("retro"));
           }
         },
       },

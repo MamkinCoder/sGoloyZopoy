@@ -1,7 +1,7 @@
 // Habr Career stages for one user: search (logged-in listing) → filters → fetch → decide (the hh decide
 // with a one-resume pool: Habr allows one profile) → apply with a cover letter, no review queue. Same browser
 // and Chrome profile as hh, Habr cookies injected. Habr conversations: the always-on agent (src/agent/chats).
-import { Status, type HHResume, type User } from "@sgz/shared";
+import { notifierFor, Status, type HHResume, type User } from "@sgz/shared";
 import { MIN_RESPONSES_LEFT, type HabrClient } from "../habr/client.js";
 import type { HabrCard } from "../habr/state.js";
 import { dayInTz } from "../scheduler/tz.js";
@@ -59,7 +59,7 @@ export async function runHabrUser(ctx: RunContext, u: UserRun, plan: HabrPlan): 
   } catch (e) {
     if (!(e instanceof BoardExhausted)) throw e;
     ctx.log.warn("apply", e.message);
-    if (!ctx.req.dryRun) await ctx.deps.notifier.alert("Хабр Карьера: отклики заканчиваются", `${user.name}: ${e.message}. Автоотклики на Хабре остановлены до пополнения лимита.`).catch(() => undefined);
+    if (!ctx.req.dryRun) await notifierFor(ctx.deps.notifier, user).alert("Хабр Карьера: отклики заканчиваются", `${user.name}: ${e.message}. Автоотклики на Хабре остановлены до пополнения лимита.`).catch(() => undefined);
   }
 }
 

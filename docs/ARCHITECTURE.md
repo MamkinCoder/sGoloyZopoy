@@ -62,6 +62,15 @@ state: queued -> running -> done | failed | queued (retry, run_after = now + bac
   the digest/retro handlers and `keepUnknown` leaves chat jobs queued. Every "alert once" (`alert_open:job:*`,
   `alert_open:heartbeat`, `alert_open:chats`, `alert_last:*`, `habr_alert_day:*`) goes through `notify/alert.ts`
   (`openAlert` / `alertOnce` / `closeAlert`: until closed, a ttl, or a UTC day; a failed send stays closed).
+- As built (per-seeker Telegram chat): `Notifier.forUser(user)` binds `alert` / `ask` / `edit` to
+  `user.tgChatId`, falling back to `TG_CHAT_ID` (the owner) when empty; `notifierFor(n, user)` (shared) falls back
+  to `n` for fakes without it. Everything about one seeker goes to her chat: KB review cards and their edits
+  (`kb_reviews` / `chat_tasks.tg_message_id` belong to the task's user, so the edit lands in the same chat), chat
+  alerts, invitations, prep and study packs, queue cards, interview reminders and outcome asks, viewers, digest
+  and retro. Ops alerts (run failures, watchdog, job failures, heartbeat, chat stall) stay on the owner's chat.
+  Taps are checked in `serve.ts`: a seeker's chat acts only on her own cards (review, queue, study, outcome), the
+  owner's chat on anyone's. «Дополнить» waits for text in the tapping chat (`kb_reviews.awaiting_chat`), so a
+  text from another chat never feeds her review.
 - As built (LLM lane): the agent runs `llm` and `browser` handlers inside `llmCaller` (AsyncLocalStorage in
   `llm/mutex.ts`), so `runClaude` waits in the mutex's priority list ahead of batch runs, the job's timeout clock
   starts at the first slot acquire (`onAcquire`; ponytail: an llm job hanging before any claude call has no clock),

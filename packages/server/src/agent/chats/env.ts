@@ -1,5 +1,5 @@
 // What the chat jobs need: the agent's browser (own Chrome profile), clients, store with the task table.
-import type { Config, EnqueueOptions, HHClient, LLMClient, Logger, Notifier, Store, User } from "@sgz/shared";
+import { notifierFor, type Config, type EnqueueOptions, type HHClient, type LLMClient, type Logger, type Notifier, type Store, type User } from "@sgz/shared";
 import type { ChatTasksRepo } from "../../db/chat-tasks.js";
 import type { KbReviewsRepo } from "../../db/kb-reviews.js";
 import type { HabrClient } from "../../habr/client.js";
@@ -25,3 +25,5 @@ export interface ChatEnv {
 }
 
 export const userById = (store: Pick<Store, "listUsers">, id: number): User | null => store.listUsers().find((u) => u.id === id) ?? null;
+/** The notifier bound to the seeker's chat: their cards and alerts are sent (and edited) there. */
+export const userNotifier = (env: Pick<ChatEnv, "notifier" | "store">, userId: number): Notifier => notifierFor(env.notifier, userById(env.store, userId));

@@ -69,15 +69,18 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
     for (const part of chunkMessage(text)) await sendOne(chat, part);
   }
 
-  return {
-    report: (user: User, run: Run) => send(user.tgChatId || chatId, formatReport(user, run, panelUrl, opts.tz)),
-    alert: (title: string, body: string) => send(chatId, formatAlert(title, body)),
-    ask: async (text: string, buttons: TgButton[] | TgButton[][]) => (await sendOne(chatId, text, buttons.length ? { reply_markup: keyboard(buttons) } : {})) ?? undefined,
+  // Every method of a bound notifier talks to one chat; `edit` edits a card sent by `ask` of the same binding.
+  const bound = (chat: string): Notifier => ({
+    report: (user: User, run: Run) => send(user.tgChatId || chat, formatReport(user, run, panelUrl, opts.tz)),
+    alert: (title: string, body: string) => send(chat, formatAlert(title, body)),
+    ask: async (text: string, buttons: TgButton[] | TgButton[][]) => (await sendOne(chat, text, buttons.length ? { reply_markup: keyboard(buttons) } : {})) ?? undefined,
     // A card edit is cosmetic: retried like a send, then only logged.
     edit: async (messageId: number, text: string, buttons: TgButton[][]) => {
-      await call("editMessageText", { chat_id: chatId, message_id: messageId, text, reply_markup: keyboard(buttons) }).catch((e: unknown) => warn(`telegram: editMessageText: ${e instanceof Error ? e.message : String(e)}`));
+      await call("editMessageText", { chat_id: chat, message_id: messageId, text, reply_markup: keyboard(buttons) }).catch((e: unknown) => warn(`telegram: editMessageText: ${e instanceof Error ? e.message : String(e)}`));
     },
-  };
+    forUser: (user) => bound(user.tgChatId || chatId),
+  });
+  return bound(chatId);
 }
 
 const isRows = (b: TgButton[] | TgButton[][]): b is TgButton[][] => Array.isArray(b[0]);

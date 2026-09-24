@@ -1,6 +1,6 @@
 // Chat extras around interviews: prep brief on an invitation, interview reminders, one polite follow-up
 // after employer silence. All hh-internal; the follow-up is a fixed text (no LLM, no links).
-import { INTERVIEW_OUTCOMES, type BrowserSession, type ChatMessage, type ChatThread, type HHClient, type InterviewOutcome, type InterviewPrep, type Notifier, type Store, type User, type Vacancy } from "@sgz/shared";
+import { INTERVIEW_OUTCOMES, notifierFor, type BrowserSession, type ChatMessage, type ChatThread, type HHClient, type InterviewOutcome, type InterviewPrep, type Notifier, type Store, type User, type Vacancy } from "@sgz/shared";
 import type { ChatEnv } from "../agent/chats/env.js";
 import type { InterviewPeek } from "../db/chats.js";
 import { formatBand } from "../db/salary.js";
@@ -76,7 +76,7 @@ export async function sendInterviewPrep(env: Pick<ChatEnv, "store" | "llm" | "no
   const prep = await env.llm.interviewPrep(profile, vacancy, invitation, kbForVacancy(env.store, thread.userId, vacancy, invitation));
   env.store.setChatPrep(thread.id, prep);
   const market = marketLine(env.store, thread.userId, vacancy);
-  await alertWithStudy(env.notifier, `📝 Подготовка: ${thread.employer} (${vacancy.title})`, market ? `${formatPrep(prep).slice(0, 3350)}\n\n${market}` : formatPrep(prep), thread.id);
+  await alertWithStudy(notifierFor(env.notifier, env.store.listUsers().find((u) => u.id === thread.userId)), `📝 Подготовка: ${thread.employer} (${vacancy.title})`, market ? `${formatPrep(prep).slice(0, 3350)}\n\n${market}` : formatPrep(prep), thread.id);
 }
 
 export function formatPrep(p: InterviewPrep): string {
@@ -105,7 +105,7 @@ export async function remindInterviews(store: Store, notifier: Notifier, tz: str
     const at = new Date(t.interviewAt!);
     const min = Math.max(1, Math.round((at.getTime() - now.getTime()) / 60_000));
     const v = t.vacancyId === null ? null : store.getVacancy(t.vacancyId);
-    await notifier
+    await notifierFor(notifier, store.listUsers().find((u) => u.id === t.userId))
       .alert(`⏰ Через ${min} мин собеседование: ${t.employer}`, `${shortStamp(at, tz)}${v ? ` · ${v.title}` : ""}\n${HH_ORIGIN}/applicant/negotiations/item?id=${t.hhNegotiationId}`)
       .catch(() => undefined);
   }
@@ -130,8 +130,8 @@ export async function askOutcomes(store: Store, notifier: Notifier, now = new Da
   if (!notifier.ask) return; // no buttons (Telegram off): keep the threads unasked
   const due = store.claimOutcomeAsks(new Date(now.getTime() - ASK_UNTIL_MS).toISOString(), new Date(now.getTime() - ASK_AFTER_MS).toISOString());
   for (const t of due)
-    await notifier
-      .ask(`Как прошло собеседование в ${t.employer}?`, INTERVIEW_OUTCOMES.map((o) => ({ text: OUTCOME_LABEL[o], data: `io:${t.id}:${o}` })))
+    await notifierFor(notifier, store.listUsers().find((u) => u.id === t.userId))
+      .ask?.(`Как прошло собеседование в ${t.employer}?`, INTERVIEW_OUTCOMES.map((o) => ({ text: OUTCOME_LABEL[o], data: `io:${t.id}:${o}` })))
       .catch(() => undefined);
 }
 

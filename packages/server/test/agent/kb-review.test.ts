@@ -1,7 +1,8 @@
 // The knowledge-base review gate in chats: one card per task (stories, escaping, length), «Подтвердить» /
 // «Дополнить» / «Нет навыка», the free-text story -> kb.ingest -> expanded, modes, the draft's KB block, fallback.
 import { afterEach, describe, expect, it } from "vitest";
-import { askStoryText, kbText, parseKbCallback } from "../../src/agent/chats/review.js";
+import type { Notifier, TgButton } from "@sgz/shared";
+import { askStoryText, kbText, onKbTap, parseKbCallback } from "../../src/agent/chats/review.js";
 import { FALLBACK_AFTER_MS } from "../../src/agent/chats/tasks.js";
 import { chatHarness, inMsg, TG_CHAT } from "./harness.js";
 
@@ -256,5 +257,36 @@ describe("KB review card", () => {
   it("parses kr: callbacks", () => {
     expect(parseKbCallback("kr:12:e")).toEqual({ reviewId: 12, action: "e" });
     expect(parseKbCallback("kr:12:x")).toBeNull();
+  });
+});
+
+describe("per-seeker Telegram chat", () => {
+  it("the card is sent and edited in the seeker's chat; a text from another seeker's chat does not take her review", async () => {
+    h = chatHarness();
+    h.store.upsertUser({ ...h.user, tgChatId: "555" });
+    h.store.upsertUser({ ...h.user, id: undefined, slug: "b", name: "B", tgChatId: "777" });
+    const calls: string[] = [];
+    const n = h.notifier;
+    const bound = (chat: string): Notifier => ({
+      ...n,
+      alert: async (t: string, b: string) => (calls.push(`alert:${chat}`), n.alert(t, b)),
+      ask: async (t: string, b: TgButton[] | TgButton[][]) => (calls.push(`ask:${chat}`), n.ask(t, b)),
+      edit: async (id: number, t: string, b: TgButton[][]) => (calls.push(`edit:${chat}`), n.edit(id, t, b)),
+    });
+    Object.assign(n, { forUser: (u: { tgChatId: string }) => bound(u.tgChatId || TG_CHAT) });
+    await ask(["Vitest"]);
+    expect(calls).toEqual(["ask:555"]);
+
+    const kr = parseKbCallback(h.asks.at(-1)!.buttons.flat().find((b) => b.text === "Дополнить Vitest")!.data)!;
+    onKbTap(h.env, kr, "555");
+    expect(kbText(h.env, "777", "история B")).toBeNull();
+    expect(kbText(h.env, TG_CHAT, "история владельца")).toBeNull();
+    expect(reviews()[0]).toMatchObject({ state: "pending", awaitingChat: "555" });
+
+    h.llm.onJson = () => ({ stories: [{ title: "Vitest", company: "Яндекс", period: "", context: "", did: "Писал тесты на Vitest.", result: "", tags: [] }] });
+    expect(kbText(h.env, "555", "Писала тесты на Vitest")).toBe("Принял, записываю историю про Vitest.");
+    await h.drain();
+    expect(calls).toContain("edit:555");
+    expect(calls.filter((c) => !c.endsWith(":555"))).toEqual([]);
   });
 });

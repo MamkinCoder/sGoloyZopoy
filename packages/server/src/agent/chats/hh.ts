@@ -8,7 +8,7 @@ import { followupChats } from "../../runner/interview.js";
 import { ensureVacancy, skeletonVacancy } from "../../runner/filters.js";
 import { alertWithStudy } from "../../runner/study.js";
 import { errMessage } from "../../runner/util.js";
-import type { ChatEnv } from "./env.js";
+import { userNotifier, type ChatEnv } from "./env.js";
 import { reconcileThread, settleThread } from "./tasks.js";
 import { kbForVacancy } from "../../kb/context.js";
 import { renderQuestions } from "../../llm/format.js";
@@ -181,7 +181,7 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
         // the «да» in the chat is the application (hh's assistant files it). The human gets the links to check.
         const said = detail.messages.find((m) => m.direction === "in" && m.text.trim())?.text.trim().slice(0, 500);
         const vlink = ext ? `\n${vacancyUrl(ext)}` : "";
-        await env.notifier.alert(`✉️ Работодатель написал первым: ${t.employer}`, `${user.name}${vacancy?.title ? `, ${vacancy.title}` : ""}.${said ? `\n\n«${said}»\n` : ""}\nАгент ответит в чате; если нужен отклик через hh, откликнись по ссылке.${vlink}\n${t.chatUrl}`).catch(() => undefined);
+        await userNotifier(env, user.id).alert(`✉️ Работодатель написал первым: ${t.employer}`, `${user.name}${vacancy?.title ? `, ${vacancy.title}` : ""}.${said ? `\n\n«${said}»\n` : ""}\nАгент ответит в чате; если нужен отклик через hh, откликнись по ссылке.${vlink}\n${t.chatUrl}`).catch(() => undefined);
       }
       if (detail.thread.state === "invited" && prev?.state !== "invited") {
         env.log.info("chats", `${t.employer}: INVITATION`, { thread_id: thread.id });
@@ -189,7 +189,7 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
         const said = [...detail.messages].reverse().find((m) => m.direction === "in" && m.text.trim())?.text.trim().slice(0, 800);
         const title = `🎉 Приглашение: ${t.employer}${vtitle}`;
         const body = `${user.name}: работодатель пригласил на следующий этап.\n${said ? `\n«${said}»\n\n` : ""}${t.chatUrl}`;
-        await (vacancy ? alertWithStudy(env.notifier, title, body, thread.id) : env.notifier.alert(title, body)).catch(() => undefined);
+        await (vacancy ? alertWithStudy(userNotifier(env, user.id), title, body, thread.id) : userNotifier(env, user.id).alert(title, body)).catch(() => undefined);
         if (vacancy) env.enqueue("chats.prep", { threadId: thread.id, invitation: said ?? "" }, { key: `prep:${thread.id}` });
       }
       if (detail.thread.state === "rejected" && prev?.state !== "rejected") {
@@ -202,7 +202,7 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
       if (prev?.state === "rejected") {
         // Anything the employer writes after a rejection is feedback: forward it, never auto-reply.
         const fresh = history.filter((m) => m.direction === "in" && !m.answered);
-        if (fresh.length) await env.notifier.alert(`Фидбек от ${t.employer}`, `${user.name}: ${fresh.map((m) => m.text).join("\n\n")}\n${t.chatUrl}`).catch(() => undefined);
+        if (fresh.length) await userNotifier(env, user.id).alert(`Фидбек от ${t.employer}`, `${user.name}: ${fresh.map((m) => m.text).join("\n\n")}\n${t.chatUrl}`).catch(() => undefined);
         settleThread(env, thread.id, "отказ, фидбек переслан");
         continue;
       }

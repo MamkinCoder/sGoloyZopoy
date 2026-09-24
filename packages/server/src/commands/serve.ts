@@ -79,17 +79,25 @@ export async function serve(): Promise<void> {
     if (cmd === "/study") return studyCommand(app, chatId, args, new Date());
     return "Команды: /status - итоги дня, /queue - очередь, /week - итоги недели, /company <название> - история откликов, /salary <слово> - рынок зарплат, /study [компания] - чеклист и промпт к собеседованию, /mock [компания] - тренировка собеседования, /stop - закончить тренировку";
   };
+  // A seeker's chat acts only on that seeker's cards (callback data can be crafted); the owner's chat on anyone's.
+  const NOT_YOURS = "это не твоя карточка";
+  const tapAllowed = (userId: number | undefined, chatId: string) =>
+    userId === undefined || chatId === app.cfg.tgChatId || (app.store.listUsers().find((u) => u.id === userId)?.tgChatId || app.cfg.tgChatId) === chatId;
   // Free text: a story for a KB review that asked for one («Дополнить») first, otherwise a /mock answer.
   const onText = async (chatId: string, text: string) => (chats ? kbText(chats, chatId, text) : null) ?? mockAnswer(app.store, app.llm, chatId, text, new Date());
   const stopCallbacks = app.cfg.tgBotToken
     ? startTelegramCallbacks(app.cfg.tgBotToken, async (data, chatId) => {
         const kr = parseKbCallback(data);
+        if (kr && !tapAllowed(app.store.getKbReview(kr.reviewId)?.userId, chatId)) return NOT_YOURS;
         if (kr) return chats ? onKbTap(chats, kr, chatId) : AGENT_OFF;
         const q = parseQueueCallback(data);
+        if (q && !tapAllowed(app.store.getApplication(q.id)?.application.userId, chatId)) return NOT_YOURS;
         if (q) return handleQueueTap(app.store, app.runner, q);
         const st = parseStudyCallback(data);
+        if (st && !tapAllowed(app.store.getChatThread(st.threadId)?.userId, chatId)) return NOT_YOURS;
         if (st) return studyTap(app, st, new Date());
         const io = parseOutcomeCallback(data);
+        if (io && !tapAllowed(app.store.getChatThread(io.threadId)?.userId, chatId)) return NOT_YOURS;
         if (io) {
           app.store.setInterviewOutcome(io.threadId, io.outcome);
           return `Записал: ${OUTCOME_LABEL[io.outcome]}`;

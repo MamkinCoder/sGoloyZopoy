@@ -5,7 +5,7 @@
 import type { ChatMessage, User } from "@sgz/shared";
 import { conversationUrl } from "../../habr/state.js";
 import { errMessage } from "../../runner/util.js";
-import type { ChatEnv } from "./env.js";
+import { userNotifier, type ChatEnv } from "./env.js";
 import { CHAT_TRACK_SINCE_DEFAULT } from "./hh.js";
 import { habrPageMessage, reconcileThread, settleThread, unansweredIds } from "./tasks.js";
 
@@ -54,14 +54,14 @@ export async function syncHabrChats(env: ChatEnv, user: User): Promise<void> {
       const history = env.store.listChatMessages(thread.id);
       const fresh = history.filter((m) => m.direction === "in" && !m.answered);
       if (invited && prev?.state !== "invited") {
-        await env.notifier.alert(`🎉 Приглашение на Хабр Карьере: ${employer}`, `${user.name}: ${fresh.at(-1)?.text.slice(0, 800) ?? lm.text.slice(0, 800)}\n${url}`).catch(() => undefined);
+        await userNotifier(env, user.id).alert(`🎉 Приглашение на Хабр Карьере: ${employer}`, `${user.name}: ${fresh.at(-1)?.text.slice(0, 800) ?? lm.text.slice(0, 800)}\n${url}`).catch(() => undefined);
       }
       if (!fresh.length || history.at(-1)?.direction === "out") {
         settleThread(env, thread.id, "ответ не нужен");
         continue;
       }
       if (history[0]?.direction === "out") {
-        await env.notifier.alert(`Хабр Карьера: сообщение от ${employer}`, `${user.name}: ${fresh.map((m) => m.text).join("\n\n").slice(0, 1500)}\n${url}`).catch(() => undefined);
+        await userNotifier(env, user.id).alert(`Хабр Карьера: сообщение от ${employer}`, `${user.name}: ${fresh.map((m) => m.text).join("\n\n").slice(0, 1500)}\n${url}`).catch(() => undefined);
         settleThread(env, thread.id, "переписку начал соискатель: переслано в Telegram");
         continue;
       }

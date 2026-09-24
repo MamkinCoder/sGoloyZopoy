@@ -254,12 +254,13 @@ A Chrome window opens on the hh.ru login page; she logs in (SMS, captcha by hand
 2. Her chat id = her Telegram user id: she messages @userinfobot and copies the number (`Id`).
 3. That number goes into her user row, field «Telegram chat id» (panel -> Настройки -> Пользователь), Step 9.
 
-Be honest about the current routing (`packages/server/src/notify/telegram.ts`): **only run reports** go to her
-chat id. **Alerts, KB review cards from employer chats («Подтвердить / Дополнить / Нет навыка») and review-queue
-cards («Отправить / Пропустить»)** go to the owner's global chat (`TG_CHAT_ID`). Her chat can also use the
-commands `/status`, `/queue`, `/week`, `/company`, `/salary`, `/study`, `/mock` (they show every user's data).
-If she needs to answer her own cards, the working option today is a shared Telegram group with the bot, her and
-Yaroslav as `TG_CHAT_ID` (his decision; it changes where his cards go too).
+Routing (`packages/server/src/notify/telegram.ts`, `Notifier.forUser`): everything about her goes to **her own
+chat id**: run reports, KB review cards from employer chats («Подтвердить / Дополнить / Нет навыка», and the
+story she writes after «Дополнить»), review-queue cards («Отправить / Пропустить»), invitations, interview prep
+and study packs, interview reminders, daily and weekly digests. Her buttons only act on her own cards. Service
+alerts (a failed run, the bot not checking chats) go to the owner's chat (`TG_CHAT_ID`). With an empty chat id
+her cards fall back to the owner's chat. Her chat can also use the commands `/status`, `/queue`, `/week`,
+`/company`, `/salary`, `/study`, `/mock` (`/status`, `/queue`, `/week` show every user's data).
 
 ## Step 9. Limits and user settings (Yaroslav sets them on the Pi; she chooses the values)
 
@@ -365,6 +366,6 @@ Daily, 5-10 minutes:
 | picks from the wrong direction | profile `directions` / resume titles don't match | align `directions`, `base-<direction>.yaml` names and hh resume titles |
 | career run: `no base CV ... (expected base-<direction>.yaml)` | file name does not match a `directions` entry | rename to `base-<direction>.yaml` |
 | bot answers «не использовала» for something she knows | skill missing from `verified_skills` / KB tag `no` or `?` | add it (panel -> База знаний or profile), re-import |
-| she gets no cards in Telegram | cards go to `TG_CHAT_ID`, only reports go to her chat id; or she never pressed Start | Step 8 |
+| she gets no cards in Telegram | her chat id is empty or wrong in the user row (cards then go to `TG_CHAT_ID`), or she never pressed Start | Step 8 |
 | Habr: «FAILED_LOGIN_EXPIRED» | Habr cookies stale | `habr-login` again, send cookies, sync + restart |
 | «claude failed» / empty JSON | the Pi's Claude login or rate limit | Yaroslav: `docs/RUNBOOK.md` «claude failed» |

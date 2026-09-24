@@ -1,7 +1,7 @@
 // Interview study pack, built only on a button press («📚 Чеклист к собеседованию», /study, the panel):
 // an LLM checklist of what the interviewer will likely ask + a ChatGPT tutor prompt built here, in code.
 // Not a runner job: no browser, just one `claude -p` through app.llm (the global claude mutex serializes it).
-import type { LLMClient, Notifier, Profile, Store, StudyItem, StudyPack, Vacancy } from "@sgz/shared";
+import { notifierFor, type LLMClient, type Notifier, type Profile, type Store, type StudyItem, type StudyPack, type Vacancy } from "@sgz/shared";
 import { kbForVacancy } from "../kb/context.js";
 import { chunkMessage, escapeHtml, formatAlert } from "../notify/format.js";
 import { usersFor } from "./mock.js";
@@ -156,15 +156,16 @@ export interface StudyDeps {
 export function studyTap(d: StudyDeps, cb: { threadId: number; regen: boolean }, now = new Date()): string {
   const t = d.store.getChatThread(cb.threadId);
   if (!t) return "диалог не найден";
-  const warn = (e: unknown) => d.notifier.alert("📚 Чеклист не собрался", `${t.employer}: ${errMessage(e)}`).catch(() => undefined);
+  const n = notifierFor(d.notifier, d.store.listUsers().find((u) => u.id === t.userId));
+  const warn = (e: unknown) => n.alert("📚 Чеклист не собрался", `${t.employer}: ${errMessage(e)}`).catch(() => undefined);
   if (t.study && !cb.regen && now.getTime() - Date.parse(t.study.at) < STUDY_TTL_MS) {
-    void deliverStudy(d.notifier, t.study, t.id).catch(warn);
+    void deliverStudy(n, t.study, t.id).catch(warn);
     return "чеклист уже есть, отправляю";
   }
   if (t.vacancyId === null) return "у диалога нет вакансии, чеклист не из чего собрать";
   if (running.has(t.id)) return "уже готовлю чеклист…";
   void startStudy(d.store, d.llm, t.id, now)
-    .then((p) => deliverStudy(d.notifier, p, t.id))
+    .then((p) => deliverStudy(n, p, t.id))
     .catch(warn);
   return "готовлю чеклист…";
 }

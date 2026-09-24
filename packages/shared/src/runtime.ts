@@ -89,7 +89,12 @@ export interface Notifier {
   ask?(text: string, buttons: TgButton[] | TgButton[][]): Promise<number | void>;
   /** Replaces the text and buttons of a message sent by `ask` (same chat). Optional like `ask`. */
   edit?(messageId: number, text: string, buttons: TgButton[][]): Promise<void>;
+  /** The same notifier bound to the seeker's own chat (`user.tgChatId`, else the owner's): alert/ask/edit go there. */
+  forUser?(user: Pick<User, "tgChatId">): Notifier;
 }
+
+/** `n` bound to the user's chat; `n` itself when it cannot bind (no Telegram, test fakes) or there is no user. */
+export const notifierFor = <N extends Partial<Notifier>>(n: N, user: Pick<User, "tgChatId"> | null | undefined): N => ((user && n.forUser?.(user)) as N | undefined) ?? n;
 
 export interface Logger {
   info(stage: string, message: string, data?: Record<string, unknown>): void;

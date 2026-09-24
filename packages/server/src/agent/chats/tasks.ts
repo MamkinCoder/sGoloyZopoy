@@ -5,13 +5,13 @@
 //   failed: a job exhausted its retries, or a send could not be confirmed (alerted per task by failTask)
 // Every step is a job keyed by the task id, reads the task from the DB and moves it with compare-and-set,
 // so repeats, restarts and a sync racing a draft are harmless.
-import { OPEN_TASK_STATES, tagIs, type BrowserSession, type ChatMessage, type ChatTask, type ChatThread, type ChatTopic, type KbBrief, type Profile, type User, type Vacancy } from "@sgz/shared";
+import { notifierFor, OPEN_TASK_STATES, tagIs, type BrowserSession, type ChatMessage, type ChatTask, type ChatThread, type ChatTopic, type KbBrief, type Profile, type User, type Vacancy } from "@sgz/shared";
 import { conversationUrl, type HabrMessage } from "../../habr/state.js";
 import { kbBrief } from "../../kb/context.js";
 import { asksQuestion } from "../../hh/state.js";
 import { errMessage } from "../../runner/util.js";
 import { shortStamp } from "../../scheduler/tz.js";
-import { userById, type ChatEnv } from "./env.js";
+import { userById, userNotifier, type ChatEnv } from "./env.js";
 import { topicTag } from "./review.js";
 
 export const SEND_RESYNC_MS = 30_000;
@@ -85,7 +85,8 @@ export async function failTask(env: ChatEnv, taskId: number, error: string): Pro
   env.review.expire(taskId);
   const task = env.store.getChatTask(taskId);
   const thread = task && env.store.getChatThread(task.threadId);
-  await env.notifier.alert(`Не ответил работодателю: ${thread?.employer ?? ""}`, `Ответь сам. Ошибка: ${error}${thread && task ? `\n${link(env, thread, task)}` : ""}`).catch(() => undefined);
+  if (!task) return;
+  await userNotifier(env, task.userId).alert(`Не ответил работодателю: ${thread?.employer ?? ""}`, `Ответь сам. Ошибка: ${error}${thread && task ? `\n${link(env, thread, task)}` : ""}`).catch(() => undefined);
 }
 
 // ------------------------------------------------------------ chats.triage (llm)
@@ -150,7 +151,7 @@ export async function fallbackTask(env: ChatEnv, taskId: number): Promise<void> 
   env.enqueue("chats.draft", { taskId: task.id }, { key: `draft:${task.id}` });
   const thread = env.store.getChatThread(task.threadId);
   const unclaimed = pending.length ? ` Без заявлений о навыках: ${pending.join(", ")}.` : "";
-  await env.notifier.alert(`Отвечаю без тебя: ${thread?.employer ?? ""}`, `12 часов без ответа по навыкам. Отвечу по базе знаний.${unclaimed}`).catch(() => undefined);
+  await userNotifier(env, task.userId).alert(`Отвечаю без тебя: ${thread?.employer ?? ""}`, `12 часов без ответа по навыкам. Отвечу по базе знаний.${unclaimed}`).catch(() => undefined);
 }
 
 // ------------------------------------------------------------ Telegram taps
@@ -240,9 +241,9 @@ export async function draftTask(env: ChatEnv, taskId: number): Promise<void> {
     // Re-read: a chats.sync may have changed the thread (invitation, linked vacancy) during the LLM call.
     const cur = env.store.getChatThread(task.threadId);
     if (cur && cur.state !== "invited" && cur.state !== "rejected") env.store.upsertChatThread({ ...cur, state: "needs_human" });
-    await env.notifier.alert(`Чат требует внимания: ${thread.employer}`, `${user?.name ?? ""}: ${last}\n\n${when}${text ? `Ответ бота: ${text}\n\n` : ""}${reply.reason}\n${link(env, thread, task)}`).catch(() => undefined);
+    await notifierFor(env.notifier, user).alert(`Чат требует внимания: ${thread.employer}`, `${user?.name ?? ""}: ${last}\n\n${when}${text ? `Ответ бота: ${text}\n\n` : ""}${reply.reason}\n${link(env, thread, task)}`).catch(() => undefined);
   } else if (interviewAt && interviewAt !== thread.interviewAt) {
-    await env.notifier.alert(`📅 Собеседование: ${thread.employer}`, `${user?.name ?? ""}: ${when}${link(env, thread, task)}`).catch(() => undefined);
+    await notifierFor(env.notifier, user).alert(`📅 Собеседование: ${thread.employer}`, `${user?.name ?? ""}: ${when}${link(env, thread, task)}`).catch(() => undefined);
   }
 }
 
