@@ -5,7 +5,9 @@ import { dailyBudget } from "./budget.js";
 import type { RunContext } from "./context.js";
 import { classify, companyLimitSettings, createRunCompanyTracker, dedupWindowDays, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
 import { expandPool, syncPool, syncIsStale } from "./pool.js";
-import { decideExtras, readLessons } from "./learn.js";
+import { decideExtras, decideKb, readLessons } from "./learn.js";
+import { kbForVacancy } from "../kb/context.js";
+import { renderQuestions } from "../llm/format.js";
 import { viewersStage } from "./viewers.js";
 import { dayInTz } from "../scheduler/tz.js";
 import type { UserRun } from "./user.js";
@@ -247,7 +249,7 @@ export async function applyStage(ctx: RunContext, u: UserRun, approved: Approved
         dryRun: ctx.req.dryRun,
         answerQuestions: async (qs) => {
           questions = qs;
-          answers = await ctx.llm.answerQuestionnaire(profile, vacancy, qs);
+          answers = await ctx.llm.answerQuestionnaire(profile, vacancy, qs, kbForVacancy(ctx.store, user.id, vacancy, renderQuestions(qs)));
           stats.llmCall();
           return answers;
         },
@@ -302,7 +304,7 @@ async function forceApply(ctx: RunContext, u: UserRun, id: number, pool: HHResum
   }
   await ctx.browser.close();
   await ctx.memoryGuard("decide");
-  const [d] = await ctx.llm.decide({ profile, resumes: pool, vacancies: [vacancy], lessons: readLessons(ctx.store, user.id).lessons });
+  const [d] = await ctx.llm.decide({ profile, resumes: pool, vacancies: [vacancy], lessons: readLessons(ctx.store, user.id).lessons, kb: decideKb(ctx.store, user.id) });
   stats.llmCall();
   const was = `forced by user (was ${row.application.status}${row.application.reasonDetail ? `: ${row.application.reasonDetail}` : ""})`;
   const decision: Decision = { ...(d ?? { resume_id: "", cover_letter: "", direction: "", seniority: "", red_flags: [] }), vacancy_id: vacancy.id, apply: true, reason: `${was}${d?.reason ? `; LLM: ${d.reason}` : ""}` };

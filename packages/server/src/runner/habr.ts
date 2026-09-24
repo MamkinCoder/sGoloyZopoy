@@ -8,7 +8,7 @@ import { dailyBudget } from "./budget.js";
 import type { RunContext } from "./context.js";
 import { classify, companyLimitSettings, createRunCompanyTracker, dedupWindowDays, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
 import { decideStage, newApp } from "./hh.js";
-import { readLessons } from "./learn.js";
+import { decideKb, readLessons } from "./learn.js";
 import type { UserRun } from "./user.js";
 import { errMessage, isStop, parseSalary } from "./util.js";
 
@@ -223,7 +223,7 @@ async function forceApply(ctx: RunContext, u: UserRun, habr: HabrClient, id: num
     vacancy = ctx.store.upsertVacancy({ ...r.vacancy, id: vacancy.id });
   }
   await ctx.browser.close();
-  const [d] = await ctx.llm.decide({ profile, resumes: pool, vacancies: [vacancy], lessons: readLessons(ctx.store, user.id).lessons });
+  const [d] = await ctx.llm.decide({ profile, resumes: pool, vacancies: [vacancy], lessons: readLessons(ctx.store, user.id).lessons, kb: decideKb(ctx.store, user.id) });
   u.stats.llmCall();
   const decision: Decision = { ...(d ?? { resume_id: "habr", cover_letter: "", direction: "", seniority: "", red_flags: [] }), vacancy_id: vacancy.id, apply: true, reason: `forced by user (was ${row.application.status})${d?.reason ? `; LLM: ${d.reason}` : ""}` };
   await applyStage(ctx, u, habr, [{ vacancy, decision, companyKey: "" }], 1, createRunCompanyTracker()).catch((e: unknown) => {

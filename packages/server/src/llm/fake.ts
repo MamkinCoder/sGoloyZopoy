@@ -9,6 +9,7 @@ import type {
   Decision,
   HHResume,
   InterviewPrep,
+  KbBrief,
   StudyItem,
   LLMClient,
   PoolVariant,
@@ -112,8 +113,8 @@ export class FakeLLM implements LLMClient {
     this.record("decide", [input]);
     return this.onDecide(input);
   }
-  async answerQuestionnaire(profile: Profile, vacancy: Vacancy | null, qs: Question[]): Promise<Answer[]> {
-    this.record("answerQuestionnaire", [profile, vacancy, qs]);
+  async answerQuestionnaire(profile: Profile, vacancy: Vacancy | null, qs: Question[], kb?: KbBrief): Promise<Answer[]> {
+    this.record("answerQuestionnaire", [profile, vacancy, qs, kb]);
     return this.onAnswerQuestionnaire(profile, vacancy, qs);
   }
   async answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[]): Promise<ChatReply> {
@@ -132,20 +133,20 @@ export class FakeLLM implements LLMClient {
     this.record("proposePoolVariants", [profile, existing, max]);
     return this.onProposePoolVariants(profile, existing, max);
   }
-  async tailorCV(profile: Profile, base: CV, vacancy: Vacancy, tier?: Tier): Promise<{ cv: CV; changes: string[] }> {
-    this.record("tailorCV", [profile, base, vacancy, tier]);
+  async tailorCV(profile: Profile, base: CV, vacancy: Vacancy, tier?: Tier, kb?: KbBrief): Promise<{ cv: CV; changes: string[] }> {
+    this.record("tailorCV", [profile, base, vacancy, tier, kb]);
     return this.onTailorCV(profile, base, vacancy, tier);
   }
-  async coverLetterCareer(profile: Profile, cv: CV, vacancy: Vacancy): Promise<string> {
-    this.record("coverLetterCareer", [profile, cv, vacancy]);
+  async coverLetterCareer(profile: Profile, cv: CV, vacancy: Vacancy, lessons?: string[], kb?: KbBrief): Promise<string> {
+    this.record("coverLetterCareer", [profile, cv, vacancy, lessons, kb]);
     return this.onCoverLetterCareer(profile, cv, vacancy);
   }
-  async interviewPrep(profile: Profile, vacancy: Vacancy, invitation: string): Promise<InterviewPrep> {
-    this.record("interviewPrep", [profile, vacancy, invitation]);
+  async interviewPrep(profile: Profile, vacancy: Vacancy, invitation: string, kb?: KbBrief): Promise<InterviewPrep> {
+    this.record("interviewPrep", [profile, vacancy, invitation, kb]);
     return this.onInterviewPrep(profile, vacancy, invitation);
   }
-  async interviewStudy(profile: Profile, vacancy: Vacancy, prep: InterviewPrep | null): Promise<StudyItem[]> {
-    this.record("interviewStudy", [profile, vacancy, prep]);
+  async interviewStudy(profile: Profile, vacancy: Vacancy, prep: InterviewPrep | null, kb?: KbBrief): Promise<StudyItem[]> {
+    this.record("interviewStudy", [profile, vacancy, prep, kb]);
     return this.onInterviewStudy(profile, vacancy, prep);
   }
   async json<T>(task: string, tier: Tier, prompt: string, schemaDescription: string): Promise<T> {

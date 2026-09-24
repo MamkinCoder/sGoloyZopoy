@@ -2,6 +2,7 @@
 // an LLM checklist of what the interviewer will likely ask + a ChatGPT tutor prompt built here, in code.
 // Not a runner job: no browser, just one `claude -p` through app.llm (the global claude mutex serializes it).
 import type { ChatThread, LLMClient, Notifier, Profile, Store, StudyItem, StudyPack, Vacancy } from "@sgz/shared";
+import { kbForVacancy } from "../kb/context.js";
 import { chunkMessage, escapeHtml, formatAlert } from "../notify/format.js";
 import { usersFor } from "./mock.js";
 import { errMessage } from "./util.js";
@@ -116,7 +117,7 @@ export async function alertWithStudy(notifier: Notifier, title: string, body: st
   for (const [i, part] of parts.entries()) await notifier.ask(part, i === parts.length - 1 ? [studyButton(threadId)] : []);
 }
 
-type StudyStore = Pick<Store, "listUsers" | "listChatThreads" | "getVacancy" | "getProfile" | "setChatStudy">;
+type StudyStore = Pick<Store, "listUsers" | "listChatThreads" | "getVacancy" | "getProfile" | "setChatStudy" | "listKbTags" | "listKbStories">;
 
 export function findThread(store: Pick<Store, "listUsers" | "listChatThreads">, id: number): ChatThread | null {
   for (const u of store.listUsers()) {
@@ -142,7 +143,7 @@ export function startStudy(store: StudyStore, llm: LLMClient, threadId: number, 
     const v = t?.vacancyId != null ? store.getVacancy(t.vacancyId) : null;
     const profile = t ? store.getProfile(t.userId) : null;
     if (!t || !v || !profile) throw new Error(!t ? "диалог не найден" : !v ? "у диалога нет вакансии" : "нет профиля");
-    const checklist = await llm.interviewStudy(profile, v, t.prep ?? null);
+    const checklist = await llm.interviewStudy(profile, v, t.prep ?? null, kbForVacancy(store, t.userId, v));
     if (!checklist.length) throw new Error("LLM вернул пустой чеклист");
     const pack: StudyPack = { checklist, prompt: buildStudyPrompt(v, profile, checklist), at: now.toISOString(), vacancyTitle: v.title, company: v.company || t.employer };
     store.setChatStudy(threadId, pack);

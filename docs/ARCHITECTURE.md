@@ -135,6 +135,22 @@ kb_reviews(id, user_id, task_id NULL, tag_id, state: pending|confirmed|expanded|
   chat drafting, questionnaire answers, cover letters, interview prep/study packs, `tailor_cv` (LaTeX CVs are
   forged from base CV structure = jobs/dates/contacts + KB stories as bullet material), hh tailored resume
   copies, the Habr profile proposal.
+  As built (phase 4, everything but chat drafting): `kbBrief(store, userId, {text, tags?, companies?}, budget)` in
+  `kb/context.ts` wraps `kbFor` for application texts and returns `{text, no}` (`KbBrief`, shared): `text` is the
+  rendered block (default budget `KB_BRIEF_BUDGET` = 3000 chars of stories; Habr proposal 6000), `no` = names +
+  aliases of the status-`no` tags. Status-`no` tags never reach a prompt's KB block: they leave story tag lists and
+  topics, sentences naming them leave the stories, a story whose title names one is dropped. `withKbNever(profile,
+  kb)` appends `no` to `never_claim_skills`, so the existing guards (blockedTech, sanitizeLetter, guardTailored,
+  guardTailoredCV, validateCV, guardStudy, guardProposal) and the prompts' «никогда не заявлять» list enforce them.
+  `kbForVacancy(store, userId, vacancy(s), extra)` = kbBrief over title + description (+ questions / invitation).
+  Every prompt gets the same partial `prompts/_kb.md` (a `## База знаний` section, absent when the KB is empty).
+  Wiring: `DecideInput.kb(vacancies)` builds one block per decide batch (`runner/learn.ts decideKb`, part of
+  `decideExtras`; the force paths pass it too) -> hh/Habr letters + `tailored` about; the LLMClient methods
+  `answerQuestionnaire`, `tailorCV`, `coverLetterCareer`, `interviewPrep`, `interviewStudy` take an optional last
+  `kb` argument (fakes/tests without it behave as before); `tailor_cv` gets only stories whose company matches a base
+  CV job (companyKey, either way contained), job identity/periods still come from the base CV (guardTailoredCV +
+  validateCV unchanged). A KB read error or an empty KB gives `undefined`: no section, never a failed application.
+  Not wired yet: the agent's bot-survey questionnaires in `agent/chats/hh.ts` (phase 3 owns that file).
 - **Panel**: «База знаний» page: tags (status, story count), stories (edit, confirm, delete), add story.
   API under `/api/users/:slug/kb/*`.
 

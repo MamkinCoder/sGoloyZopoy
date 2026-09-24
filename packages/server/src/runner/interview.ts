@@ -4,6 +4,7 @@ import { INTERVIEW_OUTCOMES, type BrowserSession, type ChatMessage, type ChatThr
 import type { ChatEnv } from "../agent/chats/env.js";
 import { formatBand } from "../db/salary.js";
 import { mapNegotiationState } from "../hh/state.js";
+import { kbForVacancy } from "../kb/context.js";
 import { HH_ORIGIN } from "../hh/urls.js";
 import { shortStamp } from "../scheduler/tz.js";
 import { alertWithStudy } from "./study.js";
@@ -71,7 +72,7 @@ export async function sendInterviewPrep(env: Pick<ChatEnv, "store" | "llm" | "no
   const vacancy: Vacancy | null = thread.vacancyId === null ? null : env.store.getVacancy(thread.vacancyId);
   const profile = env.store.getProfile(thread.userId);
   if (!vacancy || !profile || thread.prep) return;
-  const prep = await env.llm.interviewPrep(profile, vacancy, invitation);
+  const prep = await env.llm.interviewPrep(profile, vacancy, invitation, kbForVacancy(env.store, thread.userId, vacancy, invitation));
   env.store.setChatPrep(thread.id, prep);
   const market = marketLine(env.store, thread.userId, vacancy);
   await alertWithStudy(env.notifier, `📝 Подготовка: ${thread.employer} (${vacancy.title})`, market ? `${formatPrep(prep).slice(0, 3350)}\n\n${market}` : formatPrep(prep), thread.id);

@@ -31,7 +31,7 @@ function setup(applyResult: { status: Status; reasonDetail: string; questions?: 
     apply,
   } as unknown as CareerAgent;
   const resume = {
-    loadCV: vi.fn(async () => ({ title: "Go" }) as never),
+    loadCV: vi.fn(async () => ({ title: "Go", jobs: [] }) as never),
     renderTex: () => "tex",
     buildPdf: vi.fn(async (o: { outPdf: string }) => ({ pdfPath: o.outPdf, texPath: o.outPdf.replace(".pdf", ".tex") })),
     validateCV: () => [],
