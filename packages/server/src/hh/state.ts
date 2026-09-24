@@ -2,7 +2,7 @@
 // Exact key names are NOT verified against live hh; every parser tries several candidate paths and
 // then falls back to a recursive search for objects with telltale keys, and reports `matchedPath`
 // so recordings can confirm (or correct) the guesses.
-import type { Card, Question, ThreadState } from "@sgz/shared";
+import type { Card, Question, ThreadRow, ThreadState } from "@sgz/shared";
 import { HH_CHAT_ORIGIN, HH_ORIGIN } from "./urls.js";
 import { type Salary, salaryFromCompensation } from "./salary.js";
 
@@ -499,4 +499,41 @@ export const parseChatik = (state: State | null): ParsedChat | null => {
     ...(allowed === undefined ? {} : { writable: bool(allowed) }),
     choices: lastChoices(items.filter(isObj), me),
   };
+};
+
+// ---------------------------------------------------------------- chat list (hh.ru/chat)
+
+/** The chat list as hh.ru/chat embeds it (Chatik-InitialState `chats`) or as the page's paging call
+ * chatik.hh.ru/chatik/api/chats?from=<nextFrom> returns it (JSON in a <pre>): {chats: {items, nextFrom}, chatsDisplayInfo}.
+ * Employer-initiated chats (type COMMON, subType GENAI: hh's «ИИ-помощник» writing for the employer) have no
+ * NEGOTIATION_TOPIC and are not in /applicant/negotiations at all: they are keyed `chat:<chatId>`. A chat with a
+ * topic is keyed by the topic id, like the negotiations list. null = not a chat list (login page, block). */
+export const parseChatList = (html: string): { rows: ThreadRow[]; nextFrom: string | null } | null => {
+  let list: unknown = get(extractInitialState(html, "Chatik-InitialState"), "chats");
+  if (list === undefined) {
+    const pre = /<pre[^>]*>([\s\S]*?)<\/pre>/i.exec(html)?.[1] ?? html;
+    try {
+      list = JSON.parse(decodeEntities(pre.trim()));
+    } catch {
+      return null;
+    }
+  }
+  const items = get(list, "chats.items");
+  if (!Array.isArray(items)) return null;
+  const rows = items.filter(isObj).map((c): ThreadRow => {
+    const id = str(c.id);
+    const topic = str(get(c, "resources.NEGOTIATION_TOPIC[0]"));
+    const vacancy = str(get(c, "resources.VACANCY[0]"));
+    const at = Date.parse(str(pick(c, "lastMessage.creationTime", "lastActivityTime")));
+    return {
+      negotiationId: topic || `chat:${id}`,
+      chatUrl: `${HH_ORIGIN}/chat/${id}`,
+      unread: Number(c.unreadCount) > 0,
+      employer: str(get(list, `chatsDisplayInfo.${id}.subtitle`)),
+      state: "",
+      vacancyExternalId: /^\d+$/.test(vacancy) ? vacancy : null,
+      ...(Number.isFinite(at) ? { lastModified: new Date(at).toISOString() } : {}),
+    };
+  });
+  return { rows, nextFrom: str(get(list, "chats.nextFrom")) || null };
 };

@@ -60,6 +60,17 @@ export interface ResumeEdit {
   keySkills: string[];
 }
 
+/** A chat as a list shows it (negotiations list or chat list). */
+export interface ThreadRow {
+  negotiationId: string;
+  chatUrl: string;
+  unread: boolean;
+  employer: string;
+  state: string;
+  vacancyExternalId: string | null;
+  lastModified?: string;
+}
+
 export interface HHClient {
   /** True if the session is authenticated (e.g. /applicant/resumes loads without redirect to login). */
   checkLogin(s: BrowserSession): Promise<boolean>;
@@ -81,7 +92,11 @@ export interface HHClient {
   touchResume(s: BrowserSession, resumeUrl: string): Promise<void>; // «Поднять в поиске»; no-op if unavailable
 
   /** `since` set: read every page (capped at 10) instead of the first; filtering by date is the caller's. */
-  listThreads(s: BrowserSession, onlyUnread: boolean, since?: string): Promise<{ negotiationId: string; chatUrl: string; unread: boolean; employer: string; state: string; vacancyExternalId: string | null; lastModified?: string }[]>;
+  listThreads(s: BrowserSession, onlyUnread: boolean, since?: string): Promise<ThreadRow[]>;
+  /** hh.ru/chat, newest activity first: the first page, then the page's own paging call while the list is still
+   *  at or after `since` (at most `maxPages` pages). Keyed by NEGOTIATION_TOPIC, or `chat:<chatId>` for chats
+   *  without one (employer-initiated, e.g. hh's «ИИ-помощник»). */
+  listChats(s: BrowserSession, since: string, maxPages: number): Promise<ThreadRow[]>;
   readThread(s: BrowserSession, chatUrl: string): Promise<ThreadDetail>;
   sendMessage(s: BrowserSession, chatUrl: string, text: string): Promise<void>;
   submitSurvey(s: BrowserSession, chatUrl: string, answers: Answer[]): Promise<void>;

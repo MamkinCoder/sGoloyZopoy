@@ -1,5 +1,8 @@
 # hh fixtures — SYNTHETIC
 
+Except `chatlist.html`, `chatlist-page2.html` and `chat-genai.html`: trimmed live hh.ru/chat recordings
+(2026-09-24), with the seeker's name, participant names and ids scrubbed (company names kept).
+
 Every file here was written by hand to exercise the parsers in `src/hh/state.ts` and the flows in
 `src/hh/client.ts`. They mimic the shape we *expect* from hh.ru (`<template id="HH-Lux-InitialState">`
 plus a few `data-qa` elements) but none of the key names or selectors are verified.

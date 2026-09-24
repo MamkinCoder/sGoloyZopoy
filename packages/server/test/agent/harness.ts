@@ -1,7 +1,7 @@
 // The always-on agent's chat jobs against a real in-memory store, a scripted hh chat page, FakeLLM and a
 // recording notifier. `drain()` runs every due job to the end; the clock only moves with `advance()`.
 import { vi } from "vitest";
-import type { Profile, Question, TgButton, ThreadDetail } from "@sgz/shared";
+import type { Profile, Question, TgButton, ThreadDetail, ThreadRow } from "@sgz/shared";
 import type { ChatEnv } from "../../src/agent/chats/env.js";
 import { chatHandlers } from "../../src/agent/chats/index.js";
 import { kbReviewGate, onKbTap, parseKbCallback } from "../../src/agent/chats/review.js";
@@ -60,11 +60,14 @@ export function chatHarness(o: { habr?: HabrClient | null } = {}) {
     ext: null as string | null,
     writable: true,
     choices: [] as string[],
+    /** hh.ru/chat rows (listChats); employer-initiated chats are keyed `chat:<id>`. */
+    chats: [] as ThreadRow[],
     /** The next sendMessage puts the message on the page, then throws (a confirm timeout). */
     failAfterSend: false,
   };
   const hh = {
     listThreads: vi.fn(async () => [{ negotiationId: "n1", chatUrl: "https://hh.ru/chat/1", unread: false, employer: "Acme", state: page.state, vacancyExternalId: null, lastModified: page.lastModified }]),
+    listChats: vi.fn(async () => page.chats),
     readThread: vi.fn(
       async (): Promise<ThreadDetail> => ({
         thread: { hhNegotiationId: "n1", isBot: false, vacancyId: null, employer: "Acme", state: page.rejected ? "rejected" : "new", lastSeenAt: "" },

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Status } from "@sgz/shared";
 import { createHHClient } from "../../src/hh/client.js";
 import { isRejection, mapNegotiationState } from "../../src/hh/state.js";
+import { chatListApiUrl } from "../../src/hh/urls.js";
 import { FakeSession, fixture } from "./fake-session.js";
 
 const client = createHHClient({ snapshotDir: "/tmp/sgz-hh-test", settleMs: 0, confirmTimeoutMs: 10 });
@@ -129,6 +130,39 @@ describe("hh client offline flows", () => {
     });
     const ts = await client.listThreads(s, false, "2026-09-22T21:00:00.000Z");
     expect(ts.map((t) => t.negotiationId)).toEqual(["1", "2", "3", "4", "5"]); // all pages; the caller filters by date
+  });
+
+  it("listChats reads hh.ru/chat and pages on while the list is newer than `since` (live fixtures, scrubbed)", async () => {
+    const pages = () =>
+      new FakeSession({
+        "https://hh.ru/chat": { html: fixture("chatlist.html") },
+        [chatListApiUrl("1790254717452_5656422027")]: { html: fixture("chatlist-page2.html") },
+      });
+    const s = pages();
+    const rows = await client.listChats(s, "2026-09-23T00:00:00.000Z", 5);
+    expect(rows.map((r) => r.negotiationId)).toEqual(["chat:5655382625", "5601192470", "5601242638", "5601199798", "chat:5655372160"]);
+    // Employer-initiated (COMMON/GENAI, «ИИ-помощник»): no topic, keyed by the chat, vacancy and company from the list.
+    expect(rows[0]).toEqual({ negotiationId: "chat:5655382625", chatUrl: "https://hh.ru/chat/5655382625", unread: false, employer: "Арктический Научный Центр", state: "", vacancyExternalId: "136756803", lastModified: "2026-09-24T15:28:07.144Z" });
+    expect(rows[4]).toMatchObject({ employer: "Coding Team", vacancyExternalId: "136745560", chatUrl: "https://hh.ru/chat/5655372160" });
+    // Paging cap, and no page past `since` (the cursor carries the last chat's activity time).
+    expect((await client.listChats(pages(), "2026-09-23T00:00:00.000Z", 1)).length).toBe(3);
+    const late = pages();
+    expect((await client.listChats(late, "2026-09-25T00:00:00.000Z", 5)).length).toBe(3);
+    expect(late.calls.filter((c) => c.method === "goto")).toHaveLength(1);
+  });
+
+  it("reads an employer-initiated «ИИ-помощник» chat: its bot messages are the employer's", async () => {
+    const s = new FakeSession({ "https://hh.ru/chat/5655382625": { html: fixture("chat-genai.html") } });
+    const t = await client.readThread(s, "https://hh.ru/chat/5655382625");
+    expect(t.messages.map((m) => [m.direction, m.author])).toEqual([
+      ["in", "bot"],
+      ["out", "me"],
+      ["in", "bot"],
+      ["out", "me"],
+    ]);
+    expect(t.vacancyExternalId).toBe("136756803");
+    expect(t.thread.employer).toBe("Арктический Научный Центр");
+    expect(t.writable).toBe(true);
   });
 
   it("dry-run opens the response form but never submits or sends chat", async () => {

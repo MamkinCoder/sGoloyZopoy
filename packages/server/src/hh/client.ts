@@ -20,9 +20,9 @@ import {
   normalizeDedup,
 } from "@sgz/shared";
 import { SEL, TEXT } from "./selectors.js";
-import { asksQuestion, extractInitialState, get, parseChat, parseChatik, parseNegotiations, parseResumes, parseSearch, parseVacancy, type ParsedThread } from "./state.js";
+import { asksQuestion, extractInitialState, get, parseChat, parseChatik, parseChatList, parseNegotiations, parseResumes, parseSearch, parseVacancy, type ParsedThread } from "./state.js";
 import { parseSalary } from "./salary.js";
-import { HH_ORIGIN, isCaptchaUrl, isLoginUrl, negotiationsUrl, resumeUrl, resumeViewsUrl, resumesUrl, searchUrl, vacancyIdFrom, vacancyUrl } from "./urls.js";
+import { HH_ORIGIN, chatListApiUrl, isCaptchaUrl, isLoginUrl, negotiationsUrl, resumeUrl, resumeViewsUrl, resumesUrl, searchUrl, vacancyIdFrom, vacancyUrl } from "./urls.js";
 
 export interface HHClientOptions {
   snapshotDir: string;
@@ -581,6 +581,25 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     return threads.map((t) => ({ negotiationId: t.negotiationId, chatUrl: t.chatUrl, unread: t.unread, employer: t.employer, state: t.state, vacancyExternalId: t.vacancyExternalId, ...(t.lastModified ? { lastModified: t.lastModified } : {}) }));
   };
 
+  const listChats: HHClient["listChats"] = async (s, since, maxPages) => {
+    await open(s, `${HH_ORIGIN}/chat`, true);
+    let page = parseChatList(await s.html());
+    log("hh.chats", { page: 0, count: page?.rows.length ?? null });
+    let rows = page?.rows ?? [];
+    // nextFrom is "<activity millis>_<chatId>" of the last chat shown: past `since`, nothing newer is left.
+    for (let n = 1; page?.nextFrom && n < maxPages && Number(page.nextFrom.split("_")[0]) >= Date.parse(since); n++) {
+      await sleep(settleMs);
+      await s.goto(chatListApiUrl(page.nextFrom), { quick: true });
+      page = parseChatList(await s.html());
+      if (!page) {
+        await assertNotBlocked(s);
+        break;
+      }
+      rows = rows.concat(page.rows);
+    }
+    return rows;
+  };
+
   const negotiationIdFromUrl = (url: string): string => /(?:id|chat|negotiations\/item)[=/](\d+)/.exec(url)?.[1] ?? url;
 
   const readThread: HHClient["readThread"] = async (s, chatUrl) => {
@@ -694,5 +713,5 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     return Array.isArray(rows) ? rows : [];
   };
 
-  return { checkLogin, assertNotBlocked, search, fetchVacancy, apply, syncResumes, resumeText, resumeCapacity, duplicateResume, editResume, publishResume, touchResume, listThreads, readThread, sendMessage, submitSurvey, listResumeViewers };
+  return { checkLogin, assertNotBlocked, search, fetchVacancy, apply, syncResumes, resumeText, resumeCapacity, duplicateResume, editResume, publishResume, touchResume, listThreads, listChats, readThread, sendMessage, submitSurvey, listResumeViewers };
 };

@@ -36,6 +36,9 @@ export const negotiationsUrl = (opts?: { onlyUnread?: boolean; page?: number }):
   return `${HH_ORIGIN}/applicant/negotiations${q.size ? `?${q}` : ""}`;
 };
 
+/** The chat list's own paging call (hh.ru/chat loads more on scroll through it); GET, read-only. */
+export const chatListApiUrl = (from: string): string => `${HH_CHAT_ORIGIN}/chatik/api/chats?filterUnread=false&filterHasTextMessage=false&from=${encodeURIComponent(from)}`;
+
 export const resumesUrl = (): string => `${HH_ORIGIN}/applicant/resumes`;
 export const loginUrl = (): string => `${HH_ORIGIN}/account/login?role=applicant`;
 export const resumeUrl = (hash: string): string => `${HH_ORIGIN}/resume/${hash}`;

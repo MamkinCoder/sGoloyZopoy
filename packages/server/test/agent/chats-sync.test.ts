@@ -1,7 +1,8 @@
 // chats.sync side effects kept from the runner's old chat stage: invitations, rejections, feedback, surveys,
 // hh send times, vacancy linking (hh), and the Habr conversation rules.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FEEDBACK_REQUEST } from "../../src/agent/chats/hh.js";
+import type { ThreadRow } from "@sgz/shared";
+import { CHAT_LIST_MAX_OPENS, CHAT_LIST_MAX_PAGES, FEEDBACK_REQUEST } from "../../src/agent/chats/hh.js";
 import type { HabrClient } from "../../src/habr/client.js";
 import type { HabrConversation, HabrMessage } from "../../src/habr/state.js";
 import { chatHarness, inMsg, outMsg } from "./harness.js";
@@ -109,6 +110,73 @@ describe("chats.sync (hh)", () => {
     await h.sync();
     const call = h.llm.calls.find((c) => c.method === "answerChat")!;
     expect(call.args[3]).toEqual(["Офис", "Удалённо"]);
+  });
+});
+
+describe("chats.sync (hh chat list: employer-initiated chats)", () => {
+  const outreach = (id: string, o: Partial<ThreadRow> = {}): ThreadRow => ({ negotiationId: `chat:${id}`, chatUrl: `https://hh.ru/chat/${id}`, unread: true, employer: "Coding Team", state: "", vacancyExternalId: "136745560", lastModified: "2026-09-24T05:07:20.808Z", ...o });
+  const HELLO = "Здравствуйте, Иван! Я представляю компанию Coding Team. Сейчас открыта вакансия frontend vue 3 разработчика. Хотите, расскажу подробнее?";
+
+  it("a chat only in the chat list becomes a thread and its task is replied to", async () => {
+    h = chatHarness();
+    h.hh.listThreads.mockResolvedValue([]);
+    h.page.chats = [outreach("5655372160")];
+    h.page.messages = [{ ...inMsg("1", HELLO), author: "bot" }];
+    await h.sync();
+    const t = h.thread();
+    expect(t.hhNegotiationId).toBe("chat:5655372160");
+    expect(t.vacancyId).not.toBeNull(); // the vacancy was fetched for the draft
+    expect(h.tasks()).toMatchObject([{ state: "sent", target: "https://hh.ru/chat/5655372160" }]);
+    expect(h.hh.sendMessage).toHaveBeenCalledWith({}, "https://hh.ru/chat/5655372160", "Да, готов обсудить детали.");
+    const note = h.alerts("✉️ Работодатель написал первым");
+    expect(note).toHaveLength(1);
+    expect(String(note[0]![1])).toContain("https://hh.ru/vacancy/136745560");
+    await h.sync(); // nothing new: no second reply, no second note
+    expect(h.sends()).toBe(1);
+    expect(h.alerts("✉️")).toHaveLength(1);
+  });
+
+  it("a chat also in the negotiations list is one thread, keyed by its topic", async () => {
+    h = chatHarness();
+    h.page.chats = [outreach("999", { negotiationId: "n1", employer: "Acme" })];
+    h.page.messages = [inMsg("1", "Когда готовы выйти?")];
+    await h.sync();
+    expect(h.store.listChatThreads(h.user.id).map((t) => t.hhNegotiationId)).toEqual(["n1"]);
+    expect(h.hh.readThread.mock.calls.map((c) => c[1])).not.toContain("https://hh.ru/chat/999");
+    expect(h.alerts("✉️")).toHaveLength(0);
+  });
+
+  it("the seeker answered by hand: nothing is sent; a later bot question gets a reply of its own", async () => {
+    h = chatHarness();
+    h.hh.listThreads.mockResolvedValue([]);
+    h.page.chats = [outreach("5655382625", { employer: "Арктический Научный Центр" })];
+    h.page.messages = [{ ...inMsg("1", HELLO), author: "bot" }, outMsg("2", "Здравствуйте, интересно"), { ...inMsg("3", "Хотите откликнуться на эту вакансию?"), author: "bot" }, outMsg("4", "Да!")];
+    await h.sync();
+    expect(h.sends()).toBe(0);
+    expect(h.tasks()).toHaveLength(0);
+    h.page.messages.push({ ...inMsg("5", "Сталкивались ли вы с платформой ELMA365?"), author: "bot" });
+    h.page.chats = [outreach("5655382625", { employer: "Арктический Научный Центр", lastModified: "2026-09-25T09:00:00.000Z" })];
+    await h.sync();
+    const task = h.tasks()[0]!;
+    const texts = h.store.listChatMessages(h.thread().id).filter((m) => task.messageIds.includes(m.id)).map((m) => m.text);
+    expect(texts).toEqual(["Сталкивались ли вы с платформой ELMA365?"]); // only what came after our last message
+  });
+
+  it("opens at most CHAT_LIST_MAX_OPENS chat-list chats per sync, newest first", async () => {
+    h = chatHarness();
+    h.hh.listThreads.mockResolvedValue([]);
+    h.page.chats = Array.from({ length: CHAT_LIST_MAX_OPENS + 3 }, (_, i) => outreach(String(100 + i), { unread: false })); // opening a chat reads it
+    h.page.messages = [{ ...inMsg("1", "Здравствуйте! Интересно ли узнать больше?"), author: "bot" }];
+    h.llm.onTriageChat = () => ({ kind: "ack_only", topics: [] }); // no sends: the fake page is shared by every chat
+    await h.sync();
+    expect(h.hh.readThread.mock.calls.slice(0, CHAT_LIST_MAX_OPENS).map((c) => c[1])).toEqual(h.page.chats.slice(0, CHAT_LIST_MAX_OPENS).map((c) => c.chatUrl));
+    expect(h.store.listChatThreads(h.user.id)).toHaveLength(CHAT_LIST_MAX_OPENS);
+    expect(h.hh.listChats).toHaveBeenLastCalledWith({}, "2026-09-22T21:00:00.000Z", CHAT_LIST_MAX_PAGES); // chat_track_since
+    await h.sync(); // the rest are opened next time
+    expect(h.store.listChatThreads(h.user.id)).toHaveLength(CHAT_LIST_MAX_OPENS + 3);
+    // Everything handled: the next read only pages back to the previous read (minus an hour).
+    await h.sync();
+    expect(h.hh.listChats).toHaveBeenLastCalledWith({}, "2026-09-25T09:00:00.000Z", CHAT_LIST_MAX_PAGES);
   });
 });
 

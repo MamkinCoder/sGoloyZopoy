@@ -1,7 +1,7 @@
 // chats.sync, hh.ru part: read the chat list, store new messages, keep today's side effects (invitation
 // alert + prep, rejection feedback request, feedback forwarding, bot surveys, follow-ups) and open a reply task
 // for every thread with unanswered employer messages. Replies themselves are written by the task jobs.
-import type { BrowserSession, User, Vacancy } from "@sgz/shared";
+import type { BrowserSession, ThreadRow, User, Vacancy } from "@sgz/shared";
 import { mapNegotiationState } from "../../hh/state.js";
 import { vacancyUrl } from "../../hh/urls.js";
 import { followupChats } from "../../runner/interview.js";
@@ -14,6 +14,9 @@ import { kbForVacancy } from "../../kb/context.js";
 import { renderQuestions } from "../../llm/format.js";
 
 export const CHAT_TRACK_SINCE_DEFAULT = "2026-09-23";
+/** Chat list pages (20 chats each) read per sync, and chat-list-only chats opened per sync. */
+export const CHAT_LIST_MAX_PAGES = 5;
+export const CHAT_LIST_MAX_OPENS = 10;
 
 export const FEEDBACK_REQUEST =
   "Здравствуйте. Спасибо за ответ. Подскажите, пожалуйста, что именно в опыте или навыках не подошло под эту роль? Подробная обратная связь поможет мне прицельнее готовиться, буду благодарен за любые детали.";
@@ -56,7 +59,22 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
   const sinceDay = env.store.getSetting("chat_track_since") || CHAT_TRACK_SINCE_DEFAULT;
   const since = new Date(`${sinceDay}T00:00:00+03:00`).toISOString();
   const all = await env.hh.listThreads(s, false, since);
-  const threads = all.filter((t) => {
+  // Chats an employer started (hh's «ИИ-помощник» outreach) exist only in the chat list: read it once and add
+  // every chat the negotiations list doesn't have (keyed by its topic id, so a chat in both lists is one thread).
+  // Any new activity moves a chat to the top, so after one full read only pages newer than the last read (minus
+  // an hour of slack) are needed; the full window again whenever the open cap left chats for later.
+  const listKey = `chat_list_read:${user.id}`;
+  const listSince = [since, env.store.getSetting(listKey) ?? ""].sort().at(-1)!;
+  const listed = new Set(all.map((t) => t.negotiationId));
+  let listOk = true;
+  const extra = (
+    await env.hh.listChats(s, listSince, CHAT_LIST_MAX_PAGES).catch((e: unknown) => {
+      env.log.warn("chats", `hh ${user.slug}: chat list not read: ${errMessage(e)}`);
+      listOk = false;
+      return [];
+    })
+  ).filter((t) => !listed.has(t.negotiationId) && (listed.add(t.negotiationId), true));
+  const needsLook = (t: ThreadRow): boolean => {
     const prev = known.get(t.negotiationId);
     const recent = !t.lastModified || t.lastModified >= since;
     // A chat we already track keeps being handled even if older than the cutoff (e.g. a reply waiting for
@@ -72,8 +90,12 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
     }
     if (t.lastModified && t.lastModified > prev.lastSeenAt) return true;
     return env.store.listChatMessages(prev.id).some((m) => m.direction === "in" && !m.answered);
-  });
-  env.log.info("chats", `hh ${user.slug}: ${threads.length} of ${all.length} threads need a look`, { threads: threads.length });
+  };
+  // The chat list is newest first; a burst of outreach waits for the next sync instead of stretching this one.
+  const fromList = extra.filter(needsLook);
+  const threads = all.filter(needsLook).concat(fromList.slice(0, CHAT_LIST_MAX_OPENS));
+  if (listOk) env.store.setSetting(listKey, fromList.length > CHAT_LIST_MAX_OPENS ? "" : new Date(env.now().getTime() - 3600_000).toISOString());
+  env.log.info("chats", `hh ${user.slug}: ${threads.length} of ${all.length + extra.length} threads need a look`, { threads: threads.length });
   for (const t of threads) {
     try {
       const detail = await env.hh.readThread(s, t.chatUrl);
@@ -101,6 +123,13 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
       });
       const inserted = env.store.insertChatMessages(thread.id, detail.messages);
       let history = env.store.listChatMessages(thread.id);
+      if (!prev && t.negotiationId.startsWith("chat:")) {
+        // No application of ours behind it: the agent answers it like any employer turn; if it ends in «откликнуться?»,
+        // the «да» in the chat is the application (hh's assistant files it). The human gets the links to check.
+        const said = detail.messages.find((m) => m.direction === "in" && m.text.trim())?.text.trim().slice(0, 500);
+        const vlink = ext ? `\n${vacancyUrl(ext)}` : "";
+        await env.notifier.alert(`✉️ Работодатель написал первым: ${t.employer}`, `${user.name}${vacancy?.title ? `, ${vacancy.title}` : ""}.${said ? `\n\n«${said}»\n` : ""}\nАгент ответит в чате; если нужен отклик через hh, откликнись по ссылке.${vlink}\n${t.chatUrl}`).catch(() => undefined);
+      }
       if (detail.thread.state === "invited" && prev?.state !== "invited") {
         env.log.info("chats", `${t.employer}: INVITATION`, { thread_id: thread.id });
         const vtitle = vacancy?.title ? ` (${vacancy.title})` : "";
@@ -149,6 +178,9 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
         settleThread(env, thread.id, "чат закрыт для сообщений");
         continue;
       }
+      // Only employer messages after our last one need a reply: earlier ones were answered (by hand or by us).
+      const lastOut = history.findLastIndex((m) => m.direction === "out");
+      env.store.markAnswered(history.slice(0, Math.max(lastOut, 0)).filter((m) => m.direction === "in" && !m.answered).map((m) => m.id));
       // Our message is the last one (answered by hand on the phone): nothing to reply.
       if (history.at(-1)?.direction === "out") {
         settleThread(env, thread.id, "ответ уже есть в чате");

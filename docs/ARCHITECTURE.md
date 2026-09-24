@@ -125,6 +125,19 @@ task: instant, restart-proof, independent of any run.
   `habr:` key prefix), so `chats.send` and the alert links never branch on the site; `habrPageMessage` is the one
   Habr-message mapping, `settleThread` the one "nothing to send" close used by both syncs. Threads are read by id
   with `Store.getChatThread`.
+- Employer-initiated hh chats (2026-09-24): hh's «ИИ-помощник» outreach («Я представляю компанию …, хотите,
+  расскажу подробнее?») is a chat of type `COMMON` / subType `GENAI` with resources `VACANCY` + `EMPLOYER` and no
+  `NEGOTIATION_TOPIC`, so it is not in `/applicant/negotiations` (the sync never saw it). `chats.sync` now also reads
+  the hh.ru/chat list once (`hh.listChats`: `Chatik-InitialState.chats`, then the page's own GET
+  `chatik.hh.ru/chatik/api/chats?from=<nextFrom>`, 20 chats a page, newest activity first; paging stops at
+  `chat_track_since` or 5 pages; after a read that left nothing behind, only back to that read minus an hour, setting
+  `chat_list_read:<userId>`, since any new activity moves a chat to the top) and adds every chat whose key (the topic id, else `chat:<chatId>`) is not in the
+  negotiations list, so a chat in both is one thread. Chat-list-only chats go through the same "needs a look" filter
+  and at most 10 are opened per sync. They are ordinary employer turns (the bot's messages are the employer's): task,
+  triage, KB review, draft, send. A new one gets one Telegram note with the vacancy and chat links. Applying is not
+  automated here: in these chats «Хотите откликнуться?» → «Да» is itself the application (hh's assistant files it),
+  and a separate hh apply would duplicate it; the note lets the human check. Every sync marks employer messages
+  before our last message in a thread handled, so a chat the seeker answered by hand is replied to only after it.
 - The re-sync after a send is the normal full `chats.sync` pulled to +30 s (key dedupe), not a per-thread sync:
   unchanged threads cost one list read.
 - hh chat-bot surveys (the questionnaire widget) are still answered inside `chats.sync` (one LLM call inside a
