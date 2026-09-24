@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { Status, type Vacancy } from "@sgz/shared";
 import { SEL, createHabrClient } from "../../src/habr/client.js";
-import { guardProposal, toRedactorHtml } from "../../src/habr/resume.js";
+import { experienceSaved, guardProposal, resolveHabrSkills, toRedactorHtml } from "../../src/habr/resume.js";
 import { extractSsrState, parseExperiences, parseJsonPage, parseListing, parseVacancyState } from "../../src/habr/state.js";
 import { FakeSession } from "../hh/fake-session.js";
 import { readFileSync } from "node:fs";
@@ -115,6 +115,29 @@ describe("habr apply", () => {
     expect(s.calls.filter((c) => c.method === "goto")).toHaveLength(2);
   });
 
+  it("an error after «Откликнуться» (the click already sent) is SENT when Habr shows the response, letter not saved", async () => {
+    let clicked = false;
+    const s = new FakeSession(
+      { [URL]: { html: fixture("vacancy-direct.html"), existing: [SEL.applyButton] } },
+      {
+        onGoto: (_u, f) => {
+          if (clicked) f.setPage({ html: respondedPage(null) });
+        },
+        onClick: (sel, f) => {
+          if (sel === SEL.applyButton) {
+            clicked = true;
+            f.setPage({ existing: [SEL.sent, SEL.letter[0]] }); // no «Дополнить» button: the act fallback throws
+          }
+        },
+        onAct: () => {
+          throw new Error("stagehand: LLM error");
+        },
+      },
+    );
+    const r = await client.apply(s, { vacancy, coverLetter: "Привет! Готов обсудить детали.", dryRun: false });
+    expect(r).toMatchObject({ status: Status.SENT, reasonDetail: "sent, letter NOT saved: stagehand: LLM error" });
+  });
+
   it("reports no confirmation when the reloaded page has no response", async () => {
     const s = new FakeSession({ [URL]: { html: fixture("vacancy-direct.html"), existing: [SEL.applyButton] } });
     const r = await client.apply(s, { vacancy, coverLetter: "", dryRun: false });
@@ -160,6 +183,16 @@ describe("habr conversations", () => {
     expect(t.messages[1]).toMatchObject({ id: "571269082", text: "Да, актуально! Готов обсудить детали." });
   });
 
+  it("an unrendered conversation is an error, never an empty one (a send retry would post the reply twice)", async () => {
+    const s = new FakeSession({ [CONV]: { html: fixture("conversation.html"), existing: [SEL.chatInput] } });
+    await expect(client.readConversation(s, "contact1")).rejects.toThrow(/messages not rendered/);
+  });
+
+  it("a listing that is not JSON (DDoS-Guard, rate limit) aborts instead of looking like no vacancies", async () => {
+    const s = new FakeSession({ "https://career.habr.com/api/frontend/vacancies": { html: "<html><title>DDoS-Guard</title></html>" } });
+    await expect(client.search(s, "go", 0)).rejects.toMatchObject({ status: Status.FAILED_UI });
+  });
+
   it("sends a message and waits for it to appear", async () => {
     const s = new FakeSession({ [CONV]: { html: fixture("conversation.html"), existing: [SEL.chatInput, SEL.chatSend] } }, { onWaitForText: () => true });
     await s.goto(CONV);
@@ -193,5 +226,32 @@ describe("habr resume proposal guard", () => {
     expect(p.experiences.map((e) => e.company)).toEqual(["Era2.ai"]);
     expect(p.notes.join("\n")).toMatch(/Kubernetes[\s\S]*1C[\s\S]*Выдуманная компания/);
     expect(toRedactorHtml("Раз.\nДва <b>\n\n- три")).toBe("<p>Раз.<br>Два &lt;b&gt;</p><p>- три</p>");
+  });
+
+  it("strips never_claim skills from «о себе» and job descriptions", () => {
+    const p = guardProposal(
+      { title: "Go", specializations: [2], qualification: "Middle", about: "Пишу на Go. Настраивал Kubernetes в проде.", skills: [], experiences: [{ company: "Era2.ai", description: "Делал API. Поднял кластер Kubernetes." }], notes: [] },
+      ["Go"],
+      { never_claim_skills: ["Kubernetes"] },
+      ["Era2.ai"],
+    );
+    expect(p.about).not.toMatch(/Kubernetes/);
+    expect(p.experiences[0]!.description).not.toMatch(/Kubernetes/);
+    expect(p.notes.join("\n")).toMatch(/о себе/);
+    expect(p.notes.join("\n")).toMatch(/опыт Era2\.ai/);
+  });
+
+  it("maps skills to Habr titles exactly or narrower, never to a wider title (SQL is not Microsoft SQL Server)", async () => {
+    const dict: Record<string, string[]> = { SQL: ["Microsoft SQL Server", "Oracle SQL"], Go: ["Golang"], "REST API": ["REST"] };
+    const r = await resolveHabrSkills(["SQL", "Go", "REST API"], async (u) => ({ list: (dict[decodeURIComponent(u.split("term=")[1]!)] ?? []).map((title) => ({ title })) }));
+    expect(r.skills).toEqual(["Golang", "REST"]);
+    expect(r.wider).toEqual([{ name: "SQL", title: "Microsoft SQL Server" }]);
+  });
+
+  it("an experience save counts only on a 2xx answer without validation errors", () => {
+    expect(experienceSaved({ status: 200, body: "$('#experience').replaceWith(...)" })).toBe(true);
+    expect(experienceSaved({ status: 422, body: "" })).toBe(false);
+    expect(experienceSaved({ status: 200, body: "<div class=\"field_with_errors\">" })).toBe(false);
+    expect(experienceSaved({ status: 0, body: "no form" })).toBe(false);
   });
 });

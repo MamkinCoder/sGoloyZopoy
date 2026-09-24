@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { RunBusyError, Status, type RunRequest } from "@sgz/shared";
 import { openStore, seedDefaultUsers } from "../db/index.js";
-import { formatQueueCard, handleQueueTap, parseQueueCallback, queueButtons, startPendingSend } from "./queue-cards.js";
+import { formatQueueCard, handleQueueTap, parseQueueCallback, queueButtons, startPendingSend, unparkSend } from "./queue-cards.js";
 
 function setup() {
   const store = openStore(":memory:");
@@ -13,15 +13,16 @@ function setup() {
   };
   const started: RunRequest[] = [];
   let busy = false;
+  let stage = "rotate";
   const runner = {
-    active: () => (busy ? ({ id: 1 } as never) : null),
+    active: () => (busy ? ({ id: 1, stage } as never) : null),
     start: async (r: RunRequest) => {
       if (busy) throw new RunBusyError();
       started.push(r);
       return started.length;
     },
   };
-  return { store, user, queue, started, runner, setBusy: (b: boolean) => (busy = b) };
+  return { store, user, queue, started, runner, setBusy: (b: boolean, st = "rotate") => ((busy = b), (stage = st)) };
 }
 
 describe("telegram queue cards", () => {
@@ -75,5 +76,27 @@ describe("telegram queue cards", () => {
     expect(await startPendingSend(store, runner)).toBe(true);
     expect(started.map((r) => r.stage)).toEqual([`send:${b}`]);
     expect(await startPendingSend(store, runner)).toBe(false);
+  });
+
+  it("a second «Отправить» while that item is sending is not parked (a failed confirm would resend it)", async () => {
+    const { store, queue, started, runner, setBusy } = setup();
+    const a = queue("1");
+    setBusy(true, `send:${a}`);
+    expect(await handleQueueTap(store, runner, { send: true, id: a })).toMatch(/уже отправляется/);
+    setBusy(false);
+    store.updateApplicationStatus(a, Status.QUEUED, "send failed: FAILED_NO_CONFIRMATION");
+    expect(await startPendingSend(store, runner)).toBe(false);
+    expect(started).toEqual([]);
+  });
+
+  it("a send run consumes taps parked before it started (panel send vs a parked Telegram tap)", async () => {
+    const { store, queue, started, runner, setBusy } = setup();
+    const a = queue("1");
+    setBusy(true);
+    await handleQueueTap(store, runner, { send: true, id: a });
+    setBusy(false);
+    unparkSend(store, a); // the panel's send:<id> run started first
+    expect(await startPendingSend(store, runner)).toBe(false);
+    expect(started).toEqual([]);
   });
 });

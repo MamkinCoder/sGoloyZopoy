@@ -385,11 +385,16 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       `mock:<chatId>` (JSON, `""` = none), expires after 2 h of silence. Prompts use only the profile's real
       experience; nothing goes to employers.
   - Reliability: `run_max_min` = watchdog limit per run in minutes, `"0"` (default) = built-in caps
-    (20 for `touch`, 30 for `rotate` and `send:|inspect:|retailor:|force:`, 150 otherwise). On
+    (20 for `touch`, 45 for `rotate`, 30 for `send:|inspect:|retailor:|force:`, 150 otherwise; a `rotate`
+    chunk stops tailoring new items after 30 min so an aggregator's batch ends cleanly). On
     timeout the run is aborted, the browser closed and a Telegram alert sent; the run ends with
     `error: "watchdog: exceeded N min"`. If a wedged call ignores the abort, the lane frees itself
     after 60 s more (run `failed`); the watchdog covers the report too, and closing a wedged browser is
     bounded (then its processes are killed), so nothing after it can hold the runner.
+  - Daily run (`source=all`): an hh failure no longer skips Habr; Habr runs, then the hh error ends the
+    run as before. A slot that finds the runner busy is retried every minute ("owed"): settings saves keep
+    it, the autopilot starts no new chunk meanwhile, and it fires at most once per day. Autopilot
+    (`rotate`/`touch`) failures alert once per 6 h per error.
 - `sgz serve` boot closes runs left `running`/`queued` by a crash (`status: stopped`,
   `error: "orphaned by restart"`). While the runner is enabled it also checks every 30 min that some
   run finished `done` in the last 26 h (dead-man heartbeat): one Telegram alert when that breaks, one

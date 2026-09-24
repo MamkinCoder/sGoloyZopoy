@@ -17,7 +17,8 @@ vi.mock("./pipeline.js", () => ({
   aggregate: () => ({ by_status: {} }),
   sendReports: () => reports(),
 }));
-const { createRunner, maxRunMs, repeatFailure, WATCHDOG_GRACE_MS } = await import("./service.js");
+const { createRunner, maxRunMs, WATCHDOG_GRACE_MS } = await import("./service.js");
+const { repeatFailure } = await import("./util.js");
 
 let store: SqliteStore;
 let alerts: string[];
@@ -55,6 +56,7 @@ describe("run watchdog", () => {
   it("picks caps per stage and honours the override", () => {
     expect(maxRunMs({ stage: "touch" }, null)).toBe(20 * 60_000);
     expect(maxRunMs({ stage: "send:7" }, "0")).toBe(30 * 60_000);
+    expect(maxRunMs({ stage: "rotate" }, null)).toBe(45 * 60_000); // an aggregator's 8 tailored CVs end at ROTATE_QUEUE_MS (30 min) first
     expect(maxRunMs({}, "")).toBe(150 * 60_000);
     expect(maxRunMs({ stage: "touch" }, "45")).toBe(45 * 60_000);
   });
@@ -125,11 +127,11 @@ describe("repeatFailure", () => {
   const req = (stage: string, trigger: "schedule" | "manual" = "schedule") => ({ userSlug: "all", source: "hh", stage, dryRun: false, limit: 0, trigger }) as RunRequest;
   const t0 = new Date("2026-09-23T10:00:00Z");
 
-  it("reports a background failure once per 3h, ignoring digits; manual runs always", () => {
+  it("reports a background failure once per 6h, ignoring digits; manual runs always", () => {
     const s = store();
     expect(repeatFailure(s, req("touch"), "run #51: login expired", t0)).toBe(false);
     expect(repeatFailure(s, req("touch"), "run #52: login expired", new Date(t0.getTime() + 5 * 60_000))).toBe(true);
-    expect(repeatFailure(s, req("touch"), "run #53: login expired", new Date(t0.getTime() + 3 * 3600_000 + 1))).toBe(false);
+    expect(repeatFailure(s, req("touch"), "run #53: login expired", new Date(t0.getTime() + 6 * 3600_000 + 1))).toBe(false);
     expect(repeatFailure(s, req("touch", "manual"), "run #54: login expired", t0)).toBe(false);
     expect(repeatFailure(s, req("send:5"), "boom", t0)).toBe(false);
     expect(repeatFailure(s, req("send:5"), "boom", t0)).toBe(false);

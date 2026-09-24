@@ -126,7 +126,11 @@ export function createHabrClient(opts: HabrClientOptions = {}): HabrClient {
 
   const search: HabrClient["search"] = async (s, query, page) => {
     await open(s, listUrl(query, page + 1), true);
-    const r = parseListing(parseJsonPage(await s.html()));
+    const html = await s.html();
+    const json = parseJsonPage(html);
+    // A DDoS-Guard / rate-limit page parses to {}: that is a block, not "no vacancies today".
+    if (!Array.isArray(json.list)) throw new RunAbortError(Status.FAILED_UI, `habr listing is not JSON: ${html.replace(/\s+/g, " ").slice(0, 120)}`);
+    const r = parseListing(json);
     log("habr.search", { query, page, count: r.cards.length });
     return r;
   };
@@ -148,6 +152,7 @@ export function createHabrClient(opts: HabrClientOptions = {}): HabrClient {
       log("habr.apply.fail", { id, step, reasonDetail, snapshotPath });
       return { ...done(status, reasonDetail), ...(snapshotPath ? { snapshotPath } : {}) };
     };
+    let clicked = false;
     try {
       const st = await readVacancy(s, url);
       if (!st) return fail("state", "no vacancy state on the page");
@@ -166,6 +171,7 @@ export function createHabrClient(opts: HabrClientOptions = {}): HabrClient {
         const r = await s.act("Нажми кнопку «Откликнуться» в разделе «Ваш отклик»", { cacheKey: "habr.apply.button" });
         if (!r.success) return fail("button", `could not click «Откликнуться»: ${r.message}`);
       }
+      clicked = true; // the response is sent now: if the letter step or the reload fails below, it is still sent
       await s.waitForSelector(SEL.sent, confirmTimeoutMs);
       await sleep(settleMs);
 
@@ -189,7 +195,12 @@ export function createHabrClient(opts: HabrClientOptions = {}): HabrClient {
       return done(Status.SENT, after.responseMessage ? "sent with letter" : "sent, letter NOT saved");
     } catch (e) {
       if (e instanceof RunAbortError) throw e;
-      return fail("error", e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      if (clicked) {
+        const after = await readVacancy(s, url).catch(() => null);
+        if (after?.responded) return done(Status.SENT, `sent, letter NOT saved: ${msg}`);
+      }
+      return fail("error", msg);
     }
   };
 
@@ -202,7 +213,9 @@ export function createHabrClient(opts: HabrClientOptions = {}): HabrClient {
 
   const readConversation: HabrClient["readConversation"] = async (s, login) => {
     await open(s, conversationUrl(login));
-    await s.waitForSelector(SEL.message, 8_000); // messages are rendered client-side after hydration
+    // Messages are rendered client-side after hydration. Every conversation we open has at least one, so an
+    // empty page means "not rendered yet", never "no messages": the send retry relies on this read to not send twice.
+    if (!(await s.waitForSelector(SEL.message, 15_000))) throw new Error(`habr conversation ${login}: messages not rendered`);
     const html = await s.html();
     const me = parseConversations(reviveNuxt(html));
     const banned = me.conversations.find((c) => c.login === login)?.banned ?? false;

@@ -146,6 +146,11 @@ describe("chats.sync (Habr)", () => {
       { id: "m0", mine: true, text: "Привет, закинешь резюме?" },
       { id: "m2", mine: false, text: "Да, кинь файл" },
     ]);
+    const surveyed = [
+      { id: "m5", mine: false, text: "Добрый день! Посмотрели резюме" },
+      { id: "m6", mine: true, text: "Спасибо!" },
+    ];
+    hb.client.readConversation.mockImplementation(async (_s: unknown, login: string) => ({ messages: login === "habrbot" ? surveyed : hb.page, writable: true }));
     h = chatHarness({ habr: hb.client });
     h.hh.listThreads.mockResolvedValue([]);
     await h.sync();
@@ -153,6 +158,20 @@ describe("chats.sync (Habr)", () => {
     expect(h.notifier.alert).toHaveBeenCalledTimes(1);
     expect(String(h.notifier.alert.mock.calls[0]![1])).toContain("Да, кинь файл");
     expect(h.tasks()).toHaveLength(0);
+  });
+
+  it("Habr's survey after a recruiter's question does not swallow it; a survey-only thread is not re-read every sync", async () => {
+    const hb = habrClient([conv("hr3", false, "question", "q1")], [{ id: "m1", mine: false, text: "Когда удобно созвониться?" }]);
+    h = chatHarness({ habr: hb.client });
+    h.hh.listThreads.mockResolvedValue([]);
+    await h.sync();
+    expect(hb.client.sendMessage).toHaveBeenCalledTimes(1); // the recruiter's question is answered
+    await h.sync();
+    await h.sync();
+    // The survey card (q1) never appears among the page's messages: remembered, so no page load per sync.
+    const reads = hb.client.readConversation.mock.calls.length;
+    await h.sync();
+    expect(hb.client.readConversation.mock.calls.length).toBe(reads);
   });
 
   it("alerts an invitation once", async () => {

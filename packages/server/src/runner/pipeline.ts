@@ -6,7 +6,7 @@ import { runHabrUser, type HabrPlan } from "./habr.js";
 import { runHHUser, type HHPlan } from "./hh.js";
 import { createStats, mergeStats } from "./stats.js";
 import type { UserRun } from "./user.js";
-import { errMessage, RunStoppedError } from "./util.js";
+import { errMessage, isStop, repeatFailure, RunStoppedError } from "./util.js";
 
 export interface PipelineResult {
   status: RunStatus;
@@ -122,9 +122,21 @@ export async function runPipeline(ctx: RunContext): Promise<PipelineResult> {
     done.push(ur);
     try {
       ctx.checkAbort();
-      if (hhPlan) await runHHUser(ctx, ur, hhPlan);
+      // In the daily "all" run an hh failure (expired login, low memory, LLM error) must not cost Habr its day:
+      // Habr runs anyway and the hh error is reported after it.
+      let hhError: unknown = null;
+      if (hhPlan) {
+        try {
+          await runHHUser(ctx, ur, hhPlan);
+        } catch (e) {
+          if (!habrPlan || isStop(e)) throw e;
+          hhError = e;
+          await ctx.browser.close().catch(() => undefined);
+        }
+      }
       if (habrPlan) await runHabrContained(ctx, ur, habrPlan);
       if (careerPlan) await runCareerUser(ctx, ur, careerPlan);
+      if (hhError) throw hhError;
       await ctx.browser.close();
     } catch (e) {
       await ctx.browser.close().catch(() => undefined);
@@ -139,13 +151,13 @@ export async function runPipeline(ctx: RunContext): Promise<PipelineResult> {
         error = `${e.status}: ${e.message}`;
         ctx.log.error("session", `${user.slug}: fatal ${error}`, { status: e.status });
         ur.stats.record(e.status);
-        await alert(ctx, `Прогон #${ctx.run.id} остановлен: ${e.status}`, `${user.name}: ${e.message}`);
+        if (!repeatFailure(ctx.store, req, error, ctx.now())) await alert(ctx, `Прогон #${ctx.run.id} остановлен: ${e.status}`, `${user.name}: ${e.message}`);
         break;
       }
       status = "failed";
       error = errMessage(e);
       ctx.log.error("session", `${user.slug}: ${error}`, { stack: e instanceof Error ? e.stack : undefined });
-      await alert(ctx, `Прогон #${ctx.run.id} упал`, `${user.name}: ${error}`);
+      if (!repeatFailure(ctx.store, req, error, ctx.now())) await alert(ctx, `Прогон #${ctx.run.id} упал`, `${user.name}: ${error}`);
       break;
     }
   }

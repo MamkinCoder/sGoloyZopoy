@@ -91,7 +91,7 @@ describe("career review queue", () => {
     const [app] = t.store.applications;
     expect(app).toMatchObject({ status: Status.QUEUED, direction: "go", llmDecision: expect.objectContaining({ reason: "fake: подходит" }) });
     expect(app!.coverLetter).toContain("Go developer");
-    expect(t.store.getGeneratedResume(app!.generatedResumeId!)?.pdfPath).toMatch(/generated\/\d+\.pdf$/);
+    expect(t.store.getGeneratedResume(app!.generatedResumeId!)?.pdfPath).toMatch(/generated\/\d+-r\d+\.pdf$/);
     expect(stats.by_status).toEqual({ QUEUED: 1 });
 
     // the next run must not queue the same vacancy again

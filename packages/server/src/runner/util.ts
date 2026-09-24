@@ -1,3 +1,5 @@
+import type { RunRequest } from "@sgz/shared";
+
 export class RunStoppedError extends Error {
   constructor() {
     super("run stopped by request");
@@ -52,4 +54,20 @@ export function parseSalary(raw: string): { from: number; to: number; currency: 
   const to = nums[1] ?? 0;
   if (nums.length === 1 && /^\s*до/.test(lower)) return { from: 0, to: from, currency };
   return { from, to, currency };
+}
+
+const BACKGROUND_STAGES = new Set(["rotate", "touch"]);
+/** Longer than the touch cadence (TOUCH_EVERY_MS, 4h05m): an expired login must not alert on every touch. */
+const REPEAT_ALERT_MS = 6 * 3600_000;
+
+/** Autopilot runs repeat every few minutes: the same failure (e.g. an expired hh login) is reported
+ * once per 6h instead of on every poll. Manual and full runs always report. Digits are ignored so
+ * "run #51"/timings don't make the same error look new. */
+export function repeatFailure(store: { getSetting(key: string): string | null; setSetting(key: string, value: string): void }, req: RunRequest, error: string, now: Date): boolean {
+  if (req.trigger !== "schedule" || !BACKGROUND_STAGES.has(req.stage ?? "")) return false;
+  const key = `alert_last:${error.replace(/\d+/g, "#").slice(0, 80)}`;
+  const last = Date.parse(store.getSetting(key) ?? "");
+  if (Number.isFinite(last) && now.getTime() - last < REPEAT_ALERT_MS) return true;
+  store.setSetting(key, now.toISOString());
+  return false;
 }

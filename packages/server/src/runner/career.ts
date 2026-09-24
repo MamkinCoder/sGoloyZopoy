@@ -13,7 +13,7 @@ import { decideExtras, readLessons } from "./learn.js";
 import { kbBrief, kbForVacancy, withKbNever } from "../kb/context.js";
 import { renderQuestions } from "../llm/format.js";
 import { dayInTz } from "../scheduler/tz.js";
-import { formatQueueCard, queueButtons } from "./queue-cards.js";
+import { formatQueueCard, queueButtons, unparkSend } from "./queue-cards.js";
 import type { UserRun } from "./user.js";
 
 /** Title keywords for sites without their own `profile.filters`: dev roles only, so a 3000-job board
@@ -43,6 +43,10 @@ const DAY_MS = 24 * 3600 * 1000;
 const siteFailKey = (id: number) => `site_fail:${id}`;
 export const siteFails = (store: RunContext["store"], id: number) => Number(store.getSetting(siteFailKey(id))) || 0;
 export const YIELD_DAYS = 30;
+/** A rotate chunk's watchdog, and when it stops tailoring new items (each is ~2 claude -p calls + xelatex, several
+ * minutes on the Pi): an aggregator's 8 items must end the chunk cleanly, not in the watchdog (a site failure). */
+export const ROTATE_MAX_MS = 45 * 60_000;
+export const ROTATE_QUEUE_MS = 30 * 60_000;
 
 /** Rotation priority (higher = sooner): never-visited sites first, then any site unvisited for a week
  * (exploration, nothing starves), else recent yield + age minus failures. -Infinity = skip for now
@@ -255,6 +259,10 @@ async function runSite(ctx: RunContext, u: UserRun, site: CareerSite, budget: nu
         continue;
       }
     }
+    if (ctx.req.stage === "rotate" && ctx.now().getTime() - Date.parse(ctx.run.startedAt) > ROTATE_QUEUE_MS) {
+      ctx.log.info("tailor", `${site.name}: chunk time is up, ${vacancy.title} waits for the next visit`);
+      continue;
+    }
     const effectiveLock = company.personaLockEnabled ? lockedDirection || companyTracker.lockedDirection(companyKey) : "";
     const q = await queueVacancy(ctx, u, vacancy, effectiveLock, verdict.get(vacancy.id) ?? null);
     if (!q) continue;
@@ -314,7 +322,8 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
     } catch {
       /* fake fs in tests / read-only dir: buildPdf will report */
     }
-    const built = await resume.buildPdf({ tex, texDir: paths.texDir(ctx.cfg), outPdf: `${outDir}/${vacancy.id}.pdf`, xelatexBin: ctx.cfg.xelatexBin });
+    // One file per run: a retailor must not overwrite the PDF the still-queued item (and its letter) points to.
+    const built = await resume.buildPdf({ tex, texDir: paths.texDir(ctx.cfg), outPdf: `${outDir}/${vacancy.id}-r${ctx.run.id}.pdf`, xelatexBin: ctx.cfg.xelatexBin });
     ctx.checkAbort();
     pdfPath = built.pdfPath;
     generatedId = ctx.store.insertGeneratedResume({ userId: user.id, vacancyId: vacancy.id, texPath: built.texPath, pdfPath, model: tier }).id;
@@ -368,6 +377,7 @@ async function reviewQueued(ctx: RunContext, u: UserRun, review: NonNullable<Car
   const pdf = app.generatedResumeId ? ctx.store.getGeneratedResume(app.generatedResumeId) : null;
   if (!site || !pdf) return ctx.log.error("apply", `application ${id}: ${!site ? `site ${vacancy.source} not found` : "no generated CV"}`);
   const inspect = review.mode === "inspect" || ctx.req.dryRun;
+  if (!inspect) unparkSend(ctx.store, id);
   ctx.log.info("apply", `${vacancy.title} @ ${vacancy.company}: ${inspect ? "checking form" : "sending"}`, { vacancy_id: vacancy.id, application_id: id });
 
   let questions: Question[] | undefined;
