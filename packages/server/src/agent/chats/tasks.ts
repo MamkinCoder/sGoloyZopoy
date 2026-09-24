@@ -5,9 +5,9 @@
 //   failed: a job exhausted its retries, or a send could not be confirmed (alerted per task by failTask)
 // Every step is a job keyed by the task id, reads the task from the DB and moves it with compare-and-set,
 // so repeats, restarts and a sync racing a draft are harmless.
-import { OPEN_TASK_STATES, tagIs, type ChatMessage, type ChatTask, type ChatThread, type ChatTopic, type Profile, type TapReply, type Vacancy } from "@sgz/shared";
+import { OPEN_TASK_STATES, tagIs, type ChatMessage, type ChatTask, type ChatThread, type ChatTopic, type KbBrief, type Profile, type TapReply, type Vacancy } from "@sgz/shared";
 import { conversationUrl } from "../../habr/state.js";
-import { kbFor, renderKb } from "../../kb/context.js";
+import { kbFor, renderKb, withKbNever, withoutNo } from "../../kb/context.js";
 import { asksQuestion } from "../../hh/state.js";
 import { learnedSkills, legacySkillName, skillKey, withLearnedSkills } from "../../runner/skills.js";
 import { errMessage } from "../../runner/util.js";
@@ -230,15 +230,19 @@ export function draftProfile(p: Profile, topics: ChatTopic[]): Profile {
 
 /** KB block for the draft: the task topics + tags named in the vacancy / question, statuses as this task
  *  answered them (a fallback «нет» is not claimed even while the tag is unknown), the best stories. */
-export function draftKb(env: ChatEnv, task: ChatTask, vacancy: Vacancy | null, history: ChatMessage[]): string {
+/** Stories lose what they say about `no` tags and this task's «нет» topics, and those names with their aliases
+ *  come back in `no` for the reply guard (withKbNever), as for application texts. */
+export function draftKb(env: ChatEnv, task: ChatTask, vacancy: Vacancy | null, history: ChatMessage[]): KbBrief {
   const asked = history.filter((m) => task.messageIds.includes(m.id)).map((m) => m.text);
   const text = [vacancy ? `${vacancy.title}\n${vacancy.descriptionText}` : "", ...asked].join("\n");
-  const kb = kbFor(env.store, task.userId, { tags: task.topics.map((t) => t.name), text }, KB_BUDGET);
+  const tags = env.store.listKbTags(task.userId);
+  const { stories, no } = withoutNo(tags, env.store.listKbStories(task.userId), task.topics.filter((t) => t.answer === "no").map((t) => t.name));
+  const kb = kbFor({ listKbTags: () => tags, listKbStories: () => stories }, task.userId, { tags: task.topics.map((t) => t.name), text }, KB_BUDGET);
   const topics = kb.topics.map((t) => {
     const answer = task.topics.find((x) => same(x.name, t.name))?.answer;
     return answer ? { ...t, status: answer } : t;
   });
-  return renderKb({ ...kb, topics });
+  return { text: renderKb({ ...kb, topics }), no };
 }
 
 export async function draftTask(env: ChatEnv, taskId: number): Promise<void> {
@@ -248,7 +252,8 @@ export async function draftTask(env: ChatEnv, taskId: number): Promise<void> {
   if (!thread) throw new Error(`thread ${task.threadId} not found`);
   const history = env.store.listChatMessages(thread.id);
   const vacancy = thread.vacancyId === null ? null : env.store.getVacancy(thread.vacancyId);
-  const reply = await env.llm.answerChat(draftProfile(knownProfile(env, task.userId), task.topics), vacancy, history, task.choices, draftKb(env, task, vacancy, history));
+  const kb = draftKb(env, task, vacancy, history);
+  const reply = await env.llm.answerChat(withKbNever(draftProfile(knownProfile(env, task.userId), task.topics), kb), vacancy, history, task.choices, kb.text);
   const unknown = (reply.unknown_skills ?? []).filter((s) => !task.topics.some((t) => sameSkill(env, task.userId, t.name, s)));
   if (unknown.length) {
     // A skill triage missed: back to the gate with it (a new round: the reminder may come again).

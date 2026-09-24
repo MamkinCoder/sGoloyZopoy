@@ -2,7 +2,7 @@
 // kbFor() picks the stories relevant to a set of tags and/or a free text within a char budget, renderKb()
 // turns that into a prompt block. docs/ARCHITECTURE.md section 4.
 import { companyKey, tagIs, tagKey, type KbBrief, type KbStory, type KbTag, type KbTagStatus, type Store, type Vacancy } from "@sgz/shared";
-import { claimRegex, stripNeverClaimSentences } from "../llm/guards.js";
+import { claimRegex, enforceMax, stripNeverClaimSentences } from "../llm/guards.js";
 
 export interface KbQuery {
   /** Topic names (tag names or aliases), e.g. triage topics. */
@@ -78,12 +78,22 @@ export function kbFor(store: Pick<Store, "listKbTags" | "listKbStories">, userId
   const stories: KbStory[] = [];
   let used = 0;
   for (const { s } of scored) {
-    const n = renderStory(s).length + 2;
-    if (stories.length && used + n > budgetChars) break;
-    stories.push(s);
+    // The best story always goes in, shortened when it alone is over the budget; a later one that doesn't fit
+    // makes room for smaller ones below it.
+    const story = stories.length ? s : fitStory(s, budgetChars);
+    const n = renderStory(story).length + 2;
+    if (stories.length && used + n > budgetChars) continue;
+    stories.push(story);
     used += n;
   }
   return { topics, stories };
+}
+
+/** A story over the budget with its long fields cut at sentence boundaries (panel stories allow ~8k chars). */
+function fitStory(s: KbStory, budgetChars: number): KbStory {
+  if (renderStory(s).length + 2 <= budgetChars) return s;
+  const max = Math.max(100, Math.floor(budgetChars / 4));
+  return { ...s, context: enforceMax(s.context, max), did: enforceMax(s.did, max), result: enforceMax(s.result, max) };
 }
 
 const STATUS_LINE: Record<KbTagStatus, string> = {
@@ -121,21 +131,30 @@ const sameCompany = (a: string, b: string): boolean => {
   return !!x && !!y && (x.includes(y) || y.includes(x));
 };
 
+/** Stories without the status-`no` tags (plus `extraNo` names, e.g. a chat task's fallback «нет»): off the tag
+ * lists, sentences naming them (name or alias) out, a title naming one drops the story. `no` = those names + aliases. */
+export function withoutNo(tags: KbTag[], stories: KbStory[], extraNo: string[] = []): { stories: KbStory[]; no: string[] } {
+  const noTags = tags.filter((t) => t.status === "no" || extraNo.some((n) => tagIs(t, n)));
+  const noIds = new Set(noTags.map((t) => t.id));
+  const no = [...new Map([...extraNo, ...noTags.flatMap((t) => [t.name, ...t.aliases])].map((n) => [tagKey(n), n.trim()])).values()].filter(Boolean);
+  const noRe = claimRegex(no);
+  const clean = (s: string) => stripNeverClaimSentences(s, no);
+  return {
+    no,
+    stories: stories
+      .filter((s) => !noRe?.test(s.title))
+      .map((s) => ({ ...s, tags: s.tags.filter((t) => !noIds.has(t.id)), context: clean(s.context), did: clean(s.did), result: clean(s.result) })),
+  };
+}
+
 /** KB block for an application text. Status-`no` tags never reach it: they leave story tag lists and topics,
  * sentences naming them leave the stories (a title naming one drops the story), and they come back in `no` for
  * the guards. undefined for an empty KB, and when the KB can't be read: a KB problem never blocks an application. */
 export function kbBrief(store: KbStore, userId: number, q: KbBriefQuery, budgetChars = KB_BRIEF_BUDGET): KbBrief | undefined {
   try {
     const tags = store.listKbTags(userId);
-    const noTags = tags.filter((t) => t.status === "no");
-    const noIds = new Set(noTags.map((t) => t.id));
-    const no = [...new Set(noTags.flatMap((t) => [t.name, ...t.aliases]))];
-    const noRe = claimRegex(no);
-    const clean = (s: string) => stripNeverClaimSentences(s, no);
-    const stories = store
-      .listKbStories(userId)
-      .filter((s) => !noRe?.test(s.title) && (!q.companies || q.companies.some((c) => sameCompany(c, s.company))))
-      .map((s) => ({ ...s, tags: s.tags.filter((t) => !noIds.has(t.id)), context: clean(s.context), did: clean(s.did), result: clean(s.result) }));
+    const { no, stories: all } = withoutNo(tags, store.listKbStories(userId));
+    const stories = all.filter((s) => !q.companies || q.companies.some((c) => sameCompany(c, s.company)));
     if (!tags.length && !stories.length) return undefined;
     const ctx = kbFor({ listKbTags: () => tags, listKbStories: () => stories }, userId, q, budgetChars);
     const topics = ctx.topics.filter((t) => t.status !== "no");

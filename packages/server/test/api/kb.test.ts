@@ -43,4 +43,35 @@ describe("knowledge base API", () => {
     expect((await h.json("DELETE", `/api/users/yaroslav/kb/stories/${story.id}`)).status).toBe(200);
     expect(await (await h.get("/api/users/yaroslav/kb/stories")).json()).toHaveLength(1);
   });
+
+  it("editing a story keeps the status of the tags already on it; only newly added ones become `yes`", async () => {
+    const h = await harness();
+    const u = h.store.getUserBySlug("yaroslav")!;
+    h.store.saveProfile(u.id, { ...defaultProfile(), verified_skills: ["Docker"] });
+    const docker = h.store.upsertKbTag(u.id, { name: "Docker", status: "yes" });
+    const k8s = h.store.upsertKbTag(u.id, { name: "Kubernetes" });
+    const s = h.store.saveKbStory({ userId: u.id, title: "Деплой", company: "", period: "", context: "", did: "Докер", result: "", source: "seed", confirmed: false, hash: "h", tagIds: [docker.id, k8s.id] });
+    // the panel editor re-sends the full tag list with a typo fix
+    expect((await h.json("PUT", `/api/users/yaroslav/kb/stories/${s.id}`, { did: "Docker", tags: ["Docker", "Kubernetes", "Grafana"] })).status).toBe(200);
+    const status = (n: string) => h.store.listKbTags(u.id).find((t) => t.name === n)!.status;
+    expect([status("Kubernetes"), status("Grafana")]).toEqual(["unknown", "yes"]);
+    expect(h.store.getProfile(u.id)!.verified_skills).toEqual(["Docker", "Grafana"]);
+  });
+
+  it("a panel edit of the profile skill lists moves the KB tags, so the next sync keeps it", async () => {
+    const h = await harness();
+    const u = h.store.getUserBySlug("yaroslav")!;
+    h.store.saveProfile(u.id, { ...defaultProfile(), verified_skills: ["Go"], never_claim_skills: ["Kafka"] });
+    const kafka = h.store.upsertKbTag(u.id, { name: "Kafka", status: "no" });
+    const go = h.store.upsertKbTag(u.id, { name: "Go", status: "yes" });
+    const put = await h.json("PUT", "/api/users/yaroslav/profile", { ...defaultProfile(), verified_skills: ["Kafka"], never_claim_skills: ["Go"] });
+    expect(put.status).toBe(200);
+    expect(h.store.listKbTags(u.id).map((t) => [t.id, t.status])).toEqual([[go.id, "no"], [kafka.id, "yes"]]);
+    await h.json("PUT", `/api/users/yaroslav/kb/tags/${kafka.id}`, { status: "yes" }); // any later sync
+    expect(h.store.getProfile(u.id)).toMatchObject({ verified_skills: ["Kafka"], never_claim_skills: ["Go"] });
+    // dropped from both lists -> unknown, not re-added
+    await h.json("PUT", "/api/users/yaroslav/profile", { ...defaultProfile(), verified_skills: [], never_claim_skills: [] });
+    expect(h.store.listKbTags(u.id).map((t) => t.status)).toEqual(["unknown", "unknown"]);
+    expect(h.store.getProfile(u.id)).toMatchObject({ verified_skills: [], never_claim_skills: [] });
+  });
 });

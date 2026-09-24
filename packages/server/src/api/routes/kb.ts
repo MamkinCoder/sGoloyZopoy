@@ -2,7 +2,7 @@
 // Any status change is mirrored into profile.verified_skills / never_claim_skills (kb/write.ts syncProfileSkills).
 import { Hono } from "hono";
 import { z } from "zod";
-import { tagIs, type KbStory, type Store, type User } from "@sgz/shared";
+import { tagIs, tagKey, type KbStory, type Store, type User } from "@sgz/shared";
 import { syncProfileSkills } from "../../kb/write.js";
 import type { ApiDeps } from "../deps.js";
 import { notFound } from "../errors.js";
@@ -32,9 +32,12 @@ const NewStorySchema = z.object({
 const StoryPatchSchema = z.object({ ...StoryFields, confirmed: z.boolean() }).partial();
 const TagPatchSchema = z.object({ status: z.enum(["yes", "no", "unknown"]) });
 
-/** Tag ids for names; a tag the human writes a story about is real experience, so unknown/new become `yes`. */
-function humanTagIds(store: Store, userId: number, names: string[]): number[] {
+/** Tag ids for names; a tag the human writes a story about is real experience, so unknown/new become `yes`.
+ * Tags already on the story (`onStory`) keep their id and status: the editor re-sends the whole list on any save. */
+function humanTagIds(store: Store, userId: number, names: string[], onStory: KbStory["tags"] = []): number[] {
   return names.map((name) => {
+    const own = onStory.find((t) => tagKey(t.name) === tagKey(name));
+    if (own) return own.id;
     const cur = store.listKbTags(userId).find((t) => tagIs(t, name));
     return cur && cur.status !== "unknown" ? cur.id : store.upsertKbTag(userId, { name, status: "yes" }).id;
   });
@@ -83,7 +86,7 @@ export function kbRoutes({ store }: ApiDeps): Hono {
     const u = userOr404(store, c.req.param("slug"));
     const cur = storyOr404(u, idParam(c));
     const { tags, ...patch } = await parseBody(c, StoryPatchSchema);
-    const tagIds = tags ? humanTagIds(store, u.id, tags) : cur.tags.map((t) => t.id);
+    const tagIds = tags ? humanTagIds(store, u.id, tags, cur.tags) : cur.tags.map((t) => t.id);
     const story = store.saveKbStory({ ...cur, ...patch, tagIds });
     if (tags) syncProfileSkills(store, u.id);
     return c.json(story);

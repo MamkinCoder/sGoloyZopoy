@@ -128,7 +128,8 @@ by_status:{}, chat_replies, invitations, rejections, top_vacancies:[], dry_run},
 period, context, did, result, source: seed|telegram|panel, confirmed, hash, createdAt, updatedAt, tags:[{id, name}]`
 (camelCase: the shared model as is). Tag names in `tags` match existing tags by name or alias (case-insensitive);
 a missing tag is created, and a tag that is new or `unknown` becomes `yes` (a human wrote a story about it; an
-explicit `no` stays). Every status change is mirrored into `profile.verified_skills` / `never_claim_skills`
+explicit `no` stays). On `PUT .../stories/:id` this applies only to tags added in that edit: the tags already on the
+story keep their status. Every status change is mirrored into `profile.verified_skills` / `never_claim_skills`
 (`kb/write.ts` `syncProfileSkills`).
 
 What these endpoints change also changes generated material (phase 4): hh/Habr letters and tailored resume copies,
@@ -179,7 +180,8 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
 - `PUT /users/:slug` additionally accepts `allow_other_country`, `pool_expand_per_day`, `opus_enabled`
   (bool / int ≥ 0). Unknown keys are ignored; wrong types → 400.
 - `PUT /users/:slug/profile`: every field optional; strings default `""`, numbers `0`, arrays `[]`,
-  `extra` `{}`. Wrong types → 400 `{error:"field: message; ..."}`.
+  `extra` `{}`. KB tags follow `verified_skills` / `never_claim_skills` by name (never -> `no`, verified -> `yes`,
+  dropped from both -> `unknown`) before the profile sync, so the edit sticks. Wrong types → 400 `{error:"field: message; ..."}`.
 - `GET /users/:slug/stats`: `range` defaults to `all`; other values → 400. `chat_replies` counts only
   messages the bot sent (`direction='out'` and no `hh_message_id`); history imported from hh is excluded.
 - `GET /users/:slug/retro`: the last 7 days vs the 7 before (`RetroDTO` in `packages/shared/src/api.ts`),
@@ -303,7 +305,8 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       confirm, mark the messages handled, and `chats.sync` again 30 s later. A task whose job failed stays
       `failed` until the employer writes again.
     - KB review card (`agent/chats/review.ts`, setting `kb_review_mode`: `always` (default) = every topic |
-      `new_only` = only topics without stories (a tag already `no` is not asked either) | `off` = no card, a `yes`
+      `new_only` = only topics without stories (a tag with only unconfirmed seed stories is asked unless it is `yes`; a
+      tag already `no` is not asked either) | `off` = no card, a `yes`
       tag counts as yes, anything else as not claimed). Every topic resolves to a KB tag by name or alias; a topic
       the KB does not know becomes a tag (`yes`/`no` when the profile lists it, else `unknown`). One `kb_reviews` row
       per shown topic (`pending` → `confirmed` | `expanded` | `denied` | `expired`, `tg_message_id` of the card).

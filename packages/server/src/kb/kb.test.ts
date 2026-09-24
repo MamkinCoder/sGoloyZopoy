@@ -3,9 +3,10 @@ import { defaultProfile } from "../config/profile.js";
 import { openStore } from "../db/index.js";
 import { seedDefaultUsers } from "../db/users.js";
 import { FakeLLM } from "../llm/fake.js";
-import { kbFor, renderKb } from "./context.js";
+import { kbFor, renderKb, renderStory } from "./context.js";
 import { guardSeed, ingestKb, saveIngested, seedKb, seedPrompt, type SeedSources } from "./llm.js";
-import { applySeed, stripInventedNumbers, storyHash, syncProfileSkills, withKbSkills, type KbStoryDraft } from "./write.js";
+import { allowedNumbers, applySeed, stripInventedNumbers, storyHash, syncProfileSkills, withKbSkills, type KbStoryDraft } from "./write.js";
+import { KbSeedSchema } from "../llm/schemas.js";
 
 const setup = () => {
   const store = openStore(":memory:");
@@ -66,7 +67,32 @@ describe("kb repo", () => {
   });
 });
 
+describe("kb repo aliases", () => {
+  it("an incoming alias naming an existing tag resolves to it; an alias naming another tag is dropped", () => {
+    const { store, uid } = setup();
+    const k8s = store.upsertKbTag(uid, { name: "Kubernetes", status: "no" });
+    const docker = store.upsertKbTag(uid, { name: "Docker", status: "yes" });
+    const same = store.upsertKbTag(uid, { name: "K8s", aliases: ["Kubernetes", "kube"] });
+    expect(same).toMatchObject({ id: k8s.id, name: "Kubernetes", status: "no", aliases: ["kube", "K8s"] });
+    // aliases naming two different tags: no merge, and neither alias stays (it would shadow its tag)
+    const ambiguous = store.upsertKbTag(uid, { name: "Контейнеры", aliases: ["Docker", "Kubernetes", "OCI"] });
+    expect(ambiguous).toMatchObject({ name: "Контейнеры", aliases: ["OCI"] });
+    expect(store.listKbTags(uid).map((t) => t.id).sort()).toEqual([k8s.id, docker.id, ambiguous.id].sort());
+  });
+});
+
 describe("kbFor", () => {
+  it("an over-budget best story is shortened, a later one that does not fit leaves room for smaller ones", () => {
+    const { store, uid } = setup();
+    const add = (title: string, did: string) => store.saveKbStory({ userId: uid, title, company: "", period: "", context: "", did, result: "", source: "panel", confirmed: true, hash: "", tagIds: [] });
+    const small = add("Маленькая", "Коротко."); // ids ascending: the newest ranks first at equal scores
+    const big = add("Большая", "Средняя история. ".repeat(80));
+    const huge = add("Огромная", "Длинное предложение про работу. ".repeat(200));
+    const ids = kbFor({ listKbTags: () => [], listKbStories: () => [huge, big, small] }, uid, {}, 1500);
+    expect(ids.stories.map((s) => s.id)).toEqual([huge.id, small.id]);
+    expect(ids.stories.reduce((n, s) => n + renderStory(s).length + 2, 0)).toBeLessThanOrEqual(1500);
+  });
+
   it("matches tags by alias, finds tags in free text, ranks by tag overlap then words, cuts to the budget", () => {
     const { store, uid } = setup();
     const redis = store.upsertKbTag(uid, { name: "Redis", status: "yes" });
@@ -151,6 +177,47 @@ describe("seed", () => {
     expect(p.never_claim_skills).toEqual(["Kubernetes", "React"]); // the seed profile never-claims Kubernetes
   });
 
+  it("guardSeed: an alias naming another profile skill neither decides the status nor stays an alias", () => {
+    const src = sources();
+    src.profile = { ...src.profile, verified_skills: ["Docker"], never_claim_skills: ["Docker Swarm"] };
+    const seed = guardSeed({ tags: [{ name: "Docker", aliases: ["Docker Compose", "Docker Swarm"], category: "infra" }], stories: [] }, src);
+    expect(seed.tags.map((t) => [t.name, t.aliases, t.status])).toEqual([
+      ["Docker", ["Docker Compose"], "yes"],
+      ["Docker Swarm", [], "no"],
+    ]);
+  });
+
+  it("withKbSkills: an alias never removes an entry from the human's lists", () => {
+    const p = { verified_skills: ["Docker"], never_claim_skills: ["Docker Swarm"] };
+    expect(withKbSkills(p, [{ name: "Docker", aliases: ["Docker Swarm"], status: "yes" as const }])).toEqual(p);
+    expect(withKbSkills(p, [{ name: "Swarm", aliases: ["Docker"], status: "no" as const }]).verified_skills).toEqual(["Docker"]);
+  });
+
+  it("applySeed: an LLM re-run, a tag turned `no` and a deleted story do not re-import stories", () => {
+    const { store, uid } = setup();
+    store.saveProfile(uid, { ...defaultProfile(), verified_skills: ["Go"], never_claim_skills: [] });
+    const seed = { tags: [], stories: [draft()] };
+    expect(applySeed(store, uid, seed).storiesAdded).toBe(1);
+    // same story reworded by another LLM pass
+    expect(applySeed(store, uid, { tags: [], stories: [draft({ did: "Сделал кэш ответов на Redis для провайдеров." })] })).toMatchObject({ storiesAdded: 0, storiesSkipped: 1 });
+    // Redis turned `no` between runs of the same file
+    store.upsertKbTag(uid, { name: "Redis", status: "no" });
+    expect(applySeed(store, uid, seed)).toMatchObject({ storiesAdded: 0, storiesSkipped: 1 });
+    // the human deleted the seeded story: it stays deleted
+    store.deleteKbStory(store.listKbStories(uid)[0]!.id);
+    expect(applySeed(store, uid, seed)).toMatchObject({ storiesAdded: 0, storiesSkipped: 1 });
+    expect(store.listKbStories(uid)).toHaveLength(0);
+  });
+
+  it("kb_seed output: a story without a title or a garbled tag does not throw the pass away", () => {
+    const out = KbSeedSchema.parse({ tags: [{ name: null }, { name: "Go", aliases: [] }], stories: [{ title: null, did: "Сделал кэш." }, 42] });
+    expect(out.tags.map((t) => t.name)).toEqual(["", "Go"]);
+    expect(out.stories.map((s) => s.did)).toEqual(["Сделал кэш.", ""]);
+    const seed = guardSeed(out, sources());
+    expect(seed.stories).toHaveLength(1);
+    expect(seed.tags.some((t) => !t.name)).toBe(false);
+  });
+
   it("seed prompt carries the rules, the CVs and the verified list", () => {
     const prompt = seedPrompt(sources());
     expect(prompt).toContain("## Правила");
@@ -193,7 +260,15 @@ describe("ingest", () => {
   });
 
   it("stripInventedNumbers treats 2,5 and 2.5 alike", () => {
-    expect(stripInventedNumbers("Опыт 2,5 года. Ускорил в 10 раз.", new Set(["2.5"]))).toBe("Опыт 2,5 года.");
+    expect(stripInventedNumbers("Опыт 2,5 года. Ускорил в 10 раз.", allowedNumbers("опыт 2.5 года"))).toBe("Опыт 2,5 года.");
+  });
+
+  it("stripInventedNumbers: a number needs its unit in the sources; quantity words need to be there verbatim", () => {
+    const allowed = allowedNumbers("Python 3, опыт 3 года. Обслуживал 30 серверов. Go 1.18, 2022-2024. Ускорили сборку вдвое.");
+    const keep = ["Писал на Python 3.", "Обслуживал 30 серверов.", "Перешли на Go 1.18 в 2022 году.", "Сборка стала быстрее вдвое."];
+    for (const s of keep) expect(stripInventedNumbers(s, allowed)).toBe(s);
+    for (const s of ["Ускорил сборку в 3 раза.", "Снизил latency на 30%.", "Ускорил в два раза.", "Сотни тысяч пользователей.", "Выросло в десятки раз.", "Рост в разы."])
+      expect(stripInventedNumbers(s, allowed)).toBe("");
   });
 });
 

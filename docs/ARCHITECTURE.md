@@ -69,7 +69,8 @@ Jobs (all keyed by task id, so repeats are harmless):
    Ack-only and rejection keep today's behavior (no reply / feedback request). Otherwise -> review.
 3. **Review gate** (`kb.review`, none): for every topic, a KB review item (section 4). While any item is
    unresolved the task stays `awaiting_review`. Mode setting `kb_review_mode`: `always` (current: every topic
-   is shown to Yaroslav) | `new_only` (only topics without stories) | `off`.
+   is shown to Yaroslav) | `new_only` (only topics without confirmed stories: a tag with stories counts only when it is `yes` or one
+   of its stories is confirmed) | `off`.
 4. `chats.draft` (llm): when all review items are resolved, write the reply from the KB stories of the topics
    + profile + vacancy + history (answer_chat rules: always forward, Moscow office + relocation, never claim
    what the KB marks `no`). -> `ready`.
@@ -134,9 +135,19 @@ kb_reviews(id, user_id, task_id NULL, tag_id, state: pending|confirmed|expanded|
   tag's status changes only while `unknown`. Numbers, periods and companies in stories survive only when present
   in the sources (`kb/write.ts guardStory`). `--dry-run [--out f]` writes the JSON without a DB, `--from f` imports
   such a JSON without the LLM (seed on the Mac, import on the Pi). `sgz kb list --user [--tag]` prints it.
+  Round 3: a story is skipped when its hash was ever imported (setting `kb_seed_hashes:<user>`, so a deleted seed
+  story stays deleted) or a story with the same company + title exists (an LLM re-run rewords); the hash is taken
+  before `no` tags leave the draft. A tag's status comes from its name; an LLM alias naming another profile skill is
+  dropped (it survives only as the one alias naming a tag whose own name is not in the profile). Numbers need
+  their unit in the sources («3 раза» is not allowed by «Python 3»), and quantity words («вдвое», «сотни») need to
+  be there verbatim. `upsertKbTag` also matches an existing tag by an incoming alias (when exactly one tag is hit)
+  and drops an alias naming another tag.
 - **Profile sync** (until consumers read the KB): `syncProfileSkills` after every status change, `sgz db
   import-profile` applies it too. A `yes` tag is added to `verified_skills` and removed from `never_claim_skills`,
   `no` the other way round, `unknown` tags and skills without a tag are left alone (union, never a replace).
+  Removal matches the tag name only (an alias never deletes an entry). The reverse: a panel edit of the profile
+  lists (`PUT /users/:slug/profile`, `applyProfileSkills`) moves the tags first (name in never -> `no`, in verified
+  -> `yes`, in neither -> `unknown`), so the next sync keeps the edit.
 - **Ingest** (`kb/llm.ts ingestKb`, pure, phase 3 calls it): the human's text -> 1..3 stories, numbers only from
   that text; `saveIngested` stores them `confirmed` and marks the asked tag `yes`.
 - **Telegram review card** (one per chat task, all topics in one message):
@@ -159,7 +170,8 @@ kb_reviews(id, user_id, task_id NULL, tag_id, state: pending|confirmed|expanded|
   own `kb.ingest` (a second story is never dropped); «Нет навыка» tapped during the ingest wins. A topic the KB does not know becomes a tag with the profile's yes/no when listed,
   else `unknown`. `new_only` also skips tags already `no`; `off` answers from the tag status (unknown = not
   claimed). Human answers also write `skills_learned:<user>` so `withLearnedSkills` never contradicts the KB.
-  `chats.draft` passes `renderKb(kbFor(topics + vacancy + question))` with this task's answers as statuses into
+  `chats.draft` (round 3: stories without the `no` tags' and this task's «нет» topics' sentences, and their names +
+  aliases join never_claim for the reply guard via `withKbNever`) passes `renderKb(kbFor(topics + vacancy + question))` with this task's answers as statuses into
   `answer_chat` (`{{kb}}` block). Old `ct:` taps map to confirm / no skill.
 - **Consumers** (all through one module `kb/context.ts`: `kbFor(userId, {tags?, text?}, budget)` returning
   ranked stories + tag statuses, rendered for prompts):

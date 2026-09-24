@@ -65,13 +65,19 @@ export function kbRepo(s: Sql): KbRepo {
       const name = t.name.trim();
       if (!name) throw new Error("kb tag: empty name");
       return s.transaction(() => {
-        const cur = repo.listKbTags(userId).find((x) => tagIs(x, name));
+        // By name first, then by an incoming alias («K8s» with alias «Kubernetes» is the existing «Kubernetes»).
+        const all = repo.listKbTags(userId);
+        // Aliases hitting two different tags are ambiguous: no alias match then.
+        const byAlias = all.filter((x) => (t.aliases ?? []).some((a) => tagIs(x, a)));
+        const cur = all.find((x) => tagIs(x, name)) ?? (byAlias.length === 1 ? byAlias[0] : undefined);
+        // An alias naming another tag would shadow it in every name lookup.
+        const aliases = (t.aliases ?? []).filter((a) => !all.some((x) => x.id !== cur?.id && tagIs(x, a)));
         if (!cur) {
           const { lastId } = s.run(
             "INSERT INTO kb_tags (user_id, name, aliases_json, category, status, updated_at) VALUES (?,?,?,?,?,?)",
             userId,
             name,
-            toJson(mergeAliases(name, t.aliases ?? [])),
+            toJson(mergeAliases(name, aliases)),
             t.category?.trim() ?? "",
             t.status ?? "unknown",
             nowISO(),
@@ -80,7 +86,7 @@ export function kbRepo(s: Sql): KbRepo {
         }
         s.run(
           "UPDATE kb_tags SET aliases_json = ?, category = ?, status = ?, updated_at = ? WHERE id = ?",
-          toJson(mergeAliases(cur.name, cur.aliases, t.aliases ?? [], cur.name === name ? [] : [name])),
+          toJson(mergeAliases(cur.name, cur.aliases, aliases, tagIs(cur, name) ? [] : [name])),
           t.category?.trim() || cur.category,
           t.status ?? cur.status,
           nowISO(),

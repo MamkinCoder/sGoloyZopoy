@@ -181,7 +181,8 @@ function makeClient(ctx: Ctx): LLMClient {
         const norm = (s: string) => s.trim().toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, "");
         const want = norm(r.reply);
         if (!want) return { reply: "", needs_human: r.needs_human, reason, unknown_skills, interview_at };
-        const loose = choices.filter((c) => want.includes(norm(c)) || norm(c).includes(want));
+        // Whole words only: «Да» must not match inside «когда».
+        const loose = choices.filter((c) => !!norm(c) && (claimRegex([norm(c)])!.test(want) || claimRegex([want])!.test(norm(c))));
         const picked = choices.find((c) => norm(c) === want) ?? (loose.length === 1 ? loose[0] : undefined);
         return picked
           ? { reply: picked, needs_human: r.needs_human, reason, unknown_skills, interview_at }
@@ -344,8 +345,10 @@ const renderPrep = (p: InterviewPrep): string =>
 
 const STUDY_LEVELS = ["must", "likely", "nice"] as const;
 
-// Links only: tech names with dots and slashes («Node.js/Express») are fine in a checklist.
-const STUDY_LINK_RE = /https?:\/\/|www\.|t\.me\/|[\w.+-]+@[\w-]+\.[a-z]{2,}|\b[a-z0-9-]+\.(?:ru|com|org|net|io|dev|me|app)\b/i;
+// Links only: tech names with dots and slashes («Node.js/Express», «ASP.NET», «Socket.io») are fine in a checklist;
+// a bare host counts with a path or when it is a known site.
+const STUDY_LINK_RE =
+  /https?:\/\/|www\.|t\.me\/|[\w.+-]+@[\w-]+\.[a-z]{2,}|\b[a-z0-9-]+\.(?:ru|com|org|net|io|dev|me|app)\/|\b(?:github|gitlab|habr|leetcode|youtube|stackoverflow|medium|stepik|coursera|udemy)\.(?:com|ru|org|io)\b/i;
 
 /** No links, one line per field, never-claim topics always marked as gaps, must → likely → nice, at most 20. */
 export function guardStudy(profile: Profile, items: StudyItem[]): StudyItem[] {
@@ -385,6 +388,8 @@ function cleanResumeEdit(profile: Profile, e: { title: string; about: string; ke
   };
 }
 
+const REQUIRED_FALLBACK = "Готов освоить, есть смежный опыт.";
+
 function guardAnswers(qs: Question[], answers: Answer[], never: string[]): Answer[] {
   const byIdx = new Map(qs.map((q) => [q.idx, q]));
   const seen = new Set<number>();
@@ -396,6 +401,8 @@ function guardAnswers(qs: Question[], answers: Answer[], never: string[]): Answe
     const n = q.options?.length ?? 0;
     const clean: Answer = { idx: a.idx };
     if (a.text !== undefined) clean.text = enforceMax(stripNeverClaimSentences(normalizeProse(a.text), never), LIMITS.questionnaireText);
+    // A required field the guard emptied would fail hh's form validation: an honest forward answer instead.
+    if (q.required && a.text?.trim() && !clean.text) clean.text = REQUIRED_FALLBACK;
     if (a.option_idx !== undefined && a.option_idx >= 0 && a.option_idx < n) clean.option_idx = a.option_idx;
     if (a.option_idxs) {
       const ids = [...new Set(a.option_idxs.filter((i) => i >= 0 && i < n))];

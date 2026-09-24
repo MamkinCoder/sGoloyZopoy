@@ -139,6 +139,9 @@ describe("createLLM", () => {
     expect((await yes.answerChat(profile, null, history, ["Когда удобно", "Да"])).reply).toBe("Да");
     const ambiguous = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "да", needs_human: false, reason: "x" }) });
     expect(await ambiguous.answerChat(profile, null, history, ["Да, удобно", "Да, но позже"])).toMatchObject({ reply: "", needs_human: true });
+    // «Да» inside «когда» is not a «Да»: prose that names no button presses nothing
+    const prose = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", { reply: "Не работал, но готов разобраться. Когда удобно созвониться?", needs_human: false, reason: "x" }) });
+    expect(await prose.answerChat(profile, null, history, ["Да", "Нет"])).toMatchObject({ reply: "", needs_human: true });
   });
 
   it("answerQuestionnaire: validates option ranges, caps text, drops unknown idx", async () => {
@@ -157,6 +160,11 @@ describe("createLLM", () => {
     expect(as[2]!.text!.length).toBeLessThanOrEqual(500);
     expect(as[2]!.text).not.toContain("Kafka");
     expect(readFileSync(`${dir}/prompt-1.txt`, "utf8")).toContain("test@example.com");
+
+    // a required text answer the guard empties goes out as an honest forward answer, not ""
+    const req = createLLM(cfg, null, { env: stubEnv(stubDir(), "structured", { answers: [{ idx: 0, text: "Настраивал Kafka в проде." }, { idx: 1, text: "Настраивал Kafka в проде." }] }) });
+    const kq = [{ idx: 0, text: "Опыт с Kafka?", kind: "text", required: true }, { idx: 1, text: "Опыт с Kafka?", kind: "text", required: false }];
+    expect((await req.answerQuestionnaire(profile, vacancies[0]!, kq)).map((a) => a.text)).toEqual(["Готов освоить, есть смежный опыт.", ""]);
   });
 
   it("proposePoolVariants: dedups titles, filters to verified skills, caps at max", async () => {

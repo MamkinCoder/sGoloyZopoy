@@ -1,9 +1,10 @@
 // Deterministic post-checks on model output. The prompt asks; these enforce.
 import type { Decision, HHResume, Vacancy } from "@sgz/shared";
 
-// URLs, t.me, @handles, emails, host/path, bare profile hosts, RU/international phones.
+// URLs, t.me, @handles, emails, host/path (a real TLD: «Node.js/TypeScript» is a stack, not a link), bare profile
+// hosts, RU/international phones.
 const LINK_RE =
-  /https?:\/\/|www\.|t\.me|@[a-z0-9_]{4,}|[\w.+-]+@[\w-]+\.[a-z]{2,}|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\/|\b(?:github|gitlab|bitbucket|linkedin|habr|leetcode|vk|telegram)\.(?:com|ru|org|me)\b|\+\d[\d\s()-]{8,}\d|\b8[\s(-]*\d{3}[\s)-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}\b/i;
+  /https?:\/\/|www\.|\bt\.me\b|@[a-z0-9_]{4,}|[\w.+-]+@[\w-]+\.[a-z]{2,}|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:ru|com|org|net|io|dev|me|app|su|info|pro|co|рф)\/|\b(?:github|gitlab|bitbucket|linkedin|habr|leetcode|vk|telegram)\.(?:com|ru|org|me)\b|\+\d[\d\s()-]{8,}\d|\b8[\s(-]*\d{3}[\s)-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}\b/i;
 const EMOJI_RE = /[\p{Extended_Pictographic}\u{FE0F}]/gu;
 const SENTENCE_RE = /[^.!?\n]+(?:[.!?]+|\n|$)/g;
 
@@ -22,7 +23,8 @@ export function splitSentences(text: string): string[] {
   // `https://host/path` leaves fragments such as `com/path` behind.
   const marker = "\uE000";
   // Dots inside words and versions ("Node.js", "Go 1.18", "2.5 года") are not sentence ends either.
-  const protectedText = text.replace(/([\p{L}\d])\.(?=[\p{L}\d])/gu, `$1${marker}`).replace(/(?:https?:\/\/|www\.|t\.me\/)[^\s]+/gi, (url) => {
+  // A leading dot of a name (« .NET», « .env») is not one either.
+  const protectedText = text.replace(/([\p{L}\d])\.(?=[\p{L}\d])/gu, `$1${marker}`).replace(/(^|\s)\.(?=\p{L})/gu, `$1${marker}`).replace(/(?:https?:\/\/|www\.|t\.me\/)[^\s]+/gi, (url) => {
       const core = url.replace(/[.!?,;:]+$/, "");
       return core.replace(/\./g, marker) + url.slice(core.length);
     });
@@ -51,8 +53,12 @@ export function claimRegex(tokens: string[]): RegExp | null {
   return new RegExp(`(?:^|[^\\p{L}\\p{N}_])(?:${parts.join("|")})(?=$|[^\\p{L}\\p{N}_])`, "iu");
 }
 
-// An honest «X в продакшене не использовал» is what the prompts ask for; it is not a claim.
-const isDenial = (s: string) => /(?:^|[^\p{L}])(?:не\s+(?:использовал|применял|работал|было|довелось|пробовал)|нет\s+опыта)(?=$|[^\p{L}])/iu.test(s) && /прод|production/iu.test(s);
+// An honest «X в продакшене не использовал» / «с X не работал, но готов освоить» / «опыта с X нет» is what the
+// prompts ask for; it is not a claim. «не было» alone («с X не было проблем») is one, so it counts only next to прод.
+const DENIAL_RE =
+  /(?:^|[^\p{L}])(?:не\s+(?:использовал|применял|работал|довелось|доводилось|пробовал|приходилось)|нет\s+(?:\p{L}+\s+)?опыта|не\s+было\s+(?:\p{L}+\s+)?опыта|опыта(?:\s+[\p{L}\p{N}.+#-]+){0,4}\s+нет)(?=$|[^\p{L}])/iu;
+const isDenial = (s: string) =>
+  DENIAL_RE.test(s) || (/(?:^|[^\p{L}])не\s+было(?=$|[^\p{L}])/iu.test(s) && /(?:^|[^\p{L}])(?:проде?|продакшене?|продакшн|production)(?=$|[^\p{L}])/iu.test(s));
 
 export function stripNeverClaimSentences(text: string, never: string[]): string {
   const re = claimRegex(never);
@@ -102,9 +108,14 @@ export function blockedTech(p: { verified_skills: string[]; never_claim_skills: 
   return [...p.never_claim_skills, ...COMMON_TECH.filter((t) => !verified(t) && !(alt(t) && verified(alt(t)!)))];
 }
 
-/** Everything a letter or chat reply must satisfy, in one call. */
+/** Everything a letter or chat reply must satisfy, in one call. Line breaks and paragraphs are kept. */
 export function sanitizeLetter(text: string, never: string[], max: number): string {
-  const cleaned = stripNeverClaimSentences(stripLinkSentences(normalizeProse(text)), never);
+  const cleaned = normalizeProse(text)
+    .split("\n")
+    .map((line) => (line.trim() ? stripNeverClaimSentences(stripLinkSentences(line), never) : ""))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   return enforceMax(cleaned, max);
 }
 
