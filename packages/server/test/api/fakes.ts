@@ -17,6 +17,13 @@ import {
   type GeneratedResume,
   type HHResume,
   type InterviewPrep,
+  type KbStory,
+  type KbTag,
+  type KbTagStatus,
+  mergeAliases,
+  type NewKbStory,
+  type NewKbTag,
+  tagIs,
   type NewApplication,
   type NewChatMessage,
   type NewRunEvent,
@@ -339,6 +346,59 @@ export class FakeStore implements Store {
   }
   letterOutcomes() {
     return [];
+  }
+
+  kbTags: Omit<KbTag, "storyCount">[] = [];
+  kbStories: (Omit<KbStory, "tags"> & { tagIds: number[] })[] = [];
+  private kbTag(t: Omit<KbTag, "storyCount">): KbTag {
+    return { ...t, aliases: [...t.aliases], storyCount: this.kbStories.filter((s) => s.tagIds.includes(t.id)).length };
+  }
+  private kbStory({ tagIds, ...s }: Omit<KbStory, "tags"> & { tagIds: number[] }): KbStory {
+    const tags = this.kbTags.filter((t) => tagIds.includes(t.id)).map((t) => ({ id: t.id, name: t.name }));
+    return { ...s, tags: tags.sort((a, b) => a.name.localeCompare(b.name)) };
+  }
+  listKbTags(userId: number) {
+    return this.kbTags.filter((t) => t.userId === userId).map((t) => this.kbTag(t)).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  upsertKbTag(userId: number, t: NewKbTag): KbTag {
+    const name = t.name.trim();
+    const cur = this.kbTags.find((x) => x.userId === userId && tagIs(x, name));
+    if (!cur) {
+      const tag = { id: this.nextId(), userId, name, aliases: mergeAliases(name, t.aliases ?? []), category: t.category?.trim() ?? "", status: t.status ?? "unknown", updatedAt: nowISO() } as const;
+      this.kbTags.push({ ...tag, aliases: [...tag.aliases] });
+      return this.kbTag(tag);
+    }
+    cur.aliases = mergeAliases(cur.name, cur.aliases, t.aliases ?? [], cur.name === name ? [] : [name]);
+    cur.category = t.category?.trim() || cur.category;
+    cur.status = t.status ?? cur.status;
+    return this.kbTag(cur);
+  }
+  setKbTagStatus(tagId: number, status: KbTagStatus) {
+    const t = this.kbTags.find((x) => x.id === tagId);
+    if (!t) return null;
+    t.status = status;
+    return this.kbTag(t);
+  }
+  listKbStories(userId: number, tagId?: number) {
+    return this.kbStories
+      .filter((s) => s.userId === userId && (tagId === undefined || s.tagIds.includes(tagId)))
+      .map((s) => this.kbStory(s))
+      .reverse();
+  }
+  getKbStory(id: number) {
+    const s = this.kbStories.find((x) => x.id === id);
+    return s ? this.kbStory(s) : null;
+  }
+  saveKbStory(st: NewKbStory & { id?: number }): KbStory {
+    const cur = st.id === undefined ? undefined : this.kbStories.find((x) => x.id === st.id);
+    if (st.id !== undefined && !cur) throw new Error(`kb story ${st.id} not found`);
+    const row = { ...st, tagIds: [...new Set(st.tagIds)], id: cur?.id ?? this.nextId(), createdAt: cur?.createdAt ?? nowISO(), updatedAt: nowISO() };
+    if (cur) Object.assign(cur, row);
+    else this.kbStories.push(row);
+    return this.kbStory(row);
+  }
+  deleteKbStory(id: number) {
+    this.kbStories = this.kbStories.filter((s) => s.id !== id);
   }
 }
 

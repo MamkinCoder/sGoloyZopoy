@@ -76,7 +76,7 @@ task: instant, restart-proof, independent of any run.
 ```
 kb_tags(id, user_id, name, aliases_json, category, status: yes|no|unknown, updated_at)
 kb_stories(id, user_id, title, company, period, context, did, result, source: seed|telegram|panel,
-           confirmed INTEGER, created_at, updated_at)
+           confirmed INTEGER, hash, created_at, updated_at)
 kb_story_tags(story_id, tag_id)
 kb_reviews(id, user_id, task_id NULL, tag_id, state: pending|confirmed|expanded|denied|expired,
            tg_message_id, prompt, created_at, resolved_at)
@@ -91,6 +91,18 @@ kb_reviews(id, user_id, task_id NULL, tag_id, state: pending|confirmed|expanded|
 - **Seeding** (`sgz kb seed --user`): one LLM pass over base CVs, profile.yaml (+ extra facts), the Habr
   proposal and hh resume texts -> stories + tags, `source: seed, confirmed: 0`. Re-runnable (idempotent by
   content hash), never deletes human-added stories.
+  As built (phase 2): `kb_stories.hash` (added to the doc's schema) holds the content hash of a story as first
+  inserted, so an edited seed story is not re-added by the next seed; a seed only adds, it never edits or
+  deletes rows. hh resume texts are not read yet (the base CVs carry the same facts). Tag statuses are
+  deterministic: `verified_skills` -> `yes`, `never_claim_skills` -> `no`, everything else `unknown`; an existing
+  tag's status changes only while `unknown`. Numbers, periods and companies in stories survive only when present
+  in the sources (`kb/write.ts guardStory`). `--dry-run [--out f]` writes the JSON without a DB, `--from f` imports
+  such a JSON without the LLM (seed on the Mac, import on the Pi). `sgz kb list --user [--tag]` prints it.
+- **Profile sync** (until consumers read the KB): `syncProfileSkills` after every status change, `sgz db
+  import-profile` applies it too. A `yes` tag is added to `verified_skills` and removed from `never_claim_skills`,
+  `no` the other way round, `unknown` tags and skills without a tag are left alone (union, never a replace).
+- **Ingest** (`kb/llm.ts ingestKb`, pure, phase 3 calls it): the human's text -> 1..3 stories, numbers only from
+  that text; `saveIngested` stores them `confirmed` and marks the asked tag `yes`.
 - **Telegram review card** (one per chat task, all topics in one message):
   ```
   НЕОЛАНТ спрашивает: «Писали unit/компонентные тесты на Jest или Vitest?»

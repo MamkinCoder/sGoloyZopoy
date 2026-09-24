@@ -7,6 +7,7 @@ import { applicationRoutes } from "./routes/applications.js";
 import { authRoutes } from "./routes/auth.js";
 import { careerRoutes } from "./routes/career.js";
 import { chatRoutes } from "./routes/chats.js";
+import { kbRoutes } from "./routes/kb.js";
 import { resumeRoutes } from "./routes/resumes.js";
 import { runRoutes } from "./routes/runs.js";
 import { systemRoutes } from "./routes/system.js";
@@ -53,6 +54,7 @@ export function createApp(deps: ApiDeps): Hono {
   api.route("/", chatRoutes(deps));
   api.route("/", runRoutes(deps));
   api.route("/", careerRoutes(deps));
+  api.route("/", kbRoutes(deps));
   api.route("/", systemRoutes(deps));
   app.route("/api", api);
 

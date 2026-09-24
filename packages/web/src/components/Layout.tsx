@@ -13,6 +13,7 @@ const NAV: { to: string; label: string; end?: boolean }[] = [
   { to: "filtered", label: "Отфильтровано" },
   { to: "resumes", label: "Резюме" },
   { to: "chats", label: "Чаты" },
+  { to: "kb", label: "База знаний" },
   { to: "settings", label: "Настройки" },
 ];
 

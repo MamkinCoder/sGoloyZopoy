@@ -5,6 +5,7 @@ import { paths } from "@sgz/shared";
 import { ensureDirs, loadConfig, loadProfileYaml } from "../config/index.js";
 import { openStore, seedDefaultUsers } from "../db/index.js";
 import { newUserDefaults } from "../db/users.js";
+import { withKbSkills } from "../kb/write.js";
 import { learnedSkills, withLearnedSkills } from "../runner/skills.js";
 import type { Command } from "./index.js";
 
@@ -57,7 +58,8 @@ export const db: Command = async (args) => {
         seedDefaultUsers(store);
         // First-time setup: a new slug gets a user row with default limits, named from the profile.
         const user = store.getUserBySlug(slug) ?? store.upsertUser(newUserDefaults(slug, profile.full_name.split(" ")[0] || slug));
-        store.saveProfile(user.id, withLearnedSkills(profile, learnedSkills(store, user.id)));
+        // KB tag statuses win over profile.yaml (docs/ARCHITECTURE.md section 4: kept in sync for older code paths).
+        store.saveProfile(user.id, withKbSkills(withLearnedSkills(profile, learnedSkills(store, user.id)), store.listKbTags(user.id)));
       } finally {
         store.close();
       }

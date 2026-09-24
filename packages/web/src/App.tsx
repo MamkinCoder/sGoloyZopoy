@@ -8,6 +8,7 @@ import { Toaster } from "./components/Toast";
 import { Spinner } from "./components/Ui";
 import { ApplicationsPage } from "./pages/Applications";
 import { ChatsPage } from "./pages/Chats";
+import { KbPage } from "./pages/Kb";
 import { DashboardPage } from "./pages/Dashboard";
 import { FilteredPage } from "./pages/Filtered";
 import { LoginPage } from "./pages/Login";
@@ -66,6 +67,7 @@ const router = createBrowserRouter([
           { path: "resumes", element: <ResumesPage /> },
           { path: "chats", element: <ChatsPage /> },
           { path: "chats/:id", element: <ChatsPage /> },
+          { path: "kb", element: <KbPage /> },
           { path: "settings", element: <SettingsPage /> },
         ],
       },

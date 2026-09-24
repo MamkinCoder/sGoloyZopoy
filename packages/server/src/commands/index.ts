@@ -4,6 +4,7 @@ import { hhLogin } from "./hh-login.js";
 import { habrLogin } from "./habr-login.js";
 import { habrResume } from "./habr-resume.js";
 import { hhRecord } from "./hh-record.js";
+import { kb } from "./kb.js";
 import { run } from "./run.js";
 import { serve } from "./serve.js";
 import { pool } from "./pool.js";
@@ -23,4 +24,5 @@ export const commands: Record<string, Command> = {
   db,
   resume,
   site,
+  kb,
 };
