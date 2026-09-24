@@ -72,10 +72,10 @@ export async function refreshLessons(store: Store, llm: LLMClient, user: User, n
 }
 
 /** Telegram /company <name>: every active user's history with that employer. */
-export function companyReport(store: Store, name: string): string {
+export function companyReport(store: Store, name: string, users = store.listUsers(true)): string {
   const key = companyKey(name);
   if (!key) return "Использование: /company <название компании>";
-  const lines = store.listUsers(true).flatMap((u) => {
+  const lines = users.flatMap((u) => {
     const i = store.companyIntel(u.id, [key])[key];
     return i ? [`${u.name}: ${formatIntel(i)}`] : [];
   });

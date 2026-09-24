@@ -62,18 +62,20 @@ export async function serve(): Promise<void> {
   // Telegram buttons: queue cards (send / skip), «📚 Чеклист» (runner/study.ts) and the chat reply cards'
   // KB review buttons «Подтвердить / Дополнить / Нет навыка» per topic (agent/chats/review.ts: the answer goes into the task, the card is edited in place; old phase-1
   // «ct:» and one-skill «sk:» cards only get «кнопка устарела»). /status and /queue answer from the configured chats.
-  const digestAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
-  const retroAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildRetro(app.store, u, app.cfg.tz, new Date()) ?? `Мало данных: за неделю меньше ${MIN_SENT} откликов`}`).join("\n\n");
+  // The owner's chat sees every seeker; a seeker's own chat only herself.
+  const usersOf = (chatId: string) => app.store.listUsers(true).filter((u) => chatId === app.cfg.tgChatId || u.tgChatId === chatId);
+  const digestAll = (chatId: string) => usersOf(chatId).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
+  const retroAll = (chatId: string) => usersOf(chatId).map((u) => `${u.name}\n${buildRetro(app.store, u, app.cfg.tz, new Date()) ?? `Мало данных: за неделю меньше ${MIN_SENT} откликов`}`).join("\n\n");
   const onCommand = async (cmd: string, args = "", chatId = "") => {
-    if (cmd === "/status") return `${app.runner.active() ? `Идёт прогон #${app.runner.active()!.id}` : "Бот свободен"}\n\n${digestAll()}`;
-    if (cmd === "/queue") return app.store.listUsers(true).map((u) => queueList(app.store, u, app.cfg.panelUrl)).join("\n\n");
-    if (cmd === "/company") return companyReport(app.store, args);
+    if (cmd === "/status") return `${app.runner.active() ? `Идёт прогон #${app.runner.active()!.id}` : "Бот свободен"}\n\n${digestAll(chatId)}`;
+    if (cmd === "/queue") return usersOf(chatId).map((u) => queueList(app.store, u, app.cfg.panelUrl)).join("\n\n");
+    if (cmd === "/company") return companyReport(app.store, args, usersOf(chatId));
     if (cmd === "/salary") {
       if (!args) return "Напиши слово из названия вакансии: /salary go";
       const band = app.store.salaryBand({ titleLike: args });
       return band ? `Вилки в вакансиях «${args}» за 90 дней: ${formatBand(band)}` : `Мало вакансий «${args}» с зарплатой за 90 дней`;
     }
-    if (cmd === "/week") return retroAll();
+    if (cmd === "/week") return retroAll(chatId);
     if (cmd === "/mock") return startMock(app.store, chatId, args, new Date());
     if (cmd === "/stop") return stopMock(app.store, chatId, new Date());
     if (cmd === "/study") return studyCommand(app, chatId, args, new Date());
