@@ -92,6 +92,7 @@ export async function serve(): Promise<void> {
     // «Отправить» tapped in Telegram while a run was busy: those go first.
     if (await startPendingSend(app.store, app.runner).catch((e: unknown) => (console.error(`sgz serve: queued send: ${errMessage(e)}`), false))) return;
     if (app.runner.active()) return; // a panel / Telegram run started during the await
+    if (app.scheduler?.owed()) return; // the daily run waits for the idle slot: its retry takes it, not a new chunk
     // Letter lessons: checked hourly, rebuilt weekly per user once enough outcomes exist (runner/learn.ts).
     if (!learning && Date.now() - lastLearn >= 60 * 60_000) {
       lastLearn = Date.now();

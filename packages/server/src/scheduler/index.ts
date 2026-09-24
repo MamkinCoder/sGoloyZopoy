@@ -20,6 +20,8 @@ export interface Scheduler {
   configure(next: Partial<Pick<SchedulerOptions, "at" | "tz" | "jitterMin">>): void;
   next(): Date;
   running(): boolean;
+  /** Today's slot came while the runner was busy and is retried every minute: the autopilot must not take the idle slot. */
+  owed(): boolean;
 }
 
 const MAX_TIMEOUT = 2 ** 31 - 1;
@@ -69,18 +71,35 @@ export function createScheduler(svc: RunService, opts: SchedulerOptions): Schedu
   let timer: unknown = null;
   let running = false;
   let floor = 0; // never fire twice for the same slot
+  let owed = false;
+  let firedDay = ""; // one daily run per day, even when configure moves today's slot later after it fired
+  const dayOf = (t: Date) => {
+    const p = zonedParts(t, tz);
+    return `${p.y}-${p.m}-${p.d}`;
+  };
+  const upcoming = (t: Date): Date => {
+    let target = nextAfter(new Date(Math.max(t.getTime(), floor)));
+    while (dayOf(target) === firedDay) target = nextAfter(new Date(target.getTime() + 60_000));
+    return target;
+  };
+  const settle = (busy: boolean) => {
+    owed = busy;
+    if (busy) retry();
+    else schedule();
+  };
 
   const schedule = () => {
     if (!running) return;
     const t = now();
-    const target = nextAfter(new Date(Math.max(t.getTime(), floor)));
+    const target = upcoming(t);
     const delay = Math.max(0, target.getTime() - t.getTime());
     timer = setT(() => {
       timer = null;
       if (!running) return;
       if (now().getTime() < target.getTime() - 1000) return schedule(); // capped timeout: keep waiting
       floor = target.getTime() + 60_000;
-      void fire().then((busy) => (busy ? retry() : schedule()));
+      firedDay = dayOf(target);
+      void fire().then(settle);
     }, Math.min(delay, MAX_TIMEOUT));
   };
 
@@ -89,7 +108,7 @@ export function createScheduler(svc: RunService, opts: SchedulerOptions): Schedu
     if (!running) return;
     timer = setT(() => {
       timer = null;
-      if (running) void fire().then((busy) => (busy ? retry() : schedule()));
+      if (running) void fire().then(settle);
     }, 60_000);
   };
 
@@ -117,6 +136,7 @@ export function createScheduler(svc: RunService, opts: SchedulerOptions): Schedu
     },
     stop() {
       running = false;
+      owed = false;
       if (timer !== null) clearT(timer);
       timer = null;
     },
@@ -134,14 +154,16 @@ export function createScheduler(svc: RunService, opts: SchedulerOptions): Schedu
       tz = next.tz ?? tz;
       jitterMin = next.jitterMin ?? jitterMin;
       floor = 0;
-      if (running) {
+      // Owed: the retry timer keeps today's run; rescheduling now would roll it over to tomorrow.
+      if (running && !owed) {
         if (timer !== null) clearT(timer);
         timer = null;
         schedule();
-        log(`scheduler: reconfigured (${at} ${tz} ±${jitterMin}m), next run at ${nextAfter(now()).toISOString()}`);
+        log(`scheduler: reconfigured (${at} ${tz} ±${jitterMin}m), next run at ${upcoming(now()).toISOString()}`);
       }
     },
-    next: () => nextAfter(new Date(Math.max(now().getTime(), floor))),
+    next: () => upcoming(now()),
     running: () => running,
+    owed: () => owed,
   };
 }

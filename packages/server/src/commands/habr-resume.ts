@@ -12,6 +12,7 @@ import { getJson } from "../career/http.js";
 import { loadConfig, loadProfileYaml } from "../config/index.js";
 import { createHabrClient } from "../habr/client.js";
 import { SPECIALIZATIONS, guardProposal, readHabrProfile, renderProposal, resolveHabrSkills, writeHabrProfile, type HabrResumeProposal } from "../habr/resume.js";
+import { claimRegex } from "../llm/guards.js";
 import { createLLM, renderPrompt } from "../llm/index.js";
 import { neverClaimList, profileForLLM } from "../llm/format.js";
 import { loadCV } from "../resume/yaml.js";
@@ -120,10 +121,19 @@ export const habrResume = async (args: string[]): Promise<void> => {
   const allowed = [...profile.verified_skills, ...cvs.flatMap((cv) => [...cv.skills.flatMap((g) => g.items), ...cv.jobs.flatMap((j) => j.stack)])];
   const guarded = guardProposal(raw, allowed, profile, current.resume.companies.map((c) => c.title));
   const mapped = await resolveHabrSkills(guarded.skills, (u) => getJson(u));
+  // The dictionary titles are what gets published: never_claim is checked on them too, not only on the LLM's names.
+  const never = claimRegex(profile.never_claim_skills);
   const proposal: HabrResumeProposal = {
     ...guarded,
-    skills: mapped.skills,
-    notes: [...guarded.notes, ...mapped.missing.map((m) => `навык «${m}» не найден в словаре Хабра, не будет добавлен`)],
+    skills: mapped.skills.filter((t) => !never?.test(t)),
+    notes: [
+      ...guarded.notes,
+      ...mapped.skills.filter((t) => never?.test(t)).map((t) => `guard: навык «${t}» из словаря Хабра убран - он в never_claim`),
+      ...mapped.missing.map((m) => `навык «${m}» не найден в словаре Хабра, не будет добавлен`),
+      // Habr requires a qualification per job; hh-imported jobs have none, and filling it is a claim about past seniority.
+      ...(guarded.experiences.length ? [`опыт: где на Хабре у места работы не указана квалификация, при записи будет поставлена «${guarded.qualification}» (обязательное поле) - поправьте на Хабре, если там вы были ниже`] : []),
+      ...mapped.wider.map((x) => `навык «${x.name}»: в словаре Хабра только «${x.title}», это другое утверждение - не добавлен, добавьте вручную, если это правда`),
+    ],
   };
   writeFileSync(out, JSON.stringify({ generated_at: new Date().toISOString(), user: slug, login: current.login, current: current.resume, proposal }, null, 2), "utf8");
   console.log(renderProposal(proposal));

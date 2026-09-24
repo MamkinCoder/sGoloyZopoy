@@ -27,8 +27,11 @@ export async function syncHabrChats(env: ChatEnv, user: User): Promise<void> {
     const prev = known.get(key);
     const stored: ChatMessage[] = prev ? env.store.listChatMessages(prev.id) : [];
     if (!prev && (lm.isMine || lm.createdAt.slice(0, 10) < sinceDay)) continue;
-    // Known thread, its last message already stored or ours (our replies are stored without Habr's id), nothing pending.
-    if (prev && (lm.isMine || stored.some((m) => m.hhMessageId === lm.id)) && !unansweredIds(stored).length) continue;
+    // Known thread, its last message already stored, seen (a system card such as the survey is not in the page's
+    // messages) or ours (our replies are stored without Habr's id), nothing pending.
+    const seenKey = `habr_last_seen:${key}`;
+    const seen = lm.isMine || stored.some((m) => m.hhMessageId === lm.id) || env.store.getSetting(seenKey) === lm.id;
+    if (prev && seen && !unansweredIds(stored).length) continue;
     const employer = c.company ? `${c.company} (${c.name})` : c.name;
     const url = conversationUrl(c.login);
     try {
@@ -48,13 +51,10 @@ export async function syncHabrChats(env: ChatEnv, user: User): Promise<void> {
         thread.id,
         detail.messages.map((m) => ({ hhMessageId: m.id, direction: m.mine ? ("out" as const) : ("in" as const), author: m.mine ? ("me" as const) : ("employer" as const), text: m.text, isQuestion: !m.mine && asksQuestion(m.text), answered: false })),
       );
-      // Habr's own «вы договорились о работе?» survey (kind question) is not the employer talking: only it is
-      // handled, a recruiter question before it still gets its reply.
-      if (lm.kind === "question") {
-        const all = env.store.listChatMessages(thread.id);
-        const survey = all.find((m) => m.hhMessageId === lm.id) ?? all.at(-1);
-        if (survey?.direction === "in" && !survey.answered) env.store.markAnswered([survey.id]);
-      }
+      env.store.setSetting(seenKey, lm.id);
+      // Habr's own «вы договорились о работе?» survey (kind question) is not the employer talking: only that
+      // message needs no reply, a recruiter's question before it still does.
+      if (lm.kind === "question") env.store.markAnswered(env.store.listChatMessages(thread.id).filter((m) => m.hhMessageId === lm.id).map((m) => m.id));
       const history = env.store.listChatMessages(thread.id);
       const fresh = history.filter((m) => m.direction === "in" && !m.answered);
       const handled = (why: string) => {

@@ -55,6 +55,7 @@ function fakeStore(over: Partial<Store> = {}): Store {
     hasRecentApplicationByDedup: () => false,
     countRecentApplicationsByCompany: () => 0,
     companyLockDirection: () => "",
+    lastApplication: () => null,
     ...over,
   } as unknown as Store;
 }
@@ -79,6 +80,13 @@ describe("classify: LLM-rejection re-ask skip", () => {
     const store = fakeStore();
     const c = classify(store, user, profile, vacancy(), opts(store));
     expect(c.kind).toBe("candidate");
+  });
+});
+
+describe("classify: already applied on the site", () => {
+  it("treats a vacancy the site marked as already applied like a sent one (no decide, no tailored CV again)", () => {
+    const store = fakeStore({ lastApplication: () => ({ status: Status.SKIP_ALREADY_APPLIED }) as never });
+    expect(classify(store, user, profile, vacancy(), opts(store))).toEqual({ kind: "sent" });
   });
 });
 

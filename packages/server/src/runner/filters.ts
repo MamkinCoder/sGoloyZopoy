@@ -80,6 +80,8 @@ export interface ClassifyOpts {
 
 export function classify(store: Store, user: User, profile: Profile, v: Vacancy, o: ClassifyOpts): Classification {
   if (store.hasSentApplication(user.id, v.id)) return { kind: "sent" };
+  // The site said we applied already (by hand, or a send whose confirm failed): no decide, no tailored CV again.
+  if (store.lastApplication(user.id, v.id)?.status === Status.SKIP_ALREADY_APPLIED) return { kind: "sent" };
   const word = containsWord(v.title, profile.exclude_words);
   if (word) return { kind: "skip", status: Status.SKIP_FILTER, detail: `exclude word: ${word}` };
   const blacklisted = containsAny(v.company, profile.company_blacklist);

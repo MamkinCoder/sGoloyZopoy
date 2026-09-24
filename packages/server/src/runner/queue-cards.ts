@@ -67,6 +67,7 @@ export async function handleQueueTap(store: Store, runner: Pick<RunService, "sta
     store.setSetting(PENDING, [...new Set([...readPending(store), cb.id])].join(","));
     return "⏳ бот занят, отправлю, как освободится";
   };
+  if (sendingNow(runner, cb.id)) return "🚀 уже отправляется"; // parked, it would resend after a failed confirm
   if (runner.active()) return park();
   try {
     await startSend(store, runner, cb.id, row.application.userId);
@@ -75,6 +76,13 @@ export async function handleQueueTap(store: Store, runner: Pick<RunService, "sta
     if (e instanceof RunBusyError) return park();
     throw e;
   }
+}
+
+/** A send:<id> run is starting (tap, panel or parked): taps parked before it are answered by it. Otherwise a
+ * failed confirm (the row stays QUEUED) would be followed by a second submit of the same form. */
+export function unparkSend(store: Pick<Store, "getSetting" | "setSetting">, id: number): void {
+  const ids = readPending(store);
+  if (ids.includes(id)) store.setSetting(PENDING, ids.filter((x) => x !== id).join(","));
 }
 
 /** Starts the oldest parked send while the runner is idle. Returns true when a run was started. */

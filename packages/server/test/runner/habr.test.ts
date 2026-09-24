@@ -144,6 +144,23 @@ describe("runHabrUser", () => {
     expect(String((t.alert.mock.calls[0] as unknown[])[0])).toContain("отклики заканчиваются");
   });
 
+  it("external-apply and archived vacancies are not fetched again on the next run, and not stored twice", async () => {
+    const t = setup([card("1"), card("2")], { states: { "1": { kind: "external" } } });
+    store.setSetting("habr_daily_limit", "5");
+    await t.run();
+    await t.run();
+    expect(t.habr.fetchVacancy.mock.calls.map((c) => (c[1] as { externalId: string }).externalId)).toEqual(["1", "2"]);
+    expect(t.statuses()).toEqual(["1:SKIP_FILTER", "2:SENT"]);
+  });
+
+  it("a response sent without the letter is stored without it (the employer never got that letter)", async () => {
+    const t = setup([card("1")]);
+    t.habr.apply.mockImplementation(async () => ({ status: Status.SENT, reasonDetail: "sent, letter NOT saved", responsesLeft: 100 }));
+    await t.run();
+    const row = store.listApplications({ userId: t.user.id, page: 1, pageSize: 10 }).items[0]!;
+    expect(row.application).toMatchObject({ status: Status.SENT, coverLetter: "" });
+  });
+
   it("dry run applies nothing for real and keeps the budget", async () => {
     const t = setup([card("1")]);
     t.habr.apply.mockImplementation(async () => ({ status: Status.SKIP_DRY_RUN, reasonDetail: "dry run", responsesLeft: 100 }));

@@ -112,6 +112,9 @@ async function searchStage(ctx: RunContext, u: UserRun, habr: HabrClient, budget
           if (!ctx.store.hasSentApplication(user.id, vacancy.id)) recordSkip(ctx.store, newApp(ctx, user.id, vacancy.id, Status.SKIP_ALREADY_APPLIED, "Habr listing: already responded"));
           continue;
         }
+        // Archived and external-apply stay that way: don't re-fetch them every run (they would crowd out new ones).
+        const last = ctx.store.lastApplication(user.id, vacancy.id);
+        if (last && (last.status === Status.SKIP_ARCHIVED || (last.status === Status.SKIP_FILTER && last.reasonDetail.startsWith("response kind")))) continue;
         // Cross-source: the dedup hash is company+title, so a job already sent on hh (or queued on a site) is skipped here.
         const c = classify(ctx.store, user, profile, vacancy, opts);
         if (c.kind === "sent") continue;
@@ -155,7 +158,7 @@ async function fetchStage(ctx: RunContext, u: UserRun, habr: HabrClient, candida
         : null;
       if (skip) {
         stats.record(skip[0]);
-        ctx.store.insertApplication(newApp(ctx, user.id, v.id, skip[0], skip[1]));
+        recordSkip(ctx.store, newApp(ctx, user.id, v.id, skip[0], skip[1]));
         ctx.log.info("fetch", `${v.title} @ ${v.company}: ${skip[0]}${skip[1] ? ` (${skip[1]})` : ""}`);
       } else out.push({ ...c, vacancy: v });
     } catch (e) {
@@ -192,7 +195,9 @@ async function applyStage(ctx: RunContext, u: UserRun, habr: HabrClient, approve
     const s = await ctx.browser.openHabr(user);
     try {
       const r = await habr.apply(s, { vacancy, coverLetter: decision.cover_letter, dryRun: ctx.req.dryRun });
-      ctx.store.insertApplication({ ...newApp(ctx, user.id, vacancy.id, r.status, r.reasonDetail), coverLetter: decision.cover_letter, llmDecision: decision, direction: decision.direction });
+      // A SENT row carries the letter only when Habr saved it: the panel and the lessons read it as delivered.
+      const coverLetter = r.status === Status.SENT && r.reasonDetail !== "sent with letter" ? "" : decision.cover_letter;
+      ctx.store.insertApplication({ ...newApp(ctx, user.id, vacancy.id, r.status, r.reasonDetail), coverLetter, llmDecision: decision, direction: decision.direction });
       stats.record(r.status, vacancy);
       if ((r.status === Status.SENT || r.status === Status.SKIP_DRY_RUN) && companyKey) tracker.reserve(companyKey, decision.direction);
       if (r.status === Status.SENT) budget--;

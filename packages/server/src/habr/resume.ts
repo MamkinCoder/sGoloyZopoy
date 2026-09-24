@@ -7,7 +7,7 @@
 //   /profile/personal/edit   #user_about (redactor: hidden textarea + .redactor-in contenteditable)
 //   /profile/experiences     /profile/experiences/<id>/edit → #experience_description (redactor)
 import type { BrowserSession, Profile } from "@sgz/shared";
-import { claimRegex } from "../llm/guards.js";
+import { claimRegex, stripNeverClaimSentences } from "../llm/guards.js";
 import { HABR_ORIGIN, extractSsrState, loginFromHeader, parseExperiences, parseResumeState, type HabrResumeState } from "./state.js";
 
 export const MAX_SKILLS = 30;
@@ -56,17 +56,26 @@ export function guardProposal(p: HabrResumeProposal, allowed: string[], profile:
     }
     skills.push(s);
   }
+  // Free text claims too: a never_claim skill in «о себе» or a job description loses its sentence.
+  const clean = (text: string, where: string): string => {
+    const t = stripNeverClaimSentences(text.trim(), profile.never_claim_skills);
+    if (t !== text.trim()) notes.push(`guard: из «${where}» убраны предложения с навыками из never_claim`);
+    return t;
+  };
   const known = new Set(habrCompanies.map((c) => c.trim().toLowerCase()));
-  const experiences = (p.experiences ?? []).filter((e) => {
-    const hit = known.has(e.company.trim().toLowerCase());
-    if (!hit) notes.push(`guard: опыт «${e.company}» убран - такого места работы нет в профиле на Хабре`);
-    return hit && e.description.trim();
-  });
+  const experiences = (p.experiences ?? [])
+    .filter((e) => {
+      const hit = known.has(e.company.trim().toLowerCase());
+      if (!hit) notes.push(`guard: опыт «${e.company}» убран - такого места работы нет в профиле на Хабре`);
+      return hit;
+    })
+    .map((e) => ({ ...e, description: clean(e.description, `опыт ${e.company}`) }))
+    .filter((e) => e.description);
   return {
     title: p.title.trim().slice(0, MAX_TITLE),
     specializations: [...new Set(p.specializations ?? [])].filter((id) => id in SPECIALIZATIONS).slice(0, 2),
     qualification: p.qualification in QUALIFICATIONS ? p.qualification : "Middle",
-    about: p.about.trim(),
+    about: clean(p.about, "о себе"),
     skills: skills.slice(0, MAX_SKILLS),
     experiences,
     notes,
@@ -75,25 +84,32 @@ export function guardProposal(p: HabrResumeProposal, allowed: string[], profile:
 
 /**
  * Maps skill names to Habr's skill dictionary titles (public GET /api/frontend/suggestions/skills?term=),
- * exact or alias match only (Go → Golang). Unknown names come back in `missing`; the order is kept.
+ * exact, alias (Go → Golang) or a narrower title (REST API → REST). Unknown names come back in `missing`, and
+ * names Habr only has in a wider title (SQL → Microsoft SQL Server) in `wider`: that title is a different,
+ * unverified claim, so it is only suggested. Runs after guardProposal: the titles are checked against
+ * never_claim_skills again by the caller. The order is kept.
  */
-export async function resolveHabrSkills(names: string[], get: (url: string) => Promise<{ list?: { title: string }[] }>): Promise<{ skills: string[]; missing: string[] }> {
+export async function resolveHabrSkills(names: string[], get: (url: string) => Promise<{ list?: { title: string }[] }>): Promise<{ skills: string[]; missing: string[]; wider: { name: string; title: string }[] }> {
   const skills: string[] = [];
   const missing: string[] = [];
+  const wider: { name: string; title: string }[] = [];
   for (const name of names) {
     const term = SEARCH_AS[norm(name)] ?? name;
     const r = await get(`${HABR_ORIGIN}/api/frontend/suggestions/skills?term=${encodeURIComponent(term)}`).catch(() => ({ list: [] }));
     const list = r.list ?? [];
     const w = words(term);
-    // Exact, then alias (Go ~ Golang), then whole-word containment either way (Kafka ~ Apache Kafka, REST API ~ REST).
+    // Exact, then alias (Go ~ Golang), then a title whose words are all in the name (REST API ~ REST).
     const hit =
       list.find((x) => x.title.toLowerCase() === term.toLowerCase()) ??
       list.find((x) => canon(x.title) === canon(name)) ??
-      list.find((x) => within(words(x.title), w) || within(w, words(x.title)));
-    if (!hit) missing.push(name);
-    else if (!skills.includes(hit.title)) skills.push(hit.title);
+      list.find((x) => within(words(x.title), w));
+    const wide = hit ? undefined : list.find((x) => within(w, words(x.title)));
+    if (hit) {
+      if (!skills.includes(hit.title)) skills.push(hit.title);
+    } else if (wide) wider.push({ name, title: wide.title });
+    else missing.push(name);
   }
-  return { skills, missing };
+  return { skills, missing, wider };
 }
 
 /** Human-readable proposal for the terminal / the orchestrator. */
@@ -156,6 +172,31 @@ const submitFormOf = (selector: string): string => `(() => {
   btn.click();
   return true;
 })()`;
+
+/** The experience edit form is data-remote (rails-ujs adds the CSRF header) and Habr's hh-imported jobs have its
+ * required specialization/qualification blank: posted as is it fails silently. This posts it itself, fills
+ * only the blank required fields, and returns the server's answer. */
+export const saveExperienceJs = (id: string, html: string, spec: string, qual: string): string => `(async () => {
+  const f = document.querySelector("#edit_experience_" + ${JSON.stringify(id)});
+  if (!f) return { status: 0, body: "no form", filled: [] };
+  const fd = new FormData(f);
+  fd.set("experience[description]", ${JSON.stringify(html)});
+  const filled = [];
+  if (!fd.get("experience[specialization_id]")) { fd.set("experience[specialization_id]", ${JSON.stringify(spec)}); filled.push("specialization"); }
+  if (!fd.get("experience[qualification_id]")) { fd.set("experience[qualification_id]", ${JSON.stringify(qual)}); filled.push("qualification"); }
+  const token = document.querySelector("meta[name=csrf-token]");
+  const r = await fetch(f.action, { method: "POST", body: fd, credentials: "include", headers: { "X-CSRF-Token": token ? token.content : "", "X-Requested-With": "XMLHttpRequest", Accept: "text/javascript, application/json" } });
+  return { status: r.status, body: (await r.text()).slice(0, 300), filled };
+})()`;
+
+/** A 2xx answer without Rails' validation markup. */
+export const experienceSaved = (r: { status: number; body: string }): boolean =>
+  r.status >= 200 && r.status < 300 && !/error|ошибк|не может быть пуст|can't be blank/i.test(r.body);
+
+const sameStart = (a: string, b: string): boolean => {
+  const n = (s: string) => s.replace(/\s+/g, " ").trim().slice(0, 40);
+  return n(a) === n(b);
+};
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -220,13 +261,12 @@ export async function writeHabrProfile(s: BrowserSession, p: HabrResumeProposal,
       continue;
     }
     await s.goto(`${HABR_ORIGIN}/profile/experiences/${target.id}/edit`);
-    if (!(await s.evaluate<boolean>(setRedactorJs("#experience_description", toRedactorHtml(e.description))))) {
-      out.push(`опыт «${e.company}»: поле описания не найдено`);
-      continue;
-    }
-    await s.evaluate(submitFormOf("#experience_description"));
+    const spec = String(p.specializations[0] ?? 4);
+    const qual = String(QUALIFICATIONS[p.qualification]);
+    const r = (await s.evaluate<{ status: number; body: string; filled: string[] } | null>(saveExperienceJs(target.id, toRedactorHtml(e.description), spec, qual))) ?? { status: 0, body: "no result", filled: [] };
+    const filled = r.filled.length ? ` (пустые обязательные поля заполнены: ${r.filled.map((f) => (f === "qualification" ? `квалификация ${p.qualification}` : `специализация ${SPECIALIZATIONS[Number(spec)] ?? spec}`)).join(", ")})` : "";
+    out.push(experienceSaved(r) ? `опыт «${e.company}»: отправлено${filled}` : `опыт «${e.company}»: НЕ сохранено (HTTP ${r.status}: ${r.body.replace(/\s+/g, " ").slice(0, 160)})`);
     await sleep(settleMs);
-    out.push(`опыт «${e.company}»: сохранено`);
   }
 
   // Verify from the public resume page.
@@ -234,5 +274,9 @@ export async function writeHabrProfile(s: BrowserSession, p: HabrResumeProposal,
   const now = parseResumeState(extractSsrState(await s.html()));
   const aboutOk = now.about.slice(0, 40) === p.about.replace(/\s+/g, " ").trim().slice(0, 40) || now.about.includes(p.about.split("\n")[0]!.slice(0, 40));
   out.push(`проверка: о себе ${aboutOk ? "совпадает" : "НЕ совпадает"}, навыков ${now.skills.length}, мест работы ${now.companies.length}`);
+  for (const e of p.experiences) {
+    const c = now.companies.find((x) => x.title.trim().toLowerCase() === e.company.trim().toLowerCase());
+    if (c) out.push(`проверка: опыт «${e.company}» ${sameStart(c.description, e.description) ? "совпадает" : "НЕ совпадает"}`);
+  }
   return out;
 }

@@ -5,8 +5,9 @@ import { createContext } from "./context.js";
 import type { RunnerDeps } from "./deps.js";
 import { EventHub } from "./hub.js";
 import { createRunLogger } from "./logger.js";
+import { ROTATE_MAX_MS } from "./career.js";
 import { aggregate, runPipeline, sendReports } from "./pipeline.js";
-import { errMessage } from "./util.js";
+import { errMessage, repeatFailure } from "./util.js";
 
 interface Active {
   run: Run;
@@ -32,27 +33,13 @@ export function maxRunMs(req: Pick<RunRequest, "stage">, override: string | null
   if (override && Number.isFinite(o) && o > 0) return o * 60_000;
   const st = req.stage ?? "";
   if (st === "touch") return 20 * 60_000;
-  if (st === "rotate" || /^(send|inspect|retailor|force):/.test(st)) return 30 * 60_000;
+  if (st === "rotate") return ROTATE_MAX_MS; // runSite stops queueing at ROTATE_QUEUE_MS, well before this
+  if (/^(send|inspect|retailor|force):/.test(st)) return 30 * 60_000;
   return 150 * 60_000;
 }
 
 /** After the watchdog aborts, a wedged await that never reaches checkAbort gets this long before the runner moves on. */
 export const WATCHDOG_GRACE_MS = 60_000;
-
-const BACKGROUND_STAGES = new Set(["rotate", "touch"]);
-const REPEAT_ALERT_MS = 3 * 3600_000;
-
-/** Autopilot runs repeat every few minutes: the same failure (e.g. an expired hh login) is reported
- * once per 3h instead of on every poll. Manual and full runs always report. Digits are ignored so
- * "run #51"/timings don't make the same error look new. */
-export function repeatFailure(store: Pick<RunnerDeps["store"], "getSetting" | "setSetting">, req: RunRequest, error: string, now: Date): boolean {
-  if (req.trigger !== "schedule" || !BACKGROUND_STAGES.has(req.stage ?? "")) return false;
-  const key = `alert_last:${error.replace(/\d+/g, "#").slice(0, 80)}`;
-  const last = Date.parse(store.getSetting(key) ?? "");
-  if (Number.isFinite(last) && now.getTime() - last < REPEAT_ALERT_MS) return true;
-  store.setSetting(key, now.toISOString());
-  return false;
-}
 
 export function createRunner(deps: RunnerDeps): Runner {
   const hub = new EventHub();

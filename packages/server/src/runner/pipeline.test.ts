@@ -1,5 +1,59 @@
-import { describe, expect, it } from "vitest";
-import { planCareer, planHabr, planHH } from "./pipeline.js";
+import { describe, expect, it, vi } from "vitest";
+import { RunAbortError, Status, type RunRequest } from "@sgz/shared";
+import type { RunContext } from "./context.js";
+import { planCareer, planHabr, planHH, runPipeline } from "./pipeline.js";
+
+const calls: string[] = [];
+let hhError: Error | null = null;
+let careerError: Error | null = null;
+vi.mock("./hh.js", () => ({ runHHUser: async () => (calls.push("hh"), hhError && Promise.reject(hhError)) }));
+vi.mock("./habr.js", () => ({ runHabrUser: async () => void calls.push("habr") }));
+vi.mock("./career.js", () => ({ runCareerUser: async () => (calls.push("career"), careerError && Promise.reject(careerError)) }));
+
+function pipelineCtx(req: Partial<RunRequest>) {
+  const settings = new Map<string, string>();
+  const alert = vi.fn(async () => {});
+  const ctx = {
+    req: { userSlug: "y", source: "all", dryRun: false, limit: 0, trigger: "schedule", ...req } as RunRequest,
+    store: {
+      getUserBySlug: () => ({ id: 1, slug: "y", name: "Y" }),
+      getProfile: () => ({}),
+      getSetting: (k: string) => settings.get(k) ?? null,
+      setSetting: (k: string, v: string) => void settings.set(k, v),
+    },
+    deps: { habr: {}, notifier: { alert } },
+    log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    run: { id: 7 },
+    now: () => new Date("2026-09-24T10:00:00Z"),
+    checkAbort: () => {},
+    browser: { close: async () => {} },
+  } as unknown as RunContext;
+  return { ctx, alert };
+}
+
+describe("runPipeline error containment", () => {
+  it("the daily run still does Habr when hh fails, then reports the hh failure", async () => {
+    calls.length = 0;
+    hhError = new RunAbortError(Status.FAILED_LOGIN_EXPIRED, "hh login expired");
+    const { ctx, alert } = pipelineCtx({});
+    const r = await runPipeline(ctx);
+    hhError = null;
+    expect(calls).toEqual(["hh", "habr"]);
+    expect(r).toMatchObject({ status: "stopped", error: expect.stringContaining("FAILED_LOGIN_EXPIRED") });
+    expect(alert).toHaveBeenCalledTimes(1);
+  });
+
+  it("an autopilot chunk failing the same way alerts once, not on every chunk", async () => {
+    calls.length = 0;
+    careerError = new RunAbortError(Status.FAILED_LOW_MEMORY, "MemAvailable 150 MB");
+    const { ctx, alert } = pipelineCtx({ source: "career", stage: "rotate" });
+    await runPipeline(ctx);
+    await runPipeline(ctx);
+    careerError = null;
+    expect(calls).toEqual(["career", "career"]);
+    expect(alert).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("run planning", () => {
   it("keeps pool commands isolated from apply/search stages", () => {
