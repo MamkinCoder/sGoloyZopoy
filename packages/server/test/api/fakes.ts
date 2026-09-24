@@ -227,6 +227,9 @@ export class FakeStore implements Store {
   listChatThreads(userId: number, state?: string) {
     return this.threads.filter((t) => t.userId === userId && (!state || t.state === state));
   }
+  getChatThread(id: number) {
+    return this.threads.find((t) => t.id === id) ?? null;
+  }
   insertChatMessages(threadId: number, msgs: NewChatMessage[]) {
     for (const m of msgs) this.messages.push({ ...m, id: this.nextId(), threadId, createdAt: nowISO() });
     return msgs.length;

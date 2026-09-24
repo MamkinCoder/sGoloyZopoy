@@ -32,6 +32,7 @@ type ChatsRepo = Pick<
   Store,
   | "upsertChatThread"
   | "listChatThreads"
+  | "getChatThread"
   | "insertChatMessages"
   | "listChatMessages"
   | "markAnswered"
@@ -97,6 +98,10 @@ export function chatsRepo(s: Sql): ChatsRepo {
           )
         : s.all("SELECT * FROM chat_threads WHERE user_id = ? ORDER BY last_seen_at DESC, id DESC", userId);
       return rows.map(mapThread);
+    },
+    getChatThread(id) {
+      const r = s.get("SELECT * FROM chat_threads WHERE id = ?", id);
+      return r ? mapThread(r as Row) : null;
     },
     insertChatMessages(threadId, msgs) {
       return s.transaction(() => {

@@ -22,7 +22,7 @@ interface MockState {
   at: string; // last activity, ISO
 }
 
-type MockStore = Pick<Store, "getSetting" | "setSetting" | "listUsers" | "listChatThreads" | "getVacancy" | "getProfile">;
+type MockStore = Pick<Store, "getSetting" | "setSetting" | "listUsers" | "listChatThreads" | "getChatThread" | "getVacancy" | "getProfile">;
 
 const key = (chatId: string) => `mock:${chatId}`;
 const busy = new Set<string>();
@@ -82,7 +82,7 @@ export function stopMock(store: MockStore, chatId: string, now: Date): string {
 
 function llmInputs(store: MockStore, st: MockState) {
   const profile = store.getProfile(st.userId);
-  const thread = store.listChatThreads(st.userId).find((t) => t.id === st.threadId);
+  const thread = store.getChatThread(st.threadId);
   const vacancy = thread?.vacancyId != null ? store.getVacancy(thread.vacancyId) : null;
   return {
     never_claim: profile ? neverClaimList(profile) : "(список пуст)",

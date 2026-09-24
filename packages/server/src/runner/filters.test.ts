@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { companyKey, Status, type Profile, type Store, type User, type Vacancy } from "@sgz/shared";
-import { classify, createRunCompanyTracker, recordSkip, titleScore, type CompanyLimitSettings } from "./filters.js";
+import { classify, companyQuotaSkip, createRunCompanyTracker, filterOpts, recordSkip, titleScore, type CompanyLimitSettings } from "./filters.js";
 
 describe("companyKey normalization", () => {
   const cases: [string, string][] = [
@@ -169,5 +169,33 @@ describe("titleScore", () => {
     const titles = ["C#-разработчик, Ozon fresh", "Data Scientist", "Go-разработчик, Платформа", "Backend-разработчик (Golang)"];
     const ranked = [...titles].sort((a, b) => titleScore(b, p) - titleScore(a, p));
     expect(ranked).toEqual(["Backend-разработчик (Golang)", "Go-разработчик, Платформа", "Data Scientist", "C#-разработчик, Ozon fresh"]);
+  });
+});
+
+describe("filterOpts / companyQuotaSkip", () => {
+  const settings = (m: Record<string, string>) => ({ getSetting: (k: string) => m[k] ?? null });
+  const now = () => new Date("2026-09-24T00:00:00Z");
+
+  it("builds the windows from the settings, the dedup fallback per caller", () => {
+    const t = createRunCompanyTracker();
+    const o = filterOpts({ store: fakeStore(settings({ company_limit_window_days: "10", reject_window_days: "5" })), now }, t, 60);
+    expect(o).toEqual({
+      dedupSinceISO: "2026-07-26T00:00:00.000Z",
+      rejectSinceISO: "2026-09-19T00:00:00.000Z",
+      company: { maxSent: 10, windowDays: 10, personaLockEnabled: true },
+      companySinceISO: "2026-09-14T00:00:00.000Z",
+      runTracker: t,
+    });
+  });
+
+  it("counts the DB window plus this run's reservations; no key or limit 0 never skips", () => {
+    const t = createRunCompanyTracker();
+    const store = fakeStore({ ...settings({ company_limit_max: "2" }), countRecentApplicationsByCompany: () => 1 });
+    const o = filterOpts({ store, now }, t);
+    expect(companyQuotaSkip(store, 1, "ozon", o)).toBeNull();
+    t.reserve("ozon", "");
+    expect(companyQuotaSkip(store, 1, "ozon", o)).toBe("company limit reached: 2/2 sent in 30d");
+    expect(companyQuotaSkip(store, 1, "", o)).toBeNull();
+    expect(companyQuotaSkip(store, 1, "ozon", { ...o, company: { ...o.company, maxSent: 0 } })).toBeNull();
   });
 });

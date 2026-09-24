@@ -9,7 +9,7 @@ import { ensureVacancy, skeletonVacancy } from "../../runner/filters.js";
 import { alertWithStudy } from "../../runner/study.js";
 import { errMessage } from "../../runner/util.js";
 import type { ChatEnv } from "./env.js";
-import { closeTask, reconcileThread, unansweredIds } from "./tasks.js";
+import { reconcileThread, settleThread } from "./tasks.js";
 import { kbForVacancy } from "../../kb/context.js";
 import { renderQuestions } from "../../llm/format.js";
 
@@ -101,11 +101,6 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
       });
       const inserted = env.store.insertChatMessages(thread.id, detail.messages);
       let history = env.store.listChatMessages(thread.id);
-      const handled = (why: string) => {
-        const open = env.store.openChatTask(thread.id);
-        if (open && open.state !== "sending") closeTask(env, open, why);
-        env.store.markAnswered(unansweredIds(env.store.listChatMessages(thread.id)));
-      };
       if (detail.thread.state === "invited" && prev?.state !== "invited") {
         env.log.info("chats", `${t.employer}: INVITATION`, { thread_id: thread.id });
         const vtitle = vacancy?.title ? ` (${vacancy.title})` : "";
@@ -119,14 +114,14 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
         // The thread is stored rejected already: a failed feedback request must still mark the rejection
         // handled, or the next sync forwards the rejection itself as «Фидбек».
         await askFeedback(env, s, t.chatUrl, t.employer, thread.id, detail.writable).catch((e: unknown) => env.log.warn("chats", `${t.employer}: feedback request not sent: ${errMessage(e)}`, { thread_id: thread.id }));
-        handled("отказ");
+        settleThread(env, thread.id, "отказ");
         continue;
       }
       if (prev?.state === "rejected") {
         // Anything the employer writes after a rejection is feedback: forward it, never auto-reply.
         const fresh = history.filter((m) => m.direction === "in" && !m.answered);
         if (fresh.length) await env.notifier.alert(`Фидбек от ${t.employer}`, `${user.name}: ${fresh.map((m) => m.text).join("\n\n")}\n${t.chatUrl}`).catch(() => undefined);
-        handled("отказ, фидбек переслан");
+        settleThread(env, thread.id, "отказ, фидбек переслан");
         continue;
       }
       // hh can keep a submitted questionnaire in the chat state: the same questions are answered once.
@@ -146,17 +141,17 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
       }
       if (prev?.state === "needs_human" && inserted === 0) {
         env.log.info("chats", `${t.employer}: still waiting for a human`, { thread_id: thread.id });
-        handled("ждёт человека"); // the human answers on hh; new messages reopen it
+        settleThread(env, thread.id, "ждёт человека"); // the human answers on hh; new messages reopen it
         continue;
       }
       if (detail.writable === false) {
         // hh closed this chat for the applicant (employer setting or no invitation): nothing can be sent.
-        handled("чат закрыт для сообщений");
+        settleThread(env, thread.id, "чат закрыт для сообщений");
         continue;
       }
       // Our message is the last one (answered by hand on the phone): nothing to reply.
       if (history.at(-1)?.direction === "out") {
-        handled("ответ уже есть в чате");
+        settleThread(env, thread.id, "ответ уже есть в чате");
         await env.throttle.afterRead();
         continue;
       }

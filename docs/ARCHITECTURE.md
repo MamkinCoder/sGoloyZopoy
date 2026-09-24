@@ -16,6 +16,14 @@ it in the same commit when reality forces a deviation.
 The planes never wait for each other. Batch runs no longer touch chats at all. The runner's `chats` slot
 (added 2026-09-24) is replaced by the agent.
 
+- As built (board adapters): hh and Habr Career are two `Board {search, fetch, send}` adapters
+  (`runner/hh.ts hhBoard`, `runner/habr.ts`) over one search -> classify -> fetch -> decide -> apply loop and one
+  `force:<id>` path in `runner/board.ts` (`runBoard`, `forceApply`). hh keeps its stages around it (pool sync,
+  viewers first, tailored copies inside its `send`, touch, pool expand); Habr's allowance throws `BoardExhausted`.
+  Per-board log texts and the small force differences (hh: memory guard, `was` detail, log line) are kept as they
+  were. Career sites stay separate (review queue, rotate); every source builds its classify options with
+  `filters.ts filterOpts` and re-checks the company quota with `companyQuotaSkip` (also used by `classify`).
+
 ## 2. The agent: a persistent job queue
 
 `sgz serve` starts `createAgent(deps)`; it owns a loop and a handler registry.
@@ -113,6 +121,10 @@ task: instant, restart-proof, independent of any run.
   confirms by the text's first 60 chars or fails to the human; after a successful `sendMessage` a page copy
   that does not match exactly is only logged. Closing or failing a task expires its KB reviews; `kbText` also
   drops a «Дополнить» wait nothing waits for any more.
+- Board adapters: `tasks.ts chatBoard(env, thread)` is the thread's site (`open / read / send / url`, Habr by the
+  `habr:` key prefix), so `chats.send` and the alert links never branch on the site; `habrPageMessage` is the one
+  Habr-message mapping, `settleThread` the one "nothing to send" close used by both syncs. Threads are read by id
+  with `Store.getChatThread`.
 - The re-sync after a send is the normal full `chats.sync` pulled to +30 s (key dedupe), not a per-thread sync:
   unchanged threads cost one list read.
 - hh chat-bot surveys (the questionnaire widget) are still answered inside `chats.sync` (one LLM call inside a

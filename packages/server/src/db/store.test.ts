@@ -388,6 +388,8 @@ describe("chats", () => {
     expect(store.listChatThreads(u.id, "invited")).toHaveLength(1);
     expect(store.listChatThreads(u.id, "new")).toHaveLength(0);
     expect(store.listChatThreads(u.id)).toHaveLength(1);
+    expect(store.getChatThread(t.id)).toEqual(store.listChatThreads(u.id)[0]);
+    expect(store.getChatThread(t.id + 1)).toBeNull();
 
     const n = store.insertChatMessages(t.id, [
       { hhMessageId: "m1", direction: "in", author: "bot", text: "Q1?", isQuestion: true, answered: false },

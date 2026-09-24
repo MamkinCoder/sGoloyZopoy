@@ -88,7 +88,7 @@ function topicLines(v: TopicView, max: number): string {
 
 export function kbReviewGate(store: ChatStore, notifier: Pick<Notifier, "ask" | "alert">, now: () => Date = () => new Date()): ReviewGate {
   const iso = () => now().toISOString();
-  const thread = (task: ChatTask) => store.listChatThreads(task.userId).find((t) => t.id === task.threadId) ?? null;
+  const thread = (task: ChatTask) => store.getChatThread(task.threadId);
   const asked = (task: ChatTask) =>
     store
       .listChatMessages(task.threadId)

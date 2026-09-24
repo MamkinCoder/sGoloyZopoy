@@ -1,7 +1,6 @@
 // Chat job kinds of the always-on agent and their schedule. Every task job is keyed by the task id.
 import type { Job } from "@sgz/shared";
 import { sendInterviewPrep } from "../../runner/interview.js";
-import { findThread } from "../../runner/study.js";
 import { errMessage } from "../../runner/util.js";
 import type { JobHandler, Schedule } from "../queue.js";
 import type { ChatEnv } from "./env.js";
@@ -52,7 +51,7 @@ export function chatHandlers(env: ChatEnv): Record<string, JobHandler> {
       needs: "llm",
       leaseMs: 15 * 60_000,
       async run(job) {
-        const thread = findThread(env.store, Number(job.payload.threadId));
+        const thread = env.store.getChatThread(Number(job.payload.threadId));
         if (thread) await sendInterviewPrep(env, thread, String(job.payload.invitation ?? ""));
       },
     },

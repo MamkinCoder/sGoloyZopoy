@@ -7,8 +7,8 @@ import { dailyBudget } from "./budget.js";
 import { atsClientFor } from "../career/ats/index.js";
 import { manualApplyOnly } from "../career/agent.js";
 import type { RunContext } from "./context.js";
-import { classify, titleScore, companyLimitSettings, createRunCompanyTracker, dedupWindowDays, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
-import { newApp } from "./hh.js";
+import { newApp } from "./board.js";
+import { classify, companyQuotaSkip, createRunCompanyTracker, ensureVacancy, filterOpts, isoDaysAgo, recordSkip, settingInt, skeletonVacancy, titleScore, type RunCompanyTracker } from "./filters.js";
 import { decideExtras, readLessons } from "./learn.js";
 import { kbBrief, kbForVacancy, withKbNever } from "../kb/context.js";
 import { renderQuestions } from "../llm/format.js";
@@ -75,13 +75,6 @@ export function careerRotation(store: RunContext["store"], user: UserRun["user"]
   return { sites, budget };
 }
 
-/** A non-negative number setting; "0" is honoured, missing / empty / invalid -> def. */
-function settingNum(ctx: RunContext, key: string, def: number): number {
-  const raw = ctx.store.getSetting(key);
-  const n = Number(raw);
-  return raw !== null && raw.trim() !== "" && Number.isFinite(n) && n >= 0 ? n : def;
-}
-
 export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPlan): Promise<void> {
   const { user } = u;
   const career = ctx.deps.career;
@@ -100,7 +93,7 @@ export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPla
   if (plan.rotate) {
     const r = careerRotation(ctx.store, user, ctx.cfg.tz, ctx.now());
     if (r.budget <= 0) return ctx.log.info("discover", "career: daily limit reached, nothing to rotate");
-    const n = Math.max(1, settingNum(ctx, "career_sites_per_run", 1)); // 0 would start empty chunks every minute
+    const n = Math.max(1, settingInt(ctx.store, "career_sites_per_run", 1)); // 0 would start empty chunks every minute
     sites = r.sites.slice(0, n);
   }
   if (!sites.length) {
@@ -157,7 +150,7 @@ export async function runCareerUser(ctx: RunContext, u: UserRun, plan: CareerPla
     try {
       // Spread wide: at most career_per_site vacancies per site per run.
       // Job boards (Habr Career) list hundreds of employers: a bigger share than one company's site.
-      const perSite = atsClientFor(site.ats as ATSKind)?.aggregator ? settingNum(ctx, "career_per_aggregator", 8) : settingNum(ctx, "career_per_site", 3);
+      const perSite = atsClientFor(site.ats as ATSKind)?.aggregator ? settingInt(ctx.store, "career_per_aggregator", 8) : settingInt(ctx.store, "career_per_site", 3);
       const cap = Math.min(budget, perSite);
       budget -= cap - (await runSite(ctx, u, site, cap, plan.apply, companyTracker));
       if (markVisit) ctx.store.setSetting(siteFailKey(site.id), "0");
@@ -177,14 +170,11 @@ async function runSite(ctx: RunContext, u: UserRun, site: CareerSite, budget: nu
   stats.found(discovered.length);
   ctx.log.info("discover", `${site.name}: ${discovered.length} vacancies`, { site_id: site.id, found: discovered.length });
 
-  const dedupSince = isoDaysAgo(ctx.now(), dedupWindowDays(ctx.store, 60));
-  const rejectSince = isoDaysAgo(ctx.now(), rejectWindowDays(ctx.store, 30));
-  const company = companyLimitSettings(ctx.store);
-  const companySince = isoDaysAgo(ctx.now(), company.windowDays);
+  const o = filterOpts(ctx, companyTracker, 60);
   const candidates: { d: Discovered; vacancy: Vacancy; companyKey: string; lockedDirection: string }[] = [];
   for (const d of discovered) {
     const vacancy = ensureVacancy(ctx.store, skeletonVacancy(site.slug, d.externalId, d.url, d.title, d.company || site.name));
-    const c = classify(ctx.store, user, profile, vacancy, { dedupSinceISO: dedupSince, rejectSinceISO: rejectSince, company, companySinceISO: companySince, runTracker: companyTracker });
+    const c = classify(ctx.store, user, profile, vacancy, o);
     if (c.kind === "sent") continue;
     if (c.kind === "skip") {
       if (c.status === Status.SKIP_DEDUP) stats.deduped();
@@ -251,19 +241,17 @@ async function runSite(ctx: RunContext, u: UserRun, site: CareerSite, budget: nu
     }
     // Re-check right before tailoring/sending: earlier vacancies this run may have already used up
     // the company's quota, or locked it to a different CV direction.
-    if (companyKey && company.maxSent > 0) {
-      const total = ctx.store.countRecentApplicationsByCompany(user.id, companyKey, companySince) + companyTracker.count(companyKey);
-      if (total >= company.maxSent) {
-        stats.record(Status.SKIP_COMPANY_LIMIT);
-        ctx.store.insertApplication(newApp(ctx, user.id, vacancy.id, Status.SKIP_COMPANY_LIMIT, `company limit reached: ${total}/${company.maxSent} sent in ${company.windowDays}d`));
-        continue;
-      }
+    const full = companyQuotaSkip(ctx.store, user.id, companyKey, o);
+    if (full) {
+      stats.record(Status.SKIP_COMPANY_LIMIT);
+      ctx.store.insertApplication(newApp(ctx, user.id, vacancy.id, Status.SKIP_COMPANY_LIMIT, full));
+      continue;
     }
     if (ctx.req.stage === "rotate" && ctx.now().getTime() - Date.parse(ctx.run.startedAt) > ROTATE_QUEUE_MS) {
       ctx.log.info("tailor", `${site.name}: chunk time is up, ${vacancy.title} waits for the next visit`);
       continue;
     }
-    const effectiveLock = company.personaLockEnabled ? lockedDirection || companyTracker.lockedDirection(companyKey) : "";
+    const effectiveLock = o.company.personaLockEnabled ? lockedDirection || companyTracker.lockedDirection(companyKey) : "";
     const q = await queueVacancy(ctx, u, vacancy, effectiveLock, verdict.get(vacancy.id) ?? null);
     if (!q) continue;
     if (companyKey) companyTracker.reserve(companyKey, q.direction);

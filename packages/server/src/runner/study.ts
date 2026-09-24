@@ -117,15 +117,7 @@ export async function alertWithStudy(notifier: Notifier, title: string, body: st
   for (const [i, part] of parts.entries()) await notifier.ask(part, i === parts.length - 1 ? [studyButton(threadId)] : []);
 }
 
-type StudyStore = Pick<Store, "listUsers" | "listChatThreads" | "getVacancy" | "getProfile" | "setChatStudy" | "listKbTags" | "listKbStories">;
-
-export function findThread(store: Pick<Store, "listUsers" | "listChatThreads">, id: number): ChatThread | null {
-  for (const u of store.listUsers()) {
-    const t = store.listChatThreads(u.id).find((x) => x.id === id);
-    if (t) return t;
-  }
-  return null;
-}
+type StudyStore = Pick<Store, "listUsers" | "listChatThreads" | "getChatThread" | "getVacancy" | "getProfile" | "setChatStudy" | "listKbTags" | "listKbStories">;
 
 // ponytail: in-process registry, fine for one serve process; a restart forgets running builds (the tap is repeatable).
 const running = new Map<number, Promise<StudyPack>>();
@@ -139,7 +131,7 @@ export function startStudy(store: StudyStore, llm: LLMClient, threadId: number, 
   if (cur) return cur;
   failures.delete(threadId);
   const job = (async () => {
-    const t = findThread(store, threadId);
+    const t = store.getChatThread(threadId);
     const v = t?.vacancyId != null ? store.getVacancy(t.vacancyId) : null;
     const profile = t ? store.getProfile(t.userId) : null;
     if (!t || !v || !profile) throw new Error(!t ? "диалог не найден" : !v ? "у диалога нет вакансии" : "нет профиля");
@@ -162,7 +154,7 @@ export interface StudyDeps {
 
 /** Telegram tap / command: resend a fresh pack, or build one in the background. Returns the tap note. */
 export function studyTap(d: StudyDeps, cb: { threadId: number; regen: boolean }, now = new Date()): string {
-  const t = findThread(d.store, cb.threadId);
+  const t = d.store.getChatThread(cb.threadId);
   if (!t) return "диалог не найден";
   const warn = (e: unknown) => d.notifier.alert("📚 Чеклист не собрался", `${t.employer}: ${errMessage(e)}`).catch(() => undefined);
   if (t.study && !cb.regen && now.getTime() - Date.parse(t.study.at) < STUDY_TTL_MS) {

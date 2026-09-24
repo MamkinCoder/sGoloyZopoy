@@ -155,6 +155,7 @@ export interface Store {
   // chats
   upsertChatThread(t: Omit<ChatThread, "id"> & { id?: number }): ChatThread;
   listChatThreads(userId: number, state?: string): ChatThread[];
+  getChatThread(id: number): ChatThread | null;
   /** Dedup by hhMessageId when present, else by (thread, direction, text). Returns inserted count. */
   insertChatMessages(threadId: number, msgs: NewChatMessage[]): number;
   listChatMessages(threadId: number): ChatMessage[];

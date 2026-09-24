@@ -4,11 +4,10 @@
 // and Habr's own «вы договорились о работе?» survey are handled here too.
 import type { ChatMessage, User } from "@sgz/shared";
 import { conversationUrl } from "../../habr/state.js";
-import { asksQuestion } from "../../hh/state.js";
 import { errMessage } from "../../runner/util.js";
 import type { ChatEnv } from "./env.js";
 import { CHAT_TRACK_SINCE_DEFAULT } from "./hh.js";
-import { closeTask, reconcileThread, unansweredIds } from "./tasks.js";
+import { habrPageMessage, reconcileThread, settleThread, unansweredIds } from "./tasks.js";
 
 /** Chat threads of Habr conversations live next to hh ones, keyed "habr:<login>". */
 export const habrThreadKey = (login: string): string => `habr:${login}`;
@@ -47,35 +46,27 @@ export async function syncHabrChats(env: ChatEnv, user: User): Promise<void> {
         lastSeenAt: env.now().toISOString(),
         ...(prev ? { id: prev.id } : {}),
       });
-      env.store.insertChatMessages(
-        thread.id,
-        detail.messages.map((m) => ({ hhMessageId: m.id, direction: m.mine ? ("out" as const) : ("in" as const), author: m.mine ? ("me" as const) : ("employer" as const), text: m.text, isQuestion: !m.mine && asksQuestion(m.text), answered: false })),
-      );
+      env.store.insertChatMessages(thread.id, detail.messages.map(habrPageMessage));
       env.store.setSetting(seenKey, lm.id);
       // Habr's own «вы договорились о работе?» survey (kind question) is not the employer talking: only that
       // message needs no reply, a recruiter's question before it still does.
       if (lm.kind === "question") env.store.markAnswered(env.store.listChatMessages(thread.id).filter((m) => m.hhMessageId === lm.id).map((m) => m.id));
       const history = env.store.listChatMessages(thread.id);
       const fresh = history.filter((m) => m.direction === "in" && !m.answered);
-      const handled = (why: string) => {
-        const open = env.store.openChatTask(thread.id);
-        if (open && open.state !== "sending") closeTask(env, open, why);
-        env.store.markAnswered(unansweredIds(env.store.listChatMessages(thread.id)));
-      };
       if (invited && prev?.state !== "invited") {
         await env.notifier.alert(`🎉 Приглашение на Хабр Карьере: ${employer}`, `${user.name}: ${fresh.at(-1)?.text.slice(0, 800) ?? lm.text.slice(0, 800)}\n${url}`).catch(() => undefined);
       }
       if (!fresh.length || history.at(-1)?.direction === "out") {
-        handled("ответ не нужен");
+        settleThread(env, thread.id, "ответ не нужен");
         continue;
       }
       if (history[0]?.direction === "out") {
         await env.notifier.alert(`Хабр Карьера: сообщение от ${employer}`, `${user.name}: ${fresh.map((m) => m.text).join("\n\n").slice(0, 1500)}\n${url}`).catch(() => undefined);
-        handled("переписку начал соискатель: переслано в Telegram");
+        settleThread(env, thread.id, "переписку начал соискатель: переслано в Telegram");
         continue;
       }
       if (!detail.writable) {
-        handled("чат закрыт для сообщений");
+        settleThread(env, thread.id, "чат закрыт для сообщений");
         continue;
       }
       reconcileThread(env, thread, c.login);

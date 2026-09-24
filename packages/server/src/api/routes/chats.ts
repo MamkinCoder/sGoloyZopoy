@@ -50,25 +50,25 @@ export function chatRoutes({ store, llm, agent }: ApiDeps): Hono {
   r.put("/users/:slug/chats/:id/interview", async (c) => {
     const u = userOr404(store, c.req.param("slug"));
     const id = idParam(c);
-    if (!store.listChatThreads(u.id).some((t) => t.id === id)) throw notFound(`chat not found: ${id}`);
+    if (store.getChatThread(id)?.userId !== u.id) throw notFound(`chat not found: ${id}`);
     const b = await parseBody(c, InterviewSchema);
     store.setChatInterview(id, b.interview_at);
-    return c.json(store.listChatThreads(u.id).find((t) => t.id === id));
+    return c.json(store.getChatThread(id));
   });
 
   // Post-interview outcome (also tapped in Telegram): feeds the funnel and per-resume conversion.
   r.put("/users/:slug/chats/:id/outcome", async (c) => {
     const u = userOr404(store, c.req.param("slug"));
     const id = idParam(c);
-    if (!store.listChatThreads(u.id).some((t) => t.id === id)) throw notFound(`chat not found: ${id}`);
+    if (store.getChatThread(id)?.userId !== u.id) throw notFound(`chat not found: ${id}`);
     const b = await parseBody(c, OutcomeSchema);
     store.setInterviewOutcome(id, b.outcome);
-    return c.json(store.listChatThreads(u.id).find((t) => t.id === id));
+    return c.json(store.getChatThread(id));
   });
 
   const ownThread = (slug: string | undefined, id: number) => {
-    const t = store.listChatThreads(userOr404(store, slug).id).find((x) => x.id === id);
-    if (!t) throw notFound(`chat not found: ${id}`);
+    const t = store.getChatThread(id);
+    if (t?.userId !== userOr404(store, slug).id) throw notFound(`chat not found: ${id}`);
     return t;
   };
 

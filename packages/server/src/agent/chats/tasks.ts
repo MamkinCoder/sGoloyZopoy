@@ -5,8 +5,8 @@
 //   failed: a job exhausted its retries, or a send could not be confirmed (alerted per task by failTask)
 // Every step is a job keyed by the task id, reads the task from the DB and moves it with compare-and-set,
 // so repeats, restarts and a sync racing a draft are harmless.
-import { OPEN_TASK_STATES, tagIs, type ChatMessage, type ChatTask, type ChatThread, type ChatTopic, type KbBrief, type Profile, type Vacancy } from "@sgz/shared";
-import { conversationUrl } from "../../habr/state.js";
+import { OPEN_TASK_STATES, tagIs, type BrowserSession, type ChatMessage, type ChatTask, type ChatThread, type ChatTopic, type KbBrief, type Profile, type User, type Vacancy } from "@sgz/shared";
+import { conversationUrl, type HabrMessage } from "../../habr/state.js";
 import { kbBrief } from "../../kb/context.js";
 import { asksQuestion } from "../../hh/state.js";
 import { errMessage } from "../../runner/util.js";
@@ -20,7 +20,6 @@ export const FALLBACK_AFTER_MS = 12 * 3600_000;
 const KB_BUDGET = 3000;
 export const READY_FOOTER = "Все ответы есть, готовлю ответ работодателю.";
 
-export const isHabrThread = (t: Pick<ChatThread, "hhNegotiationId">): boolean => t.hhNegotiationId.startsWith("habr:");
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 export const unansweredIds = (msgs: ChatMessage[]): number[] => msgs.filter((m) => m.direction === "in" && !m.answered).map((m) => m.id);
@@ -31,11 +30,7 @@ const sameSkill = (env: ChatEnv, userId: number, t: string, name: string) => sam
 export const SEND_CLICKED = "отправка нажата, проверяю";
 const later = (env: ChatEnv, ms: number) => new Date(env.now().getTime() + ms);
 
-function threadOf(env: ChatEnv, task: Pick<ChatTask, "userId" | "threadId">): ChatThread | null {
-  return env.store.listChatThreads(task.userId).find((t) => t.id === task.threadId) ?? null;
-}
-
-const link = (thread: ChatThread, task: ChatTask) => (isHabrThread(thread) ? conversationUrl(task.target) : task.target);
+const link = (env: ChatEnv, thread: ChatThread, task: ChatTask) => chatBoard(env, thread).url(task.target);
 
 // ------------------------------------------------------------ opening tasks (called by chats.sync)
 
@@ -76,14 +71,21 @@ export function closeTask(env: ChatEnv, task: ChatTask, why: string): void {
   env.review.expire(task.id);
 }
 
+/** Nothing to send in this thread: its open task (unless being sent) closes, every employer message counts as handled. */
+export function settleThread(env: ChatEnv, threadId: number, why: string): void {
+  const open = env.store.openChatTask(threadId);
+  if (open && open.state !== "sending") closeTask(env, open, why);
+  env.store.markAnswered(unansweredIds(env.store.listChatMessages(threadId)));
+}
+
 /** A job of this task gave up: the task shows as failed in the panel, and every such task is alerted with its
  *  employer (the employer is left without a reply until the human answers by hand). */
 export async function failTask(env: ChatEnv, taskId: number, error: string): Promise<void> {
   if (!env.store.moveChatTask(taskId, OPEN_TASK_STATES as ChatTask["state"][], "failed", { lastError: error }, iso(env))) return;
   env.review.expire(taskId);
   const task = env.store.getChatTask(taskId);
-  const thread = task && threadOf(env, task);
-  await env.notifier.alert(`Не ответил работодателю: ${thread?.employer ?? ""}`, `Ответь сам. Ошибка: ${error}${thread && task ? `\n${link(thread, task)}` : ""}`).catch(() => undefined);
+  const thread = task && env.store.getChatThread(task.threadId);
+  await env.notifier.alert(`Не ответил работодателю: ${thread?.employer ?? ""}`, `Ответь сам. Ошибка: ${error}${thread && task ? `\n${link(env, thread, task)}` : ""}`).catch(() => undefined);
 }
 
 // ------------------------------------------------------------ chats.triage (llm)
@@ -146,7 +148,7 @@ export async function fallbackTask(env: ChatEnv, taskId: number): Promise<void> 
   if (!env.store.moveChatTask(task.id, "awaiting_review", "drafting", { topics }, iso(env))) return;
   env.review.expire(task.id);
   env.enqueue("chats.draft", { taskId: task.id }, { key: `draft:${task.id}` });
-  const thread = threadOf(env, task);
+  const thread = env.store.getChatThread(task.threadId);
   const unclaimed = pending.length ? ` Без заявлений о навыках: ${pending.join(", ")}.` : "";
   await env.notifier.alert(`Отвечаю без тебя: ${thread?.employer ?? ""}`, `12 часов без ответа по навыкам. Отвечу по базе знаний.${unclaimed}`).catch(() => undefined);
 }
@@ -205,7 +207,7 @@ const withYes = (p: Profile, topics: ChatTopic[]): Profile => {
 export async function draftTask(env: ChatEnv, taskId: number): Promise<void> {
   const task = env.store.getChatTask(taskId);
   if (!task || task.state !== "drafting") return;
-  const thread = threadOf(env, task);
+  const thread = env.store.getChatThread(task.threadId);
   if (!thread) throw new Error(`thread ${task.threadId} not found`);
   const history = env.store.listChatMessages(thread.id);
   const vacancy = thread.vacancyId === null ? null : env.store.getVacancy(thread.vacancyId);
@@ -236,17 +238,44 @@ export async function draftTask(env: ChatEnv, taskId: number): Promise<void> {
     // A reply can still go out (e.g. «да, пришлите тестовое»); the human is pinged either way. An invitation
     // stays invited: downgrading it would re-announce the invitation on the next sync.
     // Re-read: a chats.sync may have changed the thread (invitation, linked vacancy) during the LLM call.
-    const cur = threadOf(env, task);
+    const cur = env.store.getChatThread(task.threadId);
     if (cur && cur.state !== "invited" && cur.state !== "rejected") env.store.upsertChatThread({ ...cur, state: "needs_human" });
-    await env.notifier.alert(`Чат требует внимания: ${thread.employer}`, `${user?.name ?? ""}: ${last}\n\n${when}${text ? `Ответ бота: ${text}\n\n` : ""}${reply.reason}\n${link(thread, task)}`).catch(() => undefined);
+    await env.notifier.alert(`Чат требует внимания: ${thread.employer}`, `${user?.name ?? ""}: ${last}\n\n${when}${text ? `Ответ бота: ${text}\n\n` : ""}${reply.reason}\n${link(env, thread, task)}`).catch(() => undefined);
   } else if (interviewAt && interviewAt !== thread.interviewAt) {
-    await env.notifier.alert(`📅 Собеседование: ${thread.employer}`, `${user?.name ?? ""}: ${when}${link(thread, task)}`).catch(() => undefined);
+    await env.notifier.alert(`📅 Собеседование: ${thread.employer}`, `${user?.name ?? ""}: ${when}${link(env, thread, task)}`).catch(() => undefined);
   }
 }
 
 // ------------------------------------------------------------ chats.send (browser)
 
 type PageMessage = Pick<ChatMessage, "hhMessageId" | "direction" | "author" | "text" | "isQuestion" | "answered"> & { createdAt?: string };
+
+export const habrPageMessage = (m: HabrMessage): PageMessage => ({ hhMessageId: m.id, direction: m.mine ? "out" : "in", author: m.mine ? "me" : "employer", text: m.text, isQuestion: !m.mine && asksQuestion(m.text), answered: false });
+
+/** The site of a chat thread: Habr conversations are keyed "habr:<login>" (target = the login), the rest are hh chats. */
+export interface ChatBoard {
+  open(user: User): Promise<BrowserSession>;
+  read(s: BrowserSession, target: string): Promise<{ messages: PageMessage[]; writable?: boolean; choices?: string[] }>;
+  send(s: BrowserSession, target: string, text: string): Promise<void>;
+  url(target: string): string;
+}
+
+export function chatBoard(env: ChatEnv, thread: Pick<ChatThread, "hhNegotiationId">): ChatBoard {
+  if (!thread.hhNegotiationId.startsWith("habr:")) return { open: (u) => env.browser.openHH(u), read: (s, url) => env.hh.readThread(s, url), send: (s, url, text) => env.hh.sendMessage(s, url, text), url: (url) => url };
+  const habr = async () => {
+    if (env.habr) return env.habr;
+    throw new Error("habr client is not configured");
+  };
+  return {
+    open: (u) => env.browser.openHabr(u),
+    read: async (s, login) => {
+      const d = await (await habr()).readConversation(s, login);
+      return { messages: d.messages.map(habrPageMessage), writable: d.writable };
+    },
+    send: async (s, login, text) => (await habr()).sendMessage(s, login, text),
+    url: conversationUrl,
+  };
+}
 
 /** Our reply is on the page after the task's last employer message. `loose`: its start is enough (the clients'
  *  own send probe: the page may render the rest differently). */
@@ -261,21 +290,12 @@ export function repliedOnPage(page: PageMessage[], stored: ChatMessage[], task: 
 export async function sendTask(env: ChatEnv, taskId: number): Promise<void> {
   const task = env.store.getChatTask(taskId);
   if (!task || !env.store.moveChatTask(task.id, ["ready", "sending"], "sending", {}, iso(env))) return;
-  const thread = threadOf(env, task);
+  const thread = env.store.getChatThread(task.threadId);
   const user = userById(env.store, task.userId);
   if (!thread || !user) throw new Error(`thread ${task.threadId} not found`);
-  const habr = isHabrThread(thread);
-  const s = habr ? await env.browser.openHabr(user) : await env.browser.openHH(user);
-  const read = async (): Promise<{ messages: PageMessage[]; writable: boolean | undefined; choices: string[] }> => {
-    if (!habr) {
-      const d = await env.hh.readThread(s, task.target);
-      return { messages: d.messages, writable: d.writable, choices: d.choices ?? [] };
-    }
-    if (!env.habr) throw new Error("habr client is not configured");
-    const d = await env.habr.readConversation(s, task.target);
-    const messages = d.messages.map((m): PageMessage => ({ hhMessageId: m.id, direction: m.mine ? "out" : "in", author: m.mine ? "me" : "employer", text: m.text, isQuestion: !m.mine && asksQuestion(m.text), answered: false }));
-    return { messages, writable: d.writable, choices: [] };
-  };
+  const board = chatBoard(env, thread);
+  const s = await board.open(user);
+  const read = () => board.read(s, task.target);
 
   // Idempotent: a retry (the confirm failed, the process died mid-send) first looks whether the reply is there.
   let page = await read();
@@ -298,8 +318,7 @@ export async function sendTask(env: ChatEnv, taskId: number): Promise<void> {
       return;
     }
     env.store.patchChatTask(task.id, "sending", { lastError: SEND_CLICKED }, iso(env));
-    if (habr) await env.habr!.sendMessage(s, task.target, task.draft);
-    else await env.hh.sendMessage(s, task.target, task.draft);
+    await board.send(s, task.target, task.draft);
     // sendMessage already saw the text appear; our parse of the page may render it differently (typography,
     // Habr's markup): a mismatch is logged, never a reason to send again.
     page = await read();

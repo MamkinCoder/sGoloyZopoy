@@ -3,8 +3,9 @@
 // daily budget, the usual honest letter that never mentions the view), at most MAX_APPLIES per run.
 import { RunAbortError, Status, companyKey, type HHResume } from "@sgz/shared";
 import type { RunContext } from "./context.js";
-import { classify, companyLimitSettings, dedupWindowDays, ensureVacancy, isoDaysAgo, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
-import { applyStage, decideStage, fetchStage, IT_ROLES, type Candidate } from "./hh.js";
+import { applyStage, decideStage, fetchStage, type Candidate } from "./board.js";
+import { classify, ensureVacancy, filterOpts, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
+import { hhBoard, IT_ROLES } from "./hh.js";
 import type { UserRun } from "./user.js";
 import { errMessage, isStop, parseSalary } from "./util.js";
 
@@ -46,14 +47,7 @@ export async function viewersStage(ctx: RunContext, u: UserRun, pool: HHResume[]
   }
   if (!ctx.req.dryRun) ctx.store.setSetting(checkedKey, ctx.now().toISOString());
 
-  const o = {
-    dedupSinceISO: isoDaysAgo(ctx.now(), dedupWindowDays(ctx.store, 30)),
-    rejectSinceISO: isoDaysAgo(ctx.now(), rejectWindowDays(ctx.store, 30)),
-    company: companyLimitSettings(ctx.store),
-    companySinceISO: "",
-    runTracker: tracker,
-  };
-  o.companySinceISO = isoDaysAgo(ctx.now(), o.company.windowDays);
+  const o = filterOpts(ctx, tracker);
   const done: string[] = []; // viewers not worth a line: we already applied there, they are reading that
   const leads: Lead[] = [];
   for (const [key, v] of fresh) {
@@ -86,8 +80,9 @@ export async function viewersStage(ctx: RunContext, u: UserRun, pool: HHResume[]
   const candidates = leads.flatMap((l) => l.candidates);
   if (candidates.length) {
     const cap = Math.min(budget, MAX_APPLIES);
-    const approved = await decideStage(ctx, u, await fetchStage(ctx, u, candidates, cap), pool);
-    sent = cap - (await applyStage(ctx, u, approved.slice(0, cap), pool, cap, tracker));
+    const board = hhBoard(ctx, u, pool);
+    const approved = await decideStage(ctx, u, await fetchStage(ctx, u, board, candidates, cap), pool);
+    sent = cap - (await applyStage(ctx, u, board, approved.slice(0, cap), cap, tracker));
   }
 
   // A lead is finished once each candidate has a row (sent, rejected, failed); ones cut by the cap wait.
