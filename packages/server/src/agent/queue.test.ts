@@ -110,16 +110,97 @@ describe("agent queue", () => {
     await agent.settle();
     expect(store.getJob(job.id)).toMatchObject({ state: "failed", attempts: 3 });
     expect(onFailed).toHaveBeenCalledTimes(1);
-    expect(alerts).toEqual(["Агент: задача k не выполнена"]);
-    // A second failed job of the same kind: no second alert until one succeeds.
+    expect(alerts).toEqual([]); // a handler with onFailed alerts per task itself
+    // Every failed task job reaches its onFailed (no per-kind dedupe hiding the second employer).
     agent.enqueue("k", {}, { maxAttempts: 1 });
     agent.tick();
     await agent.settle();
-    expect(alerts).toHaveLength(1);
+    expect(onFailed).toHaveBeenCalledTimes(2);
     expect(backoffMs(30)).toBe(30 * 60_000);
   });
 
-  it("a hung job times out at its lease and frees the browser for the next one", async () => {
+  it("a handler without onFailed alerts once per kind until one succeeds", async () => {
+    let fail = true;
+    const agent = createAgent({ store, handlers: { k: { needs: "none", run: async () => (fail ? Promise.reject(new Error("boom")) : undefined) } }, notifier, now, log: silent });
+    for (let i = 0; i < 2; i++) agent.enqueue("k", {}, { maxAttempts: 1 });
+    agent.tick();
+    await agent.settle();
+    expect(alerts).toEqual(["Агент: задача k не выполнена"]);
+    fail = false;
+    agent.enqueue("k");
+    agent.tick();
+    await agent.settle();
+    fail = true;
+    agent.enqueue("k", {}, { maxAttempts: 1 });
+    agent.tick();
+    await agent.settle();
+    expect(alerts).toHaveLength(2);
+  });
+
+  it("a timed-out job keeps its browser slot until its handler really returns", async () => {
+    const close = vi.fn(async () => undefined);
+    let finish = () => undefined as void;
+    const ran: string[] = [];
+    const hang: JobHandler = { needs: "browser", leaseMs: 60_000, run: () => new Promise<void>((r) => (ran.push("hang"), (finish = r))) };
+    const next: JobHandler = { needs: "browser", run: async () => void ran.push("next") };
+    const agent = createAgent({ store, handlers: { hang, next }, notifier, now, log: silent, browser: { close } });
+    const job = agent.enqueue("hang", {}, { maxAttempts: 2 });
+    agent.tick();
+    await vi.advanceTimersByTimeAsync(60_000);
+    await agent.settle();
+    expect(close).toHaveBeenCalled();
+    expect(store.getJob(job.id)!.state).toBe("queued"); // retry pending
+    agent.enqueue("next");
+    clock += backoffMs(1);
+    agent.tick();
+    await agent.settle();
+    expect(ran).toEqual(["hang"]); // neither the retry nor another browser job shares the Chrome
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    agent.tick();
+    await agent.settle();
+    expect(ran).toContain("next");
+  });
+
+  it("no browser job starts while memory is short", async () => {
+    let mem = 300;
+    const ran: number[] = [];
+    const agent = createAgent({ store, handlers: { b: { needs: "browser", run: async (j) => void ran.push(j.id) } }, notifier, now, log: silent, memAvailableMB: () => mem, memoryGuardMB: 450 });
+    agent.enqueue("b");
+    agent.tick();
+    await agent.settle();
+    expect(ran).toHaveLength(0);
+    mem = 900;
+    agent.tick();
+    await agent.settle();
+    expect(ran).toHaveLength(1);
+  });
+
+  it("a job whose runs keep dying with the process fails at boot instead of running again", async () => {
+    const onFailed = vi.fn();
+    const run = vi.fn(async () => undefined);
+    const job = store.enqueueJob("k", {}, { maxAttempts: 2 }, now().toISOString());
+    for (let i = 0; i < 2; i++) {
+      store.claimJob(job.id, new Date(clock + 3600_000).toISOString(), now().toISOString());
+      store.requeueExpired("9999", []); // the process died mid-run, the next boot requeued it
+    }
+    const agent = createAgent({ store, handlers: { k: { needs: "none", run, onFailed } }, notifier, now, log: silent });
+    agent.tick();
+    await agent.settle();
+    expect(run).not.toHaveBeenCalled();
+    expect(store.getJob(job.id)!.state).toBe("failed");
+    expect(onFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it("a DB error inside a tick is logged, not thrown out of the timer", () => {
+    const error = vi.fn();
+    const broken = { ...store, dueJobs: () => { throw new Error("SQLITE_BUSY"); } } as unknown as SqliteStore;
+    const agent = createAgent({ store: broken, handlers: {}, notifier, now, log: { ...silent, error } });
+    expect(() => agent.tick()).not.toThrow();
+    expect(error).toHaveBeenCalledWith("queue", "SQLITE_BUSY");
+  });
+
+  it("a hung job times out at its lease and its Chrome is closed", async () => {
     const close = vi.fn(async () => undefined);
     const hang: JobHandler = { needs: "browser", leaseMs: 60_000, run: () => new Promise<void>(() => undefined) };
     const agent = createAgent({ store, handlers: { hang }, notifier, now, log: silent, browser: { close } });

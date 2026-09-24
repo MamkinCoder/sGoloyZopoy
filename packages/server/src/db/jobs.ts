@@ -19,7 +19,7 @@ const mapJob = (r: Row): Job => ({
 });
 
 export interface JobsRepo {
-  /** A new queued job, or the open one with the same key (whose run_after moves earlier when asked). */
+  /** A new queued job, or the open one with the same key (whose run_after moves earlier when asked, or anywhere with `replace`). */
   enqueueJob(kind: string, payload: Record<string, unknown>, opts: EnqueueOptions, nowISO: string): Job;
   getJob(id: number): Job | null;
   /** Queued jobs due at `nowISO`, highest priority first, then oldest. */
@@ -50,7 +50,7 @@ export function jobsRepo(s: Sql): JobsRepo {
         if (opts.key) {
           const open = s.get("SELECT * FROM jobs WHERE key = ? AND state IN ('queued','running')", opts.key);
           if (open) {
-            if (str(open.state) === "queued" && runAfter < str(open.run_after)) s.run("UPDATE jobs SET run_after = ?, updated_at = ? WHERE id = ?", runAfter, nowISO, open.id);
+            if (str(open.state) === "queued" && (opts.replace ? runAfter !== str(open.run_after) : runAfter < str(open.run_after))) s.run("UPDATE jobs SET run_after = ?, updated_at = ? WHERE id = ?", runAfter, nowISO, open.id);
             return get(num(open.id))!;
           }
         }

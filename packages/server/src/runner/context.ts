@@ -81,11 +81,14 @@ export function createBrowserHandle(deps: Pick<RunnerDeps, "cfg" | "launcher" | 
   let session: BrowserSession | null = null;
   let sessionSlug = "";
   let habrChecked: BrowserSession | null = null;
+  // The Chrome being shut down: a new one on the same profile waits for it (profile lock, leftover-kill by dir).
+  let closing: Promise<void> = Promise.resolve();
 
   const launch = async (user: User): Promise<BrowserSession> => {
     o.checkAbort?.();
     if (session && sessionSlug === user.slug) return session;
     if (session) await close();
+    await closing;
     session = await deps.launcher.launch({
       executablePath: deps.cfg.chromiumBin,
       headless: true,
@@ -104,13 +107,12 @@ export function createBrowserHandle(deps: Pick<RunnerDeps, "cfg" | "launcher" | 
     const s = session;
     session = null;
     sessionSlug = "";
-    if (!s) return;
-    try {
-      await s.close();
-      log.info("session", "browser closed");
-    } catch (e) {
-      log.warn("session", `browser close failed: ${errMessage(e)}`);
-    }
+    if (!s) return closing;
+    closing = s.close().then(
+      () => log.info("session", "browser closed"),
+      (e: unknown) => log.warn("session", `browser close failed: ${errMessage(e)}`),
+    );
+    return closing;
   };
 
   return {

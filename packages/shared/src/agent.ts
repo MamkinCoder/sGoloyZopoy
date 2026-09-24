@@ -23,6 +23,8 @@ export interface EnqueueOptions {
   key?: string;
   /** Not before this time (default now). With a key already queued, the earlier time wins. */
   runAfter?: Date;
+  /** With a key already queued: move it to `runAfter` even when that is later (a timer restarted). */
+  replace?: boolean;
   priority?: number;
   maxAttempts?: number;
 }

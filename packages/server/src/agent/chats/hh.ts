@@ -100,7 +100,7 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
         lastSeenAt: env.now().toISOString(),
       });
       const inserted = env.store.insertChatMessages(thread.id, detail.messages);
-      const history = env.store.listChatMessages(thread.id);
+      let history = env.store.listChatMessages(thread.id);
       const handled = (why: string) => {
         const open = env.store.openChatTask(thread.id);
         if (open && open.state !== "sending") closeTask(env, open, why);
@@ -116,7 +116,9 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
         if (vacancy) env.enqueue("chats.prep", { threadId: thread.id, invitation: said ?? "" }, { key: `prep:${thread.id}` });
       }
       if (detail.thread.state === "rejected" && prev?.state !== "rejected") {
-        await askFeedback(env, s, t.chatUrl, t.employer, thread.id, detail.writable);
+        // The thread is stored rejected already: a failed feedback request must still mark the rejection
+        // handled, or the next sync forwards the rejection itself as «Фидбек».
+        await askFeedback(env, s, t.chatUrl, t.employer, thread.id, detail.writable).catch((e: unknown) => env.log.warn("chats", `${t.employer}: feedback request not sent: ${errMessage(e)}`, { thread_id: thread.id }));
         handled("отказ");
         continue;
       }
@@ -135,10 +137,12 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
         const answers = await env.llm.answerQuestionnaire(env.store.getProfile(user.id)!, vacancy, detail.survey, kbForVacancy(env.store, user.id, vacancy, renderQuestions(detail.survey)));
         await env.hh.submitSurvey(s, t.chatUrl, answers);
         env.store.setSetting(surveyKey, surveySig);
-        handled("опрос заполнен");
+        // Only the survey's own questions are answered by it; typed employer text next to it goes on to a reply task.
+        const asked = new Set(detail.survey.map((q) => q.text.replace(/\s+/g, " ").trim()));
+        env.store.markAnswered(history.filter((m) => m.direction === "in" && !m.answered && asked.has(m.text.replace(/\s+/g, " ").trim())).map((m) => m.id));
         env.log.info("chats", `${t.employer}: survey answered (${detail.survey.length} questions)`, { thread_id: thread.id });
         await env.throttle.afterMutation();
-        continue;
+        history = env.store.listChatMessages(thread.id);
       }
       if (prev?.state === "needs_human" && inserted === 0) {
         env.log.info("chats", `${t.employer}: still waiting for a human`, { thread_id: thread.id });

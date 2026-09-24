@@ -3,7 +3,7 @@
 import { paths, type Config, type HHClient, type LLMClient, type Notifier } from "@sgz/shared";
 import type { SqliteStore } from "../db/index.js";
 import type { HabrClient } from "../habr/client.js";
-import { createThrottle } from "../runner/budget.js";
+import { createThrottle, readMemAvailableMB } from "../runner/budget.js";
 import { createBrowserHandle } from "../runner/context.js";
 import type { RunnerDeps } from "../runner/deps.js";
 import { sleep } from "../runner/util.js";
@@ -48,6 +48,6 @@ export function createAppAgent(d: AgentDeps): { agent: Agent; chats: ChatEnv } {
     enqueue: (kind, payload, opts) => agent!.enqueue(kind, payload, opts),
     review: kbReviewGate(d.store, d.notifier),
   };
-  agent = createAgent({ store: d.store, handlers: chatHandlers(chats), schedules: chatSchedules(), notifier: d.notifier, browser, log });
+  agent = createAgent({ store: d.store, handlers: chatHandlers(chats), schedules: chatSchedules(), notifier: d.notifier, browser, log, memAvailableMB: readMemAvailableMB, memoryGuardMB: d.cfg.memoryGuardMB });
   return { agent, chats };
 }

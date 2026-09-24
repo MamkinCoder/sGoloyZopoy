@@ -20,7 +20,8 @@ export interface JobHandler {
   run(job: Job, ctx: JobContext): Promise<void>;
   /** Longest run before the job counts as hung (timeout = failed attempt) and its lease as expired. Default 10 min. */
   leaseMs?: number;
-  /** Once, when the job exhausted its attempts (after the Telegram alert). */
+  /** Once, when the job exhausted its attempts. With it the handler alerts itself (per task, naming the employer);
+   *  without it the queue alerts once per kind until a job of that kind succeeds again. */
   onFailed?(job: Job, error: string): void | Promise<void>;
 }
 
@@ -43,6 +44,9 @@ export interface AgentOptions {
   /** The agent's Chrome: opened lazily by browser handlers, closed here after `browserIdleMs` without one. */
   browser?: { close(): Promise<void> };
   browserIdleMs?: number;
+  /** No browser job starts while less memory is free (the runner's Chrome and claude share the Pi). */
+  memAvailableMB?: () => number;
+  memoryGuardMB?: number;
   llmSlots?: number;
   pollMs?: number;
   now?: () => Date;
@@ -96,43 +100,63 @@ export function createAgent(o: AgentOptions): Agent {
   const ctx: JobContext = { now, enqueue, log };
   const count = (r: Resource) => [...running.values()].filter((x) => x === r).length;
 
-  const fits = (r: Resource) => (r === "browser" ? count("browser") < 1 : r === "llm" ? count("llm") < llmSlots : true);
+  const memOk = () => !o.memAvailableMB || o.memAvailableMB() >= (o.memoryGuardMB ?? 0);
+  const fits = (r: Resource) => (r === "browser" ? count("browser") < 1 && memOk() : r === "llm" ? count("llm") < llmSlots : true);
+
+  /** Out of attempts: the handler's onFailed (it alerts per task), else one alert per kind. */
+  async function finalFailure(job: Job, h: JobHandler, error: string): Promise<void> {
+    if (h.onFailed) {
+      await Promise.resolve(h.onFailed(job, error)).catch((fe: unknown) => log.error(job.kind, `onFailed: ${errMessage(fe)}`));
+      return;
+    }
+    // Once per kind until a job of that kind succeeds again (like scheduler/health.ts alerts).
+    if (store.getSetting(alertKey(job.kind))) return;
+    store.setSetting(alertKey(job.kind), now().toISOString());
+    await o.notifier.alert(`Агент: задача ${job.kind} не выполнена`, `${job.attempts} попыток, последняя ошибка: ${error}`).catch(() => undefined);
+  }
 
   async function execute(job: Job, h: JobHandler): Promise<void> {
     const leaseMs = h.leaseMs ?? DEFAULT_LEASE_MS;
     let timeout: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
+    // The resource stays taken until the handler really returns, even past a timeout: a wedged chats.sync must
+    // not share the agent Chrome with the next browser job. ponytail: not cancelled; closing the browser below
+    // makes a hung page call throw, a handler stuck elsewhere keeps its slot until it returns.
+    const release = () => {
+      running.delete(job.id);
+      if (h.needs === "browser") browserUsedAt = now().getTime();
+    };
+    const runP = (async () => h.run(job, ctx))().finally(() => (settled = true));
     try {
-      await Promise.race([
-        h.run(job, ctx),
-        new Promise<never>((_, reject) => (timeout = setTimeout(() => reject(new Error(`timeout: ran longer than ${Math.round(leaseMs / 1000)} s`)), leaseMs))),
-      ]);
+      await Promise.race([runP, new Promise<never>((_, reject) => (timeout = setTimeout(() => reject(new Error(`timeout: ran longer than ${Math.round(leaseMs / 1000)} s`)), leaseMs)))]);
       store.finishJob(job.id, now().toISOString());
       if (store.getSetting(alertKey(job.kind))) store.setSetting(alertKey(job.kind), "");
     } catch (e) {
       const error = errMessage(e);
       // A hung page keeps its Chrome busy: close it, the next browser job opens a fresh one.
-      // ponytail: the wedged handler promise is abandoned, not cancelled; handlers are idempotent.
       if (h.needs === "browser" && error.startsWith("timeout:")) await o.browser?.close().catch(() => undefined);
       const at = now();
       const state = store.failJob(job.id, error, new Date(at.getTime() + backoffMs(job.attempts)).toISOString(), at.toISOString());
       log.warn(job.kind, `job #${job.id} attempt ${job.attempts}/${job.maxAttempts} failed: ${error}`);
-      if (state === "failed") {
-        // Once per kind until a job of that kind succeeds again (like scheduler/health.ts alerts).
-        if (!store.getSetting(alertKey(job.kind))) {
-          store.setSetting(alertKey(job.kind), at.toISOString());
-          await o.notifier.alert(`Агент: задача ${job.kind} не выполнена`, `${job.attempts} попыток, последняя ошибка: ${error}`).catch(() => undefined);
-        }
-        await Promise.resolve(h.onFailed?.(job, error)).catch((fe: unknown) => log.error(job.kind, `onFailed: ${errMessage(fe)}`));
-      }
+      if (state === "failed") await finalFailure(job, h, error);
     } finally {
       clearTimeout(timeout);
-      running.delete(job.id);
-      if (h.needs === "browser") browserUsedAt = now().getTime();
+      if (settled) release();
+      else void runP.then(release, release);
     }
   }
 
   function tick(): void {
     if (stopped) return;
+    try {
+      pass();
+    } catch (e) {
+      // A DB error (SQLITE_BUSY while a CLI holds the lock) must not kill `sgz serve`: the next tick retries.
+      log.error("queue", errMessage(e));
+    }
+  }
+
+  function pass(): void {
     const t = now();
     const iso = t.toISOString();
     const lost = store.requeueExpired(iso, [...running.keys()]);
@@ -157,12 +181,25 @@ export function createAgent(o: AgentOptions): Agent {
         if (store.claimJob(due.id, iso, iso)) store.failJob(due.id, `no handler for ${due.kind}`, iso, iso, true);
         continue;
       }
-      if (!fits(h.needs)) continue;
+      if (running.has(due.id) || !fits(h.needs)) continue; // its timed-out previous attempt still runs
+      if (due.attempts >= due.maxAttempts) {
+        // Out of attempts but queued again: its run died with the process (OOM kill, crash) every time. Fail it
+        // instead of running it again after every restart.
+        if (store.claimJob(due.id, iso, iso)) {
+          store.failJob(due.id, due.lastError || "interrupted", iso, iso, true);
+          const job = { ...due, attempts: due.attempts + 1 };
+          log.warn(due.kind, `job #${due.id} failed: ${due.attempts} attempts interrupted`);
+          const p = finalFailure(job, h, `${due.attempts} попыток прервано перезапуском (${due.lastError || "interrupted"})`).catch((e: unknown) => log.error(due.kind, errMessage(e)));
+          inflight.add(p);
+          void p.finally(() => inflight.delete(p));
+        }
+        continue;
+      }
       if (!store.claimJob(due.id, new Date(t.getTime() + (h.leaseMs ?? DEFAULT_LEASE_MS)).toISOString(), iso)) continue;
       const job = { ...due, attempts: due.attempts + 1, state: "running" as const };
       running.set(job.id, h.needs);
       if (h.needs === "browser") browserUsedAt = t.getTime();
-      const p = execute(job, h);
+      const p = execute(job, h).catch((e: unknown) => log.error(job.kind, `job #${job.id}: ${errMessage(e)}`));
       inflight.add(p);
       void p.finally(() => inflight.delete(p));
     }

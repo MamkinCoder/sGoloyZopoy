@@ -37,6 +37,14 @@ state: queued -> running -> done | failed | queued (retry, run_after = now + bac
   Every handler is idempotent (reads state from the DB, never from memory).
 - **Observability.** `GET /api/agent/jobs?state=` + a panel section; a job that exhausts retries alerts
   once in Telegram (dedup via the existing alert pattern). The chat stall alert watches `chats.sync`.
+- As built (review round 3): a timed-out job keeps its resource until its handler really returns (the browser is
+  closed on timeout, the retry and other browser jobs wait), so there is never a second agent Chrome; the handle
+  also waits for a close in progress before launching on the same profile. No browser job starts while
+  MemAvailable < `SGZ_MEMORY_GUARD_MB`. A requeued job already at `max_attempts` (its runs died with the process,
+  e.g. OOM) fails instead of running again after every restart. A handler with `onFailed` alerts itself per job
+  (chat tasks: «Не ответил работодателю: <employer>»); the once-per-kind alert is only for jobs without one
+  (`chats.sync`, `chats.prep`). A DB error in the loop is logged, not fatal. With `SGZ_RUNNER=false` the agent
+  is not started, so Telegram taps and stories are refused («агент выключен») instead of queued for nobody.
 
 Handlers are the unit of extension: new always-on features = new job kinds, not new timers.
 
@@ -82,10 +90,20 @@ task: instant, restart-proof, independent of any run.
   card (`ct:<task>:<topic>:y|n`). Phase 3 replaced the gate with the KB review (§4 as built); `tasks.ts` only gained the KB block for the draft, `expire` on fallback and carrying answers into the fresh task when `chats.send` supersedes.
   The 2 h reminder and 12 h fallback are delayed jobs `chats.remind` / `chats.fallback`; the invitation brief is
   `chats.prep` (llm). A task whose job failed is not reopened until the employer writes again.
+  Round 3: both timers are enqueued before the card (a Telegram outage never fails the task) and restart
+  (`EnqueueOptions.replace`) when the draft sends the task back with new topics. The fallback answers a topic
+  whose tag is `yes` (verified_skills, confirmed) as «yes» and only unknown ones as «нет». Topics that are aliases
+  of one tag are answered together; a draft that still names an answered skill fails the task to the human
+  (no retry loop). `chats.send` marks the task right before the click: a retry never clicks again, it only
+  confirms by the text's first 60 chars or fails to the human; after a successful `sendMessage` a page copy
+  that does not match exactly is only logged. Closing or failing a task expires its KB reviews; `kbText` also
+  drops a «Дополнить» wait nothing waits for any more.
 - The re-sync after a send is the normal full `chats.sync` pulled to +30 s (key dedupe), not a per-thread sync:
   unchanged threads cost one list read.
 - hh chat-bot surveys (the questionnaire widget) are still answered inside `chats.sync` (one LLM call inside a
-  browser job); a job of their own if they get frequent.
+  browser job); a job of their own if they get frequent. Only the survey's own question messages count as
+  answered by it: typed employer text next to it gets a reply task. Habr's «вы договорились о работе?» survey
+  marks only itself handled.
 - The agent's tables are on `SqliteStore` (`db/jobs.ts`, `db/chat-tasks.ts`, `db/kb-reviews.ts`), not on the shared `Store` contract:
   only the agent and the API view (`ApiDeps.agent`) use them. Stage `chats` is gone from runs entirely.
 
@@ -133,11 +151,12 @@ kb_reviews(id, user_id, task_id NULL, tag_id, state: pending|confirmed|expanded|
   As built (phase 3, `agent/chats/review.ts` `kbReviewGate`, the phase-1 skills gate is deleted): the step is still
   job `chats.review` behind `ReviewGate` (+ `expire(taskId)` for the fallback, `record` takes the task id). Buttons
   are one row per topic «Подтвердить X» «Дополнить X» «Нет навыка X» (`kr:<review id>:c|e|d`; «Подтвердить» only
-  with stories or a `yes` tag, it also confirms the ≤3 stories shown). `kb_reviews` gained `topic` (the task's
+  with stories, it confirms only the stories the card shows (fewer than 3 when the card is shortened to fit)). `kb_reviews` gained `topic` (the task's
   name for it), `awaiting_chat` / `awaiting_at` (migration `007c`): «Дополнить» marks the review as waiting in the
   tapped chat (`TapReply.say` sends the question there), `kbText` routes the next plain message of that chat to
   job `kb.ingest` (llm) before `/mock`, and asks the next waiting review, oldest first. After the ingest the card is
-  edited via `Notifier.edit`. A topic the KB does not know becomes a tag with the profile's yes/no when listed,
+  edited via `Notifier.edit` (also after an empty or failed ingest, which says so per topic). Every text is its
+  own `kb.ingest` (a second story is never dropped); «Нет навыка» tapped during the ingest wins. A topic the KB does not know becomes a tag with the profile's yes/no when listed,
   else `unknown`. `new_only` also skips tags already `no`; `off` answers from the tag status (unknown = not
   claimed). Human answers also write `skills_learned:<user>` so `withLearnedSkills` never contradicts the KB.
   `chats.draft` passes `renderKb(kbFor(topics + vacancy + question))` with this task's answers as statuses into

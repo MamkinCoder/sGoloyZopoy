@@ -7,7 +7,7 @@ import type { JobHandler, Schedule } from "../queue.js";
 import type { ChatEnv } from "./env.js";
 import { syncHabrChats } from "./habr.js";
 import { syncHHChats } from "./hh.js";
-import { ingestReview } from "./review.js";
+import { ingestFailed, ingestReview } from "./review.js";
 import { draftTask, failTask, fallbackTask, remindTask, reviewTask, sendTask, triageTask } from "./tasks.js";
 import { existsSync } from "node:fs";
 import { paths } from "@sgz/shared";
@@ -47,7 +47,7 @@ export function chatHandlers(env: ChatEnv): Record<string, JobHandler> {
     "chats.draft": { needs: "llm", leaseMs: 15 * 60_000, run: (job) => draftTask(env, taskId(job)), onFailed },
     "chats.send": { needs: "browser", run: (job) => sendTask(env, taskId(job)), onFailed },
     // «Дополнить»: the human's story about a topic -> KB (review.ts)
-    "kb.ingest": { needs: "llm", leaseMs: 15 * 60_000, run: (job) => ingestReview(env, Number(job.payload.reviewId), String(job.payload.text ?? "")) },
+    "kb.ingest": { needs: "llm", leaseMs: 15 * 60_000, run: (job) => ingestReview(env, Number(job.payload.reviewId), String(job.payload.text ?? "")), onFailed: (job) => ingestFailed(env, Number(job.payload.reviewId)) },
     "chats.prep": {
       needs: "llm",
       leaseMs: 15 * 60_000,

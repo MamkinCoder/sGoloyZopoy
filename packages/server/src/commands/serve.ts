@@ -65,6 +65,9 @@ export async function serve(): Promise<void> {
   const agent = app.cfg.runnerEnabled ? app.agent : null;
   agent?.start();
   const chatsOn = !!agent && chatSchedules().length > 0;
+  // Taps and stories only feed jobs; with the agent off nothing would run them, so they are refused.
+  const chats = agent ? app.chats : null;
+  const AGENT_OFF = "агент выключен (SGZ_RUNNER=false): ответь в чате сам";
   const start = (req: Omit<RunRequest, "dryRun" | "limit" | "trigger">) =>
     app.runner.start({ ...req, dryRun: false, limit: 0, trigger: "schedule" }).catch((e: unknown) => console.error(`sgz serve: ${req.stage}: ${errMessage(e)}`));
   // Every minute: reminders and health checks, then one batch job when the runner is idle
@@ -133,11 +136,11 @@ export async function serve(): Promise<void> {
     return "Команды: /status - итоги дня, /queue - очередь, /week - итоги недели, /company <название> - история откликов, /salary <слово> - рынок зарплат, /study [компания] - чеклист и промпт к собеседованию, /mock [компания] - тренировка собеседования, /stop - закончить тренировку";
   };
   // Free text: a story for a KB review that asked for one («Дополнить») first, otherwise a /mock answer.
-  const onText = async (chatId: string, text: string) => (app.chats ? kbText(app.chats, chatId, text) : null) ?? mockAnswer(app.store, app.llm, chatId, text, new Date());
+  const onText = async (chatId: string, text: string) => (chats ? kbText(chats, chatId, text) : null) ?? mockAnswer(app.store, app.llm, chatId, text, new Date());
   const stopCallbacks = app.cfg.tgBotToken
     ? startTelegramCallbacks(app.cfg.tgBotToken, async (data, chatId) => {
         const kr = parseKbCallback(data);
-        if (kr && app.chats) return onKbTap(app.chats, kr, chatId);
+        if (kr) return chats ? onKbTap(chats, kr, chatId) : AGENT_OFF;
         const q = parseQueueCallback(data);
         if (q) return handleQueueTap(app.store, app.runner, q);
         const st = parseStudyCallback(data);
@@ -148,9 +151,9 @@ export async function serve(): Promise<void> {
           return `Записал: ${OUTCOME_LABEL[io.outcome]}`;
         }
         const card = parseCardCallback(data);
-        if (card && app.chats) return onCardTap(app.chats, card);
+        if (card) return chats ? onCardTap(chats, card) : AGENT_OFF;
         const cb = parseSkillCallback(data);
-        if (cb && app.chats) return onLegacySkillTap(app.chats, cb);
+        if (cb) return chats ? onLegacySkillTap(chats, cb) : AGENT_OFF;
         return "неизвестная кнопка";
       }, { fetch: telegramFetch(), commands: { chatIds: [app.cfg.tgChatId, ...app.store.listUsers().map((u) => u.tgChatId)].filter(Boolean), onCommand, onText } })
     : null;

@@ -149,7 +149,9 @@ describe("chat reply tasks", () => {
       await h.drain();
     }
     expect(h.tasks().map((t) => t.state)).toEqual(["failed"]);
-    expect(h.alerts("Агент: задача chats.send")).toHaveLength(1);
+    // The click may have happened: the retry does not click again, the human is told which employer waits.
+    expect(h.sends()).toBe(1);
+    expect(h.alerts("Не ответил работодателю: Acme")).toHaveLength(1);
     await h.sync();
     expect(h.tasks()).toHaveLength(1);
     h.page.messages.push(inMsg("2", "Ау?"));

@@ -21,6 +21,8 @@ export interface ReviewGate {
   record(userId: number, topic: string, has: boolean, taskId?: number): void;
   /** The card for the task as it is now (after a tap it replaces the tapped message). */
   card(task: ChatTask, footer?: string): Omit<TapReply, "note">;
+  /** How many stories per topic the task's card shows now (fewer when the card would not fit). */
+  storiesShown(task: ChatTask): number;
   /** The task stopped waiting (12 h fallback): its open reviews expire. */
   expire(taskId: number): void;
 }
@@ -102,7 +104,7 @@ export function kbReviewGate(store: ChatStore, notifier: Pick<Notifier, "ask" | 
       .join("\n")
       .slice(0, 600);
 
-  const card: ReviewGate["card"] = (task, footer) => {
+  const render = (task: ChatTask, footer?: string) => {
     const reviews = store.listKbReviews(task.id);
     const tags = store.listKbTags(task.userId);
     const views: TopicView[] = task.topics.map((tp) => {
@@ -120,11 +122,16 @@ export function kbReviewGate(store: ChatStore, notifier: Pick<Notifier, "ask" | 
     const tail = footer ?? (pending.length ? "Подтверди, дополни или отметь «Нет навыка» по каждой теме. Ответ работодателю уйдёт, когда ответишь на все." : READY_FOOTER);
     const head = `<b>${escapeHtml(thread(task)?.employer || "Работодатель")}</b> спрашивает:\n«${escapeHtml(asked(task))}»`;
     let text = "";
+    let max = STORIES_PER_TOPIC;
     // Fewer stories per topic until the card fits one Telegram message (6 topics without stories always fit).
-    for (let max = STORIES_PER_TOPIC; max >= 0; max--) {
+    for (; max >= 0; max--) {
       text = `${head}\n\n${views.map((v) => topicLines(v, max)).join("\n")}\n\n${tail}`;
       if (text.length <= CARD_MAX) break;
     }
+    return { text, buttons, max: Math.max(max, 0) };
+  };
+  const card: ReviewGate["card"] = (task, footer) => {
+    const { text, buttons } = render(task, footer);
     return { text, buttons };
   };
 
@@ -173,6 +180,7 @@ export function kbReviewGate(store: ChatStore, notifier: Pick<Notifier, "ask" | 
       for (const r of store.listKbReviews(taskId)) if (r.tagId === tag.id) store.resolveKbReview(r.id, has ? "confirmed" : "denied", iso());
     },
     card,
+    storiesShown: (task) => render(task).max,
     expire(taskId) {
       for (const r of store.listKbReviews(taskId)) store.resolveKbReview(r.id, "expired", iso());
     },
@@ -199,9 +207,9 @@ function liveTarget(env: ChatEnv, review: KbReview): { task: ChatTask; review: K
   return { task: open, review: r };
 }
 
-/** «Подтвердить» confirms the stories the card showed. */
-function confirmStories(env: ChatEnv, userId: number, tagId: number): void {
-  for (const s of env.store.listKbStories(userId, tagId).slice(0, STORIES_PER_TOPIC)) {
+/** «Подтвердить» confirms the stories the card showed, never ones cut to fit the card. */
+function confirmStories(env: ChatEnv, task: ChatTask, tagId: number): void {
+  for (const s of env.store.listKbStories(task.userId, tagId).slice(0, env.review.storiesShown(task))) {
     if (!s.confirmed) env.store.saveKbStory({ ...s, confirmed: true, tagIds: s.tags.map((t) => t.id) });
   }
 }
@@ -222,7 +230,7 @@ export function onKbTap(env: ChatEnv, tap: { reviewId: number; action: KbAction 
     if (first && first.id !== r.id) return { note: `Спрошу про ${r.topic} после ответа про ${first.topic}`, ...c };
     return { note: `Жду рассказ про ${r.topic}`, ...c, say: escapeHtml(askStoryText(r.topic)) };
   }
-  if (tap.action === "c") confirmStories(env, task.userId, r.tagId);
+  if (tap.action === "c") confirmStories(env, task, r.tagId);
   const done = answerTopic(env, task, r.topic, tap.action === "c");
   if (!done) return { note: "уже учтено", ...env.review.card(own, stateFooter(own)) };
   return { note: tap.action === "c" ? `✅ ${r.topic}` : `❌ ${r.topic}: нет навыка`, ...env.review.card(done, done.state === "awaiting_review" ? undefined : READY_FOOTER) };
@@ -233,26 +241,51 @@ export function onKbTap(env: ChatEnv, tap: { reviewId: number; action: KbAction 
  * job) and the next waiting review is asked. Null = not for the KB (other handlers, e.g. /mock answers, go next).
  */
 export function kbText(env: ChatEnv, chatId: string, text: string): string | null {
-  const [r, next] = env.store.awaitingKbReviews(chatId);
-  if (!r || !text.trim()) return null;
+  if (!text.trim()) return null;
+  // A wait whose topic nothing waits for any more (task closed, failed, answered) is dropped, not fed.
+  const waiting = env.store.awaitingKbReviews(chatId).filter((x) => liveTarget(env, x) !== null || (env.store.awaitKbReviewText(x.id, "", iso(env)), false));
+  const [r, next] = waiting;
+  if (!r) return null;
   env.store.awaitKbReviewText(r.id, "", iso(env));
-  env.enqueue("kb.ingest", { reviewId: r.id, text }, { key: `ingest:${r.id}` });
+  // No key: a second story for the same topic while the first still waits for an LLM slot is its own job.
+  env.enqueue("kb.ingest", { reviewId: r.id, text });
   return `Принял, записываю историю про ${r.topic}.${next ? `\n\n${askStoryText(next.topic)}` : ""}`;
+}
+
+/** The review's card again as it is now (its «✍️ жду» line back to buttons after a failed ingest). */
+async function refreshCard(env: ChatEnv, review: KbReview): Promise<void> {
+  const task = liveTarget(env, review)?.task ?? (review.taskId === null ? null : env.store.getChatTask(review.taskId));
+  if (task?.tgMessageId == null) return;
+  const c = env.review.card(task, task.state === "awaiting_review" ? undefined : stateFooter(task));
+  await env.notifier.edit?.(task.tgMessageId, c.text, c.buttons).catch(() => undefined);
+}
+
+/** kb.ingest gave up (LLM down): say so per topic and show the card's buttons again. */
+export async function ingestFailed(env: ChatEnv, reviewId: number): Promise<void> {
+  const review = env.store.getKbReview(reviewId);
+  if (!review) return;
+  await env.notifier.alert("Не записал историю", `Не получилось записать историю про ${review.topic}. Нажми «Дополнить» ещё раз и пришли её снова.`).catch(() => undefined);
+  await refreshCard(env, review);
 }
 
 /** kb.ingest (llm): the story -> KB (tag yes), the review `expanded`, the topic answered, the card edited. */
 export async function ingestReview(env: ChatEnv, reviewId: number, text: string): Promise<void> {
-  const review = env.store.getKbReview(reviewId);
-  if (!review || (review.state !== "pending" && review.state !== "expired")) return;
-  const tag = env.store.listKbTags(review.userId).find((t) => t.id === review.tagId);
+  const first = env.store.getKbReview(reviewId);
+  if (!first || first.state === "denied") return;
+  const tag = env.store.listKbTags(first.userId).find((t) => t.id === first.tagId);
   if (!tag) return;
-  const companies = [...new Set(env.store.listKbStories(review.userId).map((s) => [s.company, s.period].filter(Boolean).join(", ")).filter(Boolean))];
+  const companies = [...new Set(env.store.listKbStories(first.userId).map((s) => [s.company, s.period].filter(Boolean).join(", ")).filter(Boolean))];
   const drafts = await ingestKb(env.llm, { tag: tag.name, text, companies });
+  // Re-read after the LLM: «Нет навыка» tapped meanwhile is the human's last word, the tag stays «no».
+  const review = env.store.getKbReview(reviewId);
+  if (!review || review.state === "denied") return;
   if (!drafts.length) {
     await env.notifier.ask?.(`Не получилось собрать историю про <b>${escapeHtml(tag.name)}</b> из этого текста. Нажми «Дополнить» ещё раз и напиши подробнее: где, что делал, какой результат.`, []).catch(() => undefined);
+    await refreshCard(env, review);
     return;
   }
   saveIngested(env.store, review.userId, tag.name, drafts);
+  if (review.state === "expanded" || review.state === "confirmed") return; // one more story for an answered topic: saved
   const live = liveTarget(env, review);
   env.store.resolveKbReview(review.id, "expanded", iso(env));
   if (!live) return; // the task moved on (fallback, answered by hand): the story is kept anyway

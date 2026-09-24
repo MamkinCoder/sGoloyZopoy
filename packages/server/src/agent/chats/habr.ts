@@ -48,6 +48,13 @@ export async function syncHabrChats(env: ChatEnv, user: User): Promise<void> {
         thread.id,
         detail.messages.map((m) => ({ hhMessageId: m.id, direction: m.mine ? ("out" as const) : ("in" as const), author: m.mine ? ("me" as const) : ("employer" as const), text: m.text, isQuestion: !m.mine && asksQuestion(m.text), answered: false })),
       );
+      // Habr's own «вы договорились о работе?» survey (kind question) is not the employer talking: only it is
+      // handled, a recruiter question before it still gets its reply.
+      if (lm.kind === "question") {
+        const all = env.store.listChatMessages(thread.id);
+        const survey = all.find((m) => m.hhMessageId === lm.id) ?? all.at(-1);
+        if (survey?.direction === "in" && !survey.answered) env.store.markAnswered([survey.id]);
+      }
       const history = env.store.listChatMessages(thread.id);
       const fresh = history.filter((m) => m.direction === "in" && !m.answered);
       const handled = (why: string) => {
@@ -58,8 +65,7 @@ export async function syncHabrChats(env: ChatEnv, user: User): Promise<void> {
       if (invited && prev?.state !== "invited") {
         await env.notifier.alert(`🎉 Приглашение на Хабр Карьере: ${employer}`, `${user.name}: ${fresh.at(-1)?.text.slice(0, 800) ?? lm.text.slice(0, 800)}\n${url}`).catch(() => undefined);
       }
-      // Habr's own «вы договорились о работе?» survey (kind question) is not the employer talking.
-      if (lm.kind === "question" || !fresh.length || history.at(-1)?.direction === "out") {
+      if (!fresh.length || history.at(-1)?.direction === "out") {
         handled("ответ не нужен");
         continue;
       }
