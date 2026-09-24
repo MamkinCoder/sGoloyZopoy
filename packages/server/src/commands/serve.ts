@@ -1,5 +1,6 @@
 // sgz serve — HTTP API + panel, scheduler when configured, the always-on agent, graceful shutdown. Wiring only:
 // every recurring job (chats, reminders, health, digest, retro, lessons, autopilot) is an agent schedule.
+import type { User } from "@sgz/shared";
 import { serve as honoServe } from "@hono/node-server";
 import { createApp } from "../api/index.js";
 import { createAppContext } from "../app.js";
@@ -83,8 +84,7 @@ export async function serve(): Promise<void> {
   };
   // A seeker's chat acts only on that seeker's cards (callback data can be crafted); the owner's chat on anyone's.
   const NOT_YOURS = "это не твоя карточка";
-  const tapAllowed = (userId: number | undefined, chatId: string) =>
-    userId === undefined || chatId === app.cfg.tgChatId || (app.store.listUsers().find((u) => u.id === userId)?.tgChatId || app.cfg.tgChatId) === chatId;
+  const tapAllowed = (userId: number | undefined, chatId: string) => canTap(app.store.listUsers(), app.cfg.tgChatId, userId, chatId);
   // Free text: a story for a KB review that asked for one («Дополнить») first, otherwise a /mock answer.
   const onText = async (chatId: string, text: string) => (chats ? kbText(chats, chatId, text) : null) ?? mockAnswer(app.store, app.llm, chatId, text, new Date());
   const stopCallbacks = app.cfg.tgBotToken
@@ -122,3 +122,7 @@ export async function serve(): Promise<void> {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   await new Promise<void>(() => undefined); // keep the process alive; signals end it
 }
+
+/** A seeker's chat acts only on her own cards (callback data can be crafted); the owner's chat on anyone's. */
+export const canTap = (users: Pick<User, "id" | "tgChatId">[], ownerChat: string, userId: number | undefined, chatId: string): boolean =>
+  userId === undefined || chatId === ownerChat || (users.find((u) => u.id === userId)?.tgChatId || ownerChat) === chatId;

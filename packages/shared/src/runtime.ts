@@ -101,3 +101,6 @@ export interface Logger {
   warn(stage: string, message: string, data?: Record<string, unknown>): void;
   error(stage: string, message: string, data?: Record<string, unknown>): void;
 }
+
+/** The message of a thrown value (Error or anything else). */
+export const errMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));

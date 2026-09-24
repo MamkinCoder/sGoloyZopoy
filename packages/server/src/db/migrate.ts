@@ -1,4 +1,5 @@
 // Applies db/migrations/*.sql in filename order, once each, tracked in schema_migrations.
+import { errMessage } from "@sgz/shared";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { DatabaseSync } from "node:sqlite";
@@ -32,7 +33,7 @@ export function applyMigrations(db: DatabaseSync): void {
       db.exec("COMMIT");
     } catch (err) {
       db.exec("ROLLBACK");
-      throw new Error(`migration ${name} failed: ${err instanceof Error ? err.message : String(err)}`);
+      throw new Error(`migration ${name} failed: ${errMessage(err)}`);
     }
   }
 }

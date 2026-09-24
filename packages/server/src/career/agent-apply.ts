@@ -1,5 +1,6 @@
 // Universal apply flow for custom career sites: natural-language act/extract over BrowserSession,
 // guided by SiteProfile.apply_hints. Cache keys are stable so Stagehand replays selectors per host.
+import { errMessage } from "@sgz/shared";
 import { Status } from "@sgz/shared";
 import type { Answer, BrowserSession, CareerApplyRequest, CareerApplyResult, Question } from "@sgz/shared";
 import { answerValues, byIdx, splitName } from "./ats/apply-common.js";
@@ -189,7 +190,7 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
       learnedHints: truncate(learned.join("; "), 600),
     };
   } catch (err) {
-    return fail(Status.FAILED_UI, `agent apply error: ${err instanceof Error ? err.message : String(err)}`);
+    return fail(Status.FAILED_UI, `agent apply error: ${errMessage(err)}`);
   }
 }
 

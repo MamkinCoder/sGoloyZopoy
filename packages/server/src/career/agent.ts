@@ -1,5 +1,6 @@
 // Universal career-site agent: ATS JSON when we know the platform, otherwise natural-language
 // act/extract guided by SiteProfile hints that onboarding writes for itself.
+import { errMessage } from "@sgz/shared";
 import { canonicalUrl, Status } from "@sgz/shared";
 import type { ATSKind, BrowserSession, CareerAgent, CareerApplyRequest, CareerApplyResult, CareerSite, Discovered, LLMClient, SiteProfile } from "@sgz/shared";
 import { applyViaAgent } from "./agent-apply.js";
@@ -115,7 +116,7 @@ export function createCareerAgent(llm: LLMClient, opts: CareerAgentOptions = {})
       const res = await s.extract(discoverInstruction(discoverHints), jobListSchema);
       return res.jobs.filter((j) => j.title.trim() && j.url.trim()).length;
     } catch (err) {
-      log(`verifyListing ${listing} failed: ${err instanceof Error ? err.message : String(err)}`);
+      log(`verifyListing ${listing} failed: ${errMessage(err)}`);
       return 0;
     }
   }
@@ -200,7 +201,7 @@ export function createCareerAgent(llm: LLMClient, opts: CareerAgentOptions = {})
         log(`apply ${req.site.slug}: ats api declined, falling back to agent`);
       } catch (err) {
         // The POST may already have reached the employer: a browser retry could apply twice. The human checks.
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = errMessage(err);
         log(`apply ${req.site.slug}: ats api error ${msg}`);
         return { status: Status.FAILED_NO_CONFIRMATION, reasonDetail: `ats api error: ${msg}` };
       }

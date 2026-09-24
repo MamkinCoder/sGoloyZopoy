@@ -1,5 +1,6 @@
 // BrowserSession over Stagehand v4. Natural-language act() goes cache → replay → observe → act;
 // everything else is deterministic Page/Locator/evaluate calls (no LLM).
+import { errMessage } from "@sgz/shared";
 import { setTimeout as sleep } from "node:timers/promises";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -128,7 +129,7 @@ export class StagehandSession implements BrowserSession {
       const res = await this.d.stagehand.act({ selector: entry.selector, description: entry.description, method: entry.method, arguments: entry.arguments }, { timeout, ...(variables ? { variables } : {}) });
       return { ok: res.data.success, message: res.data.message };
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) };
+      return { ok: false, message: errMessage(err) };
     }
   }
 

@@ -1,4 +1,5 @@
 // LLMClient over `claude -p`: template → claude → zod → deterministic guards. One process at a time.
+import { errMessage } from "@sgz/shared";
 import { companyKey } from "@sgz/shared";
 import type {
   Answer,
@@ -111,7 +112,7 @@ async function call<T>(ctx: Ctx, o: CallOpts<T>): Promise<T> {
       log(true, r.text.length, "", r.durationMs);
       return parsed.data;
     } catch (err) {
-      lastErr = err instanceof Error ? err.message : String(err);
+      lastErr = errMessage(err);
       log(false, r.text.length, lastErr.slice(0, 500), r.durationMs);
       prompt = o.prompt + RETRY_SUFFIX;
     }

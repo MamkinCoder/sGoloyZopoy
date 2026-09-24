@@ -1,3 +1,4 @@
+import { errMessage } from "@sgz/shared";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Notifier, Run, Store, TapReply, TgButton, User } from "@sgz/shared";
 import { chunkMessage, formatAlert, formatReport } from "./format.js";
@@ -32,7 +33,7 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
           body: JSON.stringify({ parse_mode: "HTML", disable_web_page_preview: true, ...payload }),
         });
       } catch (e) {
-        lastErr = e instanceof Error ? e.message : String(e);
+        lastErr = errMessage(e);
         if (attempt < RETRIES) await sleep(1000 * 2 ** (attempt - 1));
         continue;
       }
@@ -76,7 +77,7 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
     ask: async (text: string, buttons: TgButton[] | TgButton[][]) => (await sendOne(chat, text, buttons.length ? { reply_markup: keyboard(buttons) } : {})) ?? undefined,
     // A card edit is cosmetic: retried like a send, then only logged.
     edit: async (messageId: number, text: string, buttons: TgButton[][]) => {
-      await call("editMessageText", { chat_id: chat, message_id: messageId, text, reply_markup: keyboard(buttons) }).catch((e: unknown) => warn(`telegram: editMessageText: ${e instanceof Error ? e.message : String(e)}`));
+      await call("editMessageText", { chat_id: chat, message_id: messageId, text, reply_markup: keyboard(buttons) }).catch((e: unknown) => warn(`telegram: editMessageText: ${errMessage(e)}`));
     },
     forUser: (user) => bound(user.tgChatId || chatId),
   });
@@ -140,17 +141,17 @@ export function startTelegramCallbacks(
           };
           if (cmds && m?.text?.startsWith("/") && cmds.chatIds.includes(String(m.chat.id))) {
             const args = m.text.replace(/^\S+\s*/, "");
-            await reply(await cmds.onCommand(m.text.split(/[\s@]/)[0]!.toLowerCase(), args, String(m.chat.id)).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`));
+            await reply(await cmds.onCommand(m.text.split(/[\s@]/)[0]!.toLowerCase(), args, String(m.chat.id)).catch((e: unknown) => `ошибка: ${errMessage(e)}`));
             continue;
           }
           // A slow reply (an LLM call) must not hold up button taps: answered in the background.
           if (cmds?.onText && m?.text && cmds.chatIds.includes(String(m.chat.id))) {
-            void cmds.onText(String(m.chat.id), m.text).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`).then(reply);
+            void cmds.onText(String(m.chat.id), m.text).catch((e: unknown) => `ошибка: ${errMessage(e)}`).then(reply);
             continue;
           }
           const q = u.callback_query;
           if (!q?.data) continue;
-          const r = await onTap(q.data, q.message ? String(q.message.chat.id) : "").catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`);
+          const r = await onTap(q.data, q.message ? String(q.message.chat.id) : "").catch((e: unknown) => `ошибка: ${errMessage(e)}`);
           const note = typeof r === "string" ? r : r.note;
           await api("answerCallbackQuery", { callback_query_id: q.id, text: note.slice(0, 190) }).catch(() => undefined);
           if (!q.message) continue;
@@ -162,7 +163,7 @@ export function startTelegramCallbacks(
           }
         }
       } catch (e) {
-        warn(`telegram callbacks: ${e instanceof Error ? e.message : String(e)}`);
+        warn(`telegram callbacks: ${errMessage(e)}`);
         await sleep(10_000);
       }
     }

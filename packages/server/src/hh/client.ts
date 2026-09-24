@@ -1,6 +1,7 @@
 // hh.ru flows over BrowserSession. Deterministic helpers + InitialState where markup is known;
 // Stagehand act/extract (with stable cacheKeys) for everything fragile. Every failure path
 // snapshots "<vacancyId>-<step>" and returns FAILED_UI; blocks throw RunAbortError.
+import { errMessage } from "@sgz/shared";
 import { setTimeout as sleep } from "node:timers/promises";
 import { z } from "zod";
 import {
@@ -398,7 +399,7 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
           try {
             await fillAnswer(s, q, a, id);
           } catch (e) {
-            return fail(`q${q.idx}`, e instanceof Error ? e.message : String(e), Status.FAILED_UI, { questions, answers });
+            return fail(`q${q.idx}`, errMessage(e), Status.FAILED_UI, { questions, answers });
           }
         }
       }
@@ -411,7 +412,7 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
       return { status: Status.SENT, reasonDetail: letterAttached || !req.coverLetter.trim() ? detail : `${detail}, ${LETTER_NOT_ATTACHED}`, letterAttached, questions, answers };
     } catch (e) {
       if (e instanceof RunAbortError) throw e;
-      return fail("error", e instanceof Error ? e.message : String(e));
+      return fail("error", errMessage(e));
     }
   };
 
@@ -511,7 +512,7 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     try {
       await editResume(s, newId, edit);
     } catch (e) {
-      throw new Error(`duplicateResume: copy ${newId} created but editing failed, fix it manually: ${e instanceof Error ? e.message : String(e)}`);
+      throw new Error(`duplicateResume: copy ${newId} created but editing failed, fix it manually: ${errMessage(e)}`);
     }
     return newId;
   };

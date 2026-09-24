@@ -24,7 +24,7 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export const errMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+export { errMessage } from "@sgz/shared";
 
 /** Whole-word match (titles): "cto" must not hit "Artifactory", "лид" not "валидация". */
 export function containsWord(haystack: string, needles: string[]): string | null {

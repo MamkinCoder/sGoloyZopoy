@@ -6,6 +6,7 @@
 // /vacancies/<id>/responses at once, with no form before it; the section then turns into «Отклик отправлен»
 // with a «Сопроводительное письмо» textarea (name="body") and «Дополнить отклик», which PATCHes the letter
 // onto the response. So there is no way to open the form without sending: a dry run never clicks.
+import { errMessage } from "@sgz/shared";
 import { setTimeout as sleep } from "node:timers/promises";
 import { RunAbortError, Status, normalizeDedup, type ApplyResult, type BrowserSession, type Vacancy } from "@sgz/shared";
 import { listUrl } from "../career/ats/sites/habr-career.js";
@@ -195,7 +196,7 @@ export function createHabrClient(opts: HabrClientOptions = {}): HabrClient {
       return done(Status.SENT, after.responseMessage ? "sent with letter" : "sent, letter NOT saved");
     } catch (e) {
       if (e instanceof RunAbortError) throw e;
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = errMessage(e);
       if (clicked) {
         const after = await readVacancy(s, url).catch(() => null);
         if (after?.responded) return done(Status.SENT, `sent, letter NOT saved: ${msg}`);

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // sgz CLI entrypoint. Subcommands register themselves in ./commands/index.ts (workstream G wires them).
 //   sgz serve | run | hh-login | habr-login | hh-record | pool | resume | site | db | version
+import { errMessage } from "@sgz/shared";
 import { readFileSync } from "node:fs";
 import tls from "node:tls";
 
@@ -11,7 +12,7 @@ try {
   const extra = ["russian_trusted_root_ca.pem", "russian_trusted_sub_ca.pem"].map((f) => readFileSync(new URL(f, dir), "utf8"));
   tls.setDefaultCACertificates([...tls.getCACertificates("default"), ...extra]);
 } catch (e) {
-  console.error(`sgz: extra CA certificates not loaded: ${e instanceof Error ? e.message : String(e)}`);
+  console.error(`sgz: extra CA certificates not loaded: ${errMessage(e)}`);
 }
 import { commands } from "./commands/index.js";
 
