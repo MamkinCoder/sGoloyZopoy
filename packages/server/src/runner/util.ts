@@ -1,4 +1,5 @@
 import type { RunRequest } from "@sgz/shared";
+import { openAlert } from "../notify/alert.js";
 
 export class RunStoppedError extends Error {
   constructor() {
@@ -65,9 +66,5 @@ const REPEAT_ALERT_MS = 6 * 3600_000;
  * "run #51"/timings don't make the same error look new. */
 export function repeatFailure(store: { getSetting(key: string): string | null; setSetting(key: string, value: string): void }, req: RunRequest, error: string, now: Date): boolean {
   if (req.trigger !== "schedule" || !BACKGROUND_STAGES.has(req.stage ?? "")) return false;
-  const key = `alert_last:${error.replace(/\d+/g, "#").slice(0, 80)}`;
-  const last = Date.parse(store.getSetting(key) ?? "");
-  if (Number.isFinite(last) && now.getTime() - last < REPEAT_ALERT_MS) return true;
-  store.setSetting(key, now.toISOString());
-  return false;
+  return !openAlert(store, `alert_last:${error.replace(/\d+/g, "#").slice(0, 80)}`, { ttlMs: REPEAT_ALERT_MS, now });
 }

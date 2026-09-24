@@ -1,4 +1,5 @@
-// sgz serve — HTTP API + panel, scheduler when configured, the always-on agent, graceful shutdown.
+// sgz serve — HTTP API + panel, scheduler when configured, the always-on agent, graceful shutdown. Wiring only:
+// every recurring job (chats, reminders, health, digest, retro, lessons, autopilot) is an agent schedule.
 import { serve as honoServe } from "@hono/node-server";
 import { createApp } from "../api/index.js";
 import { createAppContext } from "../app.js";
@@ -8,18 +9,12 @@ import { createScheduler } from "../scheduler/index.js";
 import { telegramFetch } from "../notify/proxy.js";
 import { startTelegramCallbacks } from "../notify/telegram.js";
 import { kbText, onKbTap, parseKbCallback } from "../agent/chats/review.js";
-import { chatSchedules } from "../agent/chats/index.js";
-import { handleQueueTap, parseQueueCallback, startPendingSend } from "../runner/queue-cards.js";
-import { buildDigest, digestDue, queueList } from "../notify/digest.js";
-import { careerRotation } from "../runner/career.js";
-import { askOutcomes, OUTCOME_LABEL, parseOutcomeCallback, remindInterviews } from "../runner/interview.js";
-import { companyReport, refreshLessons } from "../runner/learn.js";
+import { handleQueueTap, parseQueueCallback } from "../runner/queue-cards.js";
+import { buildDigest, queueList } from "../notify/digest.js";
+import { OUTCOME_LABEL, parseOutcomeCallback } from "../runner/interview.js";
+import { companyReport } from "../runner/learn.js";
 import { formatBand } from "../db/salary.js";
-import { nextJob } from "../scheduler/autopilot.js";
-import { checkChatStall, checkHeartbeat } from "../scheduler/health.js";
-import { errMessage } from "../runner/util.js";
-import type { RunRequest } from "@sgz/shared";
-import { buildRetro, MIN_SENT, retroDue } from "../notify/retro.js";
+import { buildRetro, MIN_SENT } from "../notify/retro.js";
 import { mockAnswer, startMock, stopMock } from "../runner/mock.js";
 import { parseStudyCallback, studyCommand, studyTap } from "../runner/study.js";
 
@@ -58,62 +53,12 @@ export async function serve(): Promise<void> {
   if (app.scheduler) app.scheduler.start();
   else console.error(`sgz serve: scheduler off (scheduleAt="${app.cfg.scheduleAt}", runnerEnabled=${app.cfg.runnerEnabled})`);
 
-  // The always-on agent answers employer chats (chats.sync every SGZ_CHAT_POLL_MIN, reply tasks, Telegram
-  // cards) on its own Chrome profile, independent of batch runs. See docs/ARCHITECTURE.md §2-3.
-  const agent = app.cfg.runnerEnabled ? app.agent : null;
-  agent?.start();
-  const chatsOn = !!agent && chatSchedules().length > 0;
-  // Taps and stories only feed jobs; with the agent off nothing would run them, so they are refused.
-  const chats = agent ? app.chats : null;
+  // The always-on agent: employer chats (chats.sync every SGZ_CHAT_POLL_MIN, reply tasks, Telegram cards) on its own
+  // Chrome profile, plus serve's recurring jobs (scheduler/jobs.ts). See docs/ARCHITECTURE.md §2-3.
+  app.agent?.start();
+  // Taps and stories only feed chat jobs; with the runner off nothing would run them, so they are refused.
+  const chats = app.cfg.runnerEnabled ? app.chats : null;
   const AGENT_OFF = "агент выключен (SGZ_RUNNER=false): ответь в чате сам";
-  const start = (req: Omit<RunRequest, "dryRun" | "limit" | "trigger">) =>
-    app.runner.start({ ...req, dryRun: false, limit: 0, trigger: "schedule" }).catch((e: unknown) => console.error(`sgz serve: ${req.stage}: ${errMessage(e)}`));
-  // Every minute: reminders and health checks, then one batch job when the runner is idle
-  // (see scheduler/autopilot.ts for the order).
-  let lastHealth = Date.now();
-  let lastLearn = 0;
-  let learning = false;
-  const tick = async () => {
-    void remindInterviews(app.store, app.notifier, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: interview reminders: ${errMessage(e)}`));
-    void askOutcomes(app.store, app.notifier).catch((e: unknown) => console.error(`sgz serve: interview outcomes: ${errMessage(e)}`));
-    if (Date.now() - lastHealth >= 30 * 60_000) {
-      lastHealth = Date.now();
-      void checkHeartbeat(app.store, app.notifier, app.startedAt, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: heartbeat: ${errMessage(e)}`));
-    }
-    if (chatsOn) {
-      // Stall baseline: the last chats.sync job that finished done (boot when none yet).
-      const lastSync = Date.parse(app.store.lastJobAt("chats.sync", "done") ?? "");
-      const lastChatDone = Math.max(Number.isFinite(lastSync) ? lastSync : 0, app.startedAt.getTime());
-      void checkChatStall(app.store, app.notifier, lastChatDone, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: chat stall: ${errMessage(e)}`));
-    }
-    if (app.runner.active()) return;
-    // «Отправить» tapped in Telegram while a run was busy: those go first.
-    if (await startPendingSend(app.store, app.runner).catch((e: unknown) => (console.error(`sgz serve: queued send: ${errMessage(e)}`), false))) return;
-    if (app.runner.active()) return; // a panel / Telegram run started during the await
-    if (app.scheduler?.owed()) return; // the daily run waits for the idle slot: its retry takes it, not a new chunk
-    // Letter lessons: checked hourly, rebuilt weekly per user once enough outcomes exist (runner/learn.ts).
-    if (!learning && Date.now() - lastLearn >= 60 * 60_000) {
-      lastLearn = Date.now();
-      learning = true;
-      void (async () => {
-        for (const u of app.store.listUsers(true)) await refreshLessons(app.store, app.llm, u);
-      })()
-        .catch((e: unknown) => console.error(`sgz serve: letter lessons: ${errMessage(e)}`))
-        .finally(() => (learning = false));
-    }
-    const job = nextJob({
-      now: Date.now(),
-      touchLastAt: app.store.getSetting("touch_last_at") ?? "",
-      careerOn: app.store.getSetting("career_autopilot") !== "0",
-      careerDue: () =>
-        app.store.listUsers(true).find((u) => {
-          const r = careerRotation(app.store, u, app.cfg.tz, new Date());
-          return r.budget > 0 && r.sites.length > 0;
-        })?.slug ?? null,
-    });
-    // touch_last_at only once the run really started: a RunBusyError must not skip the raise for 4 h.
-    if (job?.kind === "touch") void start({ userSlug: "all", source: "hh", stage: "touch" }).then((id) => typeof id === "number" && app.store.setSetting("touch_last_at", new Date().toISOString())); else if (job?.kind === "career") void start({ userSlug: job.userSlug, source: "career", stage: "rotate" });
-  };
   // Telegram buttons: queue cards (send / skip), «📚 Чеклист» (runner/study.ts) and the chat reply cards'
   // KB review buttons «Подтвердить / Дополнить / Нет навыка» per topic (agent/chats/review.ts: the answer goes into the task, the card is edited in place; old phase-1
   // «ct:» and one-skill «sk:» cards only get «кнопка устарела»). /status and /queue answer from the configured chats.
@@ -152,37 +97,10 @@ export async function serve(): Promise<void> {
         return "кнопка устарела"; // old cards (phase-1 «ct:», one-skill «sk:») and anything unknown
       }, { fetch: telegramFetch(), store: app.store, commands: { chatIds: [app.cfg.tgChatId, ...app.store.listUsers().map((u) => u.tgChatId)].filter(Boolean), onCommand, onText } })
     : null;
-  const chatPoll = app.cfg.runnerEnabled ? setInterval(() => void tick(), 60_000) : null;
-  // Evening digest: once a day at settings.digest_at ("" = off), independent of the runner.
-  const digestTimer = app.cfg.tgBotToken
-    ? setInterval(() => {
-        const day = digestDue(app.store.getSetting("digest_at") ?? "20:00", app.store.getSetting("digest_last_day") ?? "", new Date(), app.cfg.tz);
-        if (!day) return;
-        app.store.setSetting("digest_last_day", day);
-        for (const u of app.store.listUsers(true))
-          void app.notifier.alert(`Итоги дня · ${u.name}`, buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)).catch((e: unknown) => console.error(`sgz serve: digest: ${errMessage(e)}`));
-      }, 60_000)
-    : null;
-  // Weekly retro: settings.retro_day ("sun" default, "" = off) at retro_at; a too-small week sends nothing.
-  const retroTimer = app.cfg.tgBotToken
-    ? setInterval(() => {
-        const day = retroDue(app.store.getSetting("retro_day") ?? "sun", app.store.getSetting("retro_at") ?? "19:00", app.store.getSetting("retro_last_day") ?? "", new Date(), app.cfg.tz);
-        if (!day) return;
-        app.store.setSetting("retro_last_day", day);
-        for (const u of app.store.listUsers(true)) {
-          const text = buildRetro(app.store, u, app.cfg.tz, new Date());
-          if (text) void app.notifier.alert(`Итоги недели · ${u.name}`, text).catch((e: unknown) => console.error(`sgz serve: retro: ${errMessage(e)}`));
-        }
-      }, 60_000)
-    : null;
-
   let closing = false;
   const shutdown = (sig: string) => {
     if (closing) return;
     closing = true;
-    if (chatPoll) clearInterval(chatPoll);
-    if (digestTimer) clearInterval(digestTimer);
-    if (retroTimer) clearInterval(retroTimer);
     stopCallbacks?.();
     console.error(`sgz serve: ${sig}, shutting down`);
     server.close();

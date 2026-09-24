@@ -86,11 +86,12 @@ export async function createAppContext(opts: { withScheduler?: boolean } = {}): 
 
   const notifier = createTelegram(cfg.tgBotToken, cfg.tgChatId, cfg.panelUrl, { tz: cfg.tz, warn, fetch: telegramFetch() });
   const runner = createRunner({ cfg, store, launcher, hh, habr, career, llm, notifier, resume, loadCookies });
-  const always = opts.withScheduler ? createAppAgent({ cfg, store, launcher, loadCookies, hh, habr, llm, notifier }) : null;
+  const startedAt = new Date();
+  const always = opts.withScheduler ? createAppAgent({ cfg, store, launcher, loadCookies, hh, habr, llm, notifier, runner, owed: () => ctx.scheduler?.owed() ?? false /* lazy: serve may replace the scheduler */, startedAt }) : null;
   const scheduler =
     opts.withScheduler && cfg.scheduleAt && cfg.runnerEnabled ? createScheduler(runner, { at: cfg.scheduleAt, tz: cfg.tz, jitterMin: cfg.scheduleJitterMin, log: warn }) : null;
 
-  return {
+  const ctx: AppContext = {
     cfg,
     store,
     notifier,
@@ -100,7 +101,7 @@ export async function createAppContext(opts: { withScheduler?: boolean } = {}): 
     agent: always?.agent ?? null,
     chats: always?.chats ?? null,
     version: process.env.SGZ_VERSION ?? "dev",
-    startedAt: new Date(),
+    startedAt,
     async close(this: AppContext) {
       this.scheduler?.stop();
       const a = runner.active();
@@ -109,4 +110,5 @@ export async function createAppContext(opts: { withScheduler?: boolean } = {}): 
       store.close();
     },
   };
+  return ctx;
 }

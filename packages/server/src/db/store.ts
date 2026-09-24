@@ -6,7 +6,7 @@ import type { Store } from "@sgz/shared";
 import { applicationsRepo } from "./applications.js";
 import { careerRepo } from "./career.js";
 import { chatTasksRepo, type ChatTasksRepo } from "./chat-tasks.js";
-import { chatsRepo } from "./chats.js";
+import { chatsRepo, type InterviewPeek } from "./chats.js";
 import { intelRepo } from "./intel.js";
 import { jobsRepo, type JobsRepo } from "./jobs.js";
 import { kbRepo } from "./kb.js";
@@ -21,7 +21,7 @@ import { usersRepo } from "./users.js";
 import { vacanciesRepo } from "./vacancies.js";
 
 /** The agent's tables live next to the Store contract, not in it: only the always-on agent uses them. */
-export interface SqliteStore extends Store, JobsRepo, ChatTasksRepo, KbReviewsRepo {
+export interface SqliteStore extends Store, JobsRepo, ChatTasksRepo, KbReviewsRepo, InterviewPeek {
   readonly db: DatabaseSync;
   readonly path: string;
 }

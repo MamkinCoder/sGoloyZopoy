@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ClaudeError, buildArgs, detectFeatures, extractJson, parseEnvelope, resetFeatureCache, runClaude } from "../../src/llm/claude.js";
-import { createMutex } from "../../src/llm/mutex.js";
+import { createMutex, llmCaller } from "../../src/llm/mutex.js";
 import { REPO_DIR, STUB_BIN, stubDir, stubEnv } from "./fixtures.js";
 
 describe("extractJson", () => {
@@ -90,6 +90,21 @@ describe("runClaude", () => {
     expect(Date.now() - t0).toBeLessThan(3000);
   });
 
+  it("an aborted agent job kills its claude child (signal via llmCaller)", async () => {
+    const dir = stubDir();
+    const ac = new AbortController();
+    const t0 = Date.now();
+    const p = llmCaller.run({ signal: ac.signal }, () => runClaude({ ...base, prompt: "p", env: stubEnv(dir, "sleep", "x", { STUB_SLEEP: "5" }) })).catch((e: unknown) => e);
+    setTimeout(() => ac.abort(), 200);
+    const err = await p;
+    expect(err).toBeInstanceOf(ClaudeError);
+    expect((err as Error).message).toContain("aborted");
+    expect(Date.now() - t0).toBeLessThan(3000);
+    // Aborted before its slot came: no process is started at all.
+    const again = await runClaude({ ...base, prompt: "p", env: stubEnv(dir, "valid", "x"), signal: ac.signal }).catch((e: unknown) => e);
+    expect((again as Error).message).toContain("before start");
+  });
+
   it("runs at most two claude processes at once (global semaphore)", async () => {
     const dir = stubDir();
     const env = stubEnv(dir, "sleep", "x", { STUB_SLEEP: "0.3" });
@@ -134,5 +149,21 @@ describe("mutex", () => {
     await Promise.all([task(), task(), task()]);
     expect(peak).toBe(2);
     expect(m.pending).toBe(0);
+  });
+
+  it("priority waiters go ahead of earlier plain ones", async () => {
+    const m = createMutex(1);
+    const order: string[] = [];
+    let release = () => undefined as void;
+    const hold = m.run(() => new Promise<void>((r) => (release = r)));
+    const batch = m.run(async () => void order.push("batch"));
+    let acquired = false;
+    const agent = m.run(async () => void order.push("agent"), { priority: true, onAcquire: () => (acquired = true) });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(acquired).toBe(false);
+    release();
+    await Promise.all([hold, batch, agent]);
+    expect(acquired).toBe(true);
+    expect(order).toEqual(["agent", "batch"]);
   });
 });

@@ -44,7 +44,21 @@ state: queued -> running -> done | failed | queued (retry, run_after = now + bac
   e.g. OOM) fails instead of running again after every restart. A handler with `onFailed` alerts itself per job
   (chat tasks: «Не ответил работодателю: <employer>»); the once-per-kind alert is only for jobs without one
   (`chats.sync`, `chats.prep`). A DB error in the loop is logged, not fatal. With `SGZ_RUNNER=false` the agent
-  is not started, so Telegram taps and stories are refused («агент выключен») instead of queued for nobody.
+  runs no chat jobs (below), so Telegram taps and stories are refused («агент выключен») instead of queued for nobody.
+- As built (one scheduler): `commands/serve.ts` is wiring only. Its old timers are agent schedules
+  (`scheduler/jobs.ts serveJobs`): `interviews.remind`, `health.heartbeat`, `health.chats`, `digest.day`,
+  `digest.week`, `learn.lessons` (llm) and `runner.autopilot` (none; parked sends, then touch / career rotate via
+  `runner.start`). `Schedule.due(now)` is a cheap check made every `everyMs`; the job is enqueued only when it is
+  true, so the jobs table holds real work only. Day keys (`digest_last_day`, `retro_last_day`, `touch_last_at`,
+  `queue_send_pending`) are unchanged. The agent always starts in `sgz serve`; with `SGZ_RUNNER=false` it has only
+  the digest/retro handlers and `keepUnknown` leaves chat jobs queued. Every "alert once" (`alert_open:job:*`,
+  `alert_open:heartbeat`, `alert_open:chats`, `alert_last:*`, `habr_alert_day:*`) goes through `notify/alert.ts`
+  (`openAlert` / `alertOnce` / `closeAlert`: until closed, a ttl, or a UTC day; a failed send stays closed).
+- As built (LLM lane): the agent runs `llm` and `browser` handlers inside `llmCaller` (AsyncLocalStorage in
+  `llm/mutex.ts`), so `runClaude` waits in the mutex's priority list ahead of batch runs, the job's timeout clock
+  starts at the first slot acquire (`onAcquire`; ponytail: an llm job hanging before any claude call has no clock),
+  and the job's `AbortSignal` (also `JobContext.signal`) kills its claude child on timeout. `none` handlers run
+  outside it, so a batch run started by `runner.autopilot` keeps normal priority.
 
 Handlers are the unit of extension: new always-on features = new job kinds, not new timers.
 

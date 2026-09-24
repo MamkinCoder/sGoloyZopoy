@@ -4,6 +4,7 @@ import { runCareerUser, type CareerPlan } from "./career.js";
 import type { RunContext } from "./context.js";
 import { runHabrUser, type HabrPlan } from "./habr.js";
 import { runHHUser, type HHPlan } from "./hh.js";
+import { openAlert } from "../notify/alert.js";
 import { createStats, mergeStats } from "./stats.js";
 import type { UserRun } from "./user.js";
 import { errMessage, isStop, repeatFailure, RunStoppedError } from "./util.js";
@@ -175,12 +176,7 @@ async function runHabrContained(ctx: RunContext, ur: UserRun, plan: HabrPlan): P
     if (!(e instanceof RunAbortError) || ctx.req.source === "habr") throw e;
     ur.stats.record(e.status);
     ctx.log.error("session", `${ur.user.slug}: habr skipped: ${e.status}: ${e.message}`, { status: e.status });
-    const key = `habr_alert_day:${ur.user.id}`;
-    const day = ctx.now().toISOString().slice(0, 10);
-    if (ctx.store.getSetting(key) !== day) {
-      ctx.store.setSetting(key, day);
-      await alert(ctx, `Хабр Карьера: ${e.status}`, `${ur.user.name}: ${e.message}`);
-    }
+    if (openAlert(ctx.store, `habr_alert_day:${ur.user.id}`, { day: true, now: ctx.now() })) await alert(ctx, `Хабр Карьера: ${e.status}`, `${ur.user.name}: ${e.message}`);
   } finally {
     await ctx.browser.close().catch(() => undefined); // the next source relaunches and re-checks its own login
   }

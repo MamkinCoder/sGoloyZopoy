@@ -1,7 +1,7 @@
 // `claude -p` wrapper: one headless Claude Code process per call, serialized by a global mutex.
 import { spawn } from "node:child_process";
 import type { Tier } from "@sgz/shared";
-import { claudeMutex } from "./mutex.js";
+import { claudeMutex, llmCaller } from "./mutex.js";
 
 export const TIER_MODEL: Record<Tier, string> = { fast: "haiku", write: "sonnet", tailor: "opus" };
 const DEFAULT_TIMEOUT_MS = 300_000; // decide batches with long vacancy texts take >3 min on the Pi
@@ -16,6 +16,8 @@ export interface RunClaudeOpts {
   /** JSON schema for `--json-schema` when the binary supports it. */
   schema?: unknown;
   env?: Record<string, string>;
+  /** Kills the child when aborted (default: the calling agent job's signal, see llmCaller). */
+  signal?: AbortSignal;
 }
 
 export interface RunClaudeResult {
@@ -90,14 +92,19 @@ export function buildArgs(tier: Tier, f: ClaudeFeatures, schema?: unknown): stri
 export async function runClaude(opts: RunClaudeOpts): Promise<RunClaudeResult> {
   const features = await detectFeatures(opts.bin, opts.env);
   const args = buildArgs(opts.tier, features, opts.schema);
+  const caller = llmCaller.getStore();
+  const signal = opts.signal ?? caller?.signal;
   return claudeMutex.run(async () => {
+    if (signal?.aborted) throw new ClaudeError("claude aborted before start", -1, "", 0);
     const r = await spawnCollect(opts.bin, args, {
       cwd: opts.cwd,
       stdin: opts.prompt,
       timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       env: opts.env,
+      signal,
     });
     const stderrTail = r.stderr.slice(-STDERR_TAIL);
+    if (r.aborted) throw new ClaudeError(`claude aborted after ${r.durationMs} ms`, r.exitCode, stderrTail, r.durationMs);
     if (r.timedOut) throw new ClaudeError(`claude timed out after ${r.durationMs} ms`, r.exitCode, stderrTail, r.durationMs, true);
     if (r.exitCode !== 0) {
       throw new ClaudeError(`claude exited with code ${r.exitCode}: ${stderrTail.trim() || r.stdout.slice(-300)}`, r.exitCode, stderrTail, r.durationMs);
@@ -105,7 +112,7 @@ export async function runClaude(opts: RunClaudeOpts): Promise<RunClaudeResult> {
     const env = parseEnvelope(r.stdout);
     if (env.isError) throw new ClaudeError(`claude reported an error: ${env.text.slice(0, 300)}`, r.exitCode, stderrTail, r.durationMs);
     return { text: env.text, structured: env.structured, durationMs: r.durationMs, exitCode: r.exitCode, stderrTail };
-  });
+  }, caller);
 }
 
 interface Envelope {
@@ -193,6 +200,7 @@ interface SpawnOpts {
   stdin?: string;
   timeoutMs: number;
   env?: Record<string, string>;
+  signal?: AbortSignal;
 }
 interface SpawnResult {
   stdout: string;
@@ -200,6 +208,7 @@ interface SpawnResult {
   exitCode: number;
   durationMs: number;
   timedOut: boolean;
+  aborted: boolean;
 }
 
 function spawnCollect(bin: string, args: string[], o: SpawnOpts): Promise<SpawnResult> {
@@ -208,6 +217,7 @@ function spawnCollect(bin: string, args: string[], o: SpawnOpts): Promise<SpawnR
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let aborted = false;
     let settled = false;
     const child = spawn(bin, args, {
       cwd: o.cwd,
@@ -219,31 +229,41 @@ function spawnCollect(bin: string, args: string[], o: SpawnOpts): Promise<SpawnR
         ...o.env,
       },
     });
-    const timer = setTimeout(() => {
-      timedOut = true;
+    const kill = () => {
       child.kill("SIGTERM");
       setTimeout(() => {
         if (!settled) child.kill("SIGKILL");
       }, 2000).unref();
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      kill();
     }, o.timeoutMs);
+    const onAbort = () => {
+      aborted = true;
+      kill();
+    };
+    o.signal?.addEventListener("abort", onAbort, { once: true });
     child.stdout.setEncoding("utf8").on("data", (d: string) => (stdout += d));
     child.stderr.setEncoding("utf8").on("data", (d: string) => (stderr += d));
     child.on("error", (err) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      o.signal?.removeEventListener("abort", onAbort);
       reject(new ClaudeError(`cannot start ${bin}: ${err.message}`, -1, "", Date.now() - started));
     });
     const settle = (code: number | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({ stdout, stderr, exitCode: code ?? -1, durationMs: Date.now() - started, timedOut });
+      o.signal?.removeEventListener("abort", onAbort);
+      resolve({ stdout, stderr, exitCode: code ?? -1, durationMs: Date.now() - started, timedOut, aborted });
     };
     child.on("close", settle);
     // A killed child may leave grandchildren holding the pipes; don't wait for them.
     child.on("exit", (code) => {
-      if (timedOut) setImmediate(() => settle(code));
+      if (timedOut || aborted) setImmediate(() => settle(code));
     });
     if (o.stdin !== undefined) {
       child.stdin.on("error", () => undefined); // EPIPE when the child dies early
