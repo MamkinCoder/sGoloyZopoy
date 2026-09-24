@@ -253,5 +253,9 @@ describe("habr resume proposal guard", () => {
     expect(experienceSaved({ status: 422, body: "" })).toBe(false);
     expect(experienceSaved({ status: 200, body: "<div class=\"field_with_errors\">" })).toBe(false);
     expect(experienceSaved({ status: 0, body: "no form" })).toBe(false);
+    // Habr's real success reply (it clears errors and redirects)
+    expect(experienceSaved({ status: 200, body: "window.helpers.clear_form_errors(); window.helpers.notify('Настройки успешно сохранены'); document.location.href = \"/profile/experiences\";" })).toBe(true);
+    // Habr's real validation reply
+    expect(experienceSaved({ status: 200, body: "form_element.after('<span class=\"validation-error\">Укажите квалификацию</span>');" })).toBe(false);
   });
 });

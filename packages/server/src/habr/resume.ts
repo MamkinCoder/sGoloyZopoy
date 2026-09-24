@@ -189,9 +189,10 @@ export const saveExperienceJs = (id: string, html: string, spec: string, qual: s
   return { status: r.status, body: (await r.text()).slice(0, 300), filled };
 })()`;
 
-/** A 2xx answer without Rails' validation markup. */
+/** A 2xx answer without Rails' validation markup. The success reply itself calls `clear_form_errors()` and
+ * «Настройки успешно сохранены», so only real error markup counts, not the word "error". */
 export const experienceSaved = (r: { status: number; body: string }): boolean =>
-  r.status >= 200 && r.status < 300 && !/error|ошибк|не может быть пуст|can't be blank/i.test(r.body);
+  r.status >= 200 && r.status < 300 && !/validation-error|field_with_errors|field_error|не может быть пуст|can't be blank|Укажите /i.test(r.body);
 
 const sameStart = (a: string, b: string): boolean => {
   const n = (s: string) => s.replace(/\s+/g, " ").trim().slice(0, 40);
