@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ChatMessage, ChatThread } from "@sgz/shared";
+import type { ChatMessage, ChatThread, TgButton } from "@sgz/shared";
 import { openStore, seedDefaultUsers } from "../db/index.js";
 import { askOutcomes, FOLLOW_UP, followupDue, formatPrep, marketLine, parseOutcomeCallback, remindInterviews } from "./interview.js";
 
@@ -78,7 +78,7 @@ describe("askOutcomes", () => {
     const done = mk("Done", "2026-09-22T09:00:00.000Z");
     store.setInterviewOutcome(done.id, "offer");
     const asks: { text: string; data: string[] }[] = [];
-    const notifier = { report: async () => undefined, alert: async () => undefined, ask: async (text: string, b: { data: string }[]) => void asks.push({ text, data: b.map((x) => x.data) }) };
+    const notifier = { report: async () => undefined, alert: async () => undefined, ask: async (text: string, b: TgButton[] | TgButton[][]) => void asks.push({ text, data: b.flat().map((x) => x.data) }) };
     await askOutcomes(store, notifier, now);
     await askOutcomes(store, notifier, now);
     expect(asks).toEqual([{ text: "Как прошло собеседование в Due?", data: ["next", "rejected", "silence", "offer"].map((o) => `io:${due.id}:${o}`) }]);

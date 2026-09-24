@@ -1,7 +1,7 @@
-import type { AnalyticsCount, AnalyticsDTO, AnalyticsEvent, RunDTO, Status } from "@sgz/shared";
+import type { AgentJobDTO, AnalyticsCount, AnalyticsDTO, AnalyticsEvent, RunDTO, Status } from "@sgz/shared";
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useAnalytics, useHealth, useRuns, type StatsRange } from "../api/hooks";
+import { useAgentJobs, useAnalytics, useHealth, useRuns, type StatsRange } from "../api/hooks";
 import { useRetro } from "../api/hooks";
 import { ColumnChart, Funnel, type Series } from "../components/Charts";
 import { DataTable, type Column } from "../components/DataTable";
@@ -98,6 +98,50 @@ function Kpis({ k }: { k: AnalyticsDTO["kpi"] }) {
   );
 }
 
+const JOB_LABEL: Record<string, string> = {
+  "chats.sync": "проверка чатов",
+  "chats.triage": "разбор сообщения",
+  "chats.review": "вопрос о навыках",
+  "chats.remind": "напоминание",
+  "chats.fallback": "ответ без подтверждения",
+  "chats.draft": "черновик ответа",
+  "chats.send": "отправка ответа",
+  "chats.prep": "подготовка к собеседованию",
+};
+
+/** The always-on agent: what runs now, what waits, what failed (employer chats live here, not in runs). */
+function AgentSection() {
+  const jobs = useAgentJobs();
+  const all = jobs.data ?? [];
+  const by = (s: AgentJobDTO["state"]) => all.filter((j) => j.state === s);
+  const [running, queued, failed] = [by("running"), by("queued"), by("failed")];
+  const row = (j: AgentJobDTO, when: string) => (
+    <li key={j.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-baseline">
+      <span className="truncate" title={j.last_error || j.key || undefined}>
+        {JOB_LABEL[j.kind] ?? j.kind}
+        {j.attempts > 1 && <span className="faint"> · попытка {j.attempts}/{j.max_attempts}</span>}
+        {j.last_error && <span className="text-[var(--bad)]"> · {j.last_error}</span>}
+      </span>
+      <span className="faint tabular-nums">{when}</span>
+    </li>
+  );
+  return (
+    <Section title="Агент" right={<span className="faint text-[12px]">сейчас {running.length} · в очереди {queued.length} · ошибок {failed.length}</span>}>
+      {jobs.isLoading ? (
+        <Spinner />
+      ) : !all.length ? (
+        <Empty>Агент ещё ничего не делал</Empty>
+      ) : (
+        <ul className="grid gap-1 text-[12px]">
+          {running.map((j) => row(j, "идёт"))}
+          {[...queued].sort((a, b) => a.run_after.localeCompare(b.run_after)).slice(0, 5).map((j) => row(j, fmtRel(j.run_after)))}
+          {failed.slice(0, 5).map((j) => row(j, fmtRel(j.updated_at)))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
 export function DashboardPage() {
   const { slug = "" } = useParams();
   const nav = useNavigate();
@@ -152,6 +196,7 @@ export function DashboardPage() {
       )}
 
       <WeekCard slug={slug} />
+      <AgentSection />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Отклики по дням">{a ? daily.length ? <ColumnChart rows={daily} series={APP_SERIES} /> : <Empty /> : <Spinner />}</Section>

@@ -17,9 +17,9 @@ export interface PipelineResult {
 
 export function planHH(source: string, stage: string | undefined): HHPlan | null {
   if (source === "career" || source === "habr") return null;
-  // Chats only in stage "chats": the chat lane (runner/service.ts) is the one place that talks to employers.
-  const full: HHPlan = { poolSync: "auto", search: true, decide: true, apply: true, chats: false, touch: true, poolExpand: true, force: null };
-  const none: HHPlan = { poolSync: "off", search: false, decide: false, apply: false, chats: false, touch: false, poolExpand: false, force: null };
+  // Runs never talk to employers: chats belong to the always-on agent (src/agent/chats).
+  const full: HHPlan = { poolSync: "auto", search: true, decide: true, apply: true, touch: true, poolExpand: true, force: null };
+  const none: HHPlan = { poolSync: "off", search: false, decide: false, apply: false, touch: false, poolExpand: false, force: null };
   if (source === "pool") {
     if (!stage || stage === "pool-sync" || stage === "sync") return { ...none, poolSync: "force" };
     if (stage === "pool-expand" || stage === "expand") return { ...none, poolSync: "auto", poolExpand: true };
@@ -37,8 +37,6 @@ export function planHH(source: string, stage: string | undefined): HHPlan | null
       return { ...none, poolSync: "auto", search: true, decide: true };
     case "apply":
       return { ...none, poolSync: "auto", search: true, decide: true, apply: true };
-    case "chats":
-      return { ...none, chats: true };
     case "touch":
       return { ...none, touch: true };
     case "pool-sync":
@@ -50,11 +48,11 @@ export function planHH(source: string, stage: string | undefined): HHPlan | null
   }
 }
 
-/** Habr Career: its own source, and part of "all" (the daily run and the chat poll). Chats only in stage "chats". */
+/** Habr Career: its own source, and part of "all" (the daily run). */
 export function planHabr(source: string, stage: string | undefined): HabrPlan | null {
   if (source !== "habr" && source !== "all") return null;
-  const none: HabrPlan = { search: false, decide: false, apply: false, chats: false, force: null };
-  if (!stage) return { search: true, decide: true, apply: true, chats: false, force: null };
+  const none: HabrPlan = { search: false, decide: false, apply: false, force: null };
+  if (!stage) return { search: true, decide: true, apply: true, force: null };
   const force = /^force:(\d+)$/.exec(stage);
   if (force) return source === "habr" ? { ...none, force: Number(force[1]) } : null;
   switch (stage) {
@@ -65,8 +63,6 @@ export function planHabr(source: string, stage: string | undefined): HabrPlan | 
       return { ...none, search: true, decide: true };
     case "apply":
       return { ...none, search: true, decide: true, apply: true };
-    case "chats":
-      return { ...none, chats: true };
     default:
       return null;
   }

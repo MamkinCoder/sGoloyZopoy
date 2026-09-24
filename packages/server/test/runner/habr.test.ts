@@ -1,5 +1,5 @@
 // Habr runner (src/runner/habr.ts) against a real in-memory store and a fake Habr client: plans, the daily
-// limit, cross-source dedup with hh, the response allowance stop, and the chat rules.
+// limit, cross-source dedup with hh and the response allowance stop. Habr chats: test/agent/chats-sync.test.ts.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Status, normalizeDedup, type Profile, type RunRequest } from "@sgz/shared";
 import { openStore, type SqliteStore } from "../../src/db/index.js";
@@ -90,7 +90,7 @@ function setup(cards: HabrCard[], opts: { left?: (n: number) => number; states?:
       browser: { openHabr: vi.fn(async () => ({})), close: async () => {} },
       memoryGuard: async () => {},
     } as unknown as RunContext;
-    return runHabrUser(ctx, { user, profile, stats: createStats(false) }, { search: true, decide: true, apply: true, chats: false, force: null, ...plan });
+    return runHabrUser(ctx, { user, profile, stats: createStats(false) }, { search: true, decide: true, apply: true, force: null, ...plan });
   };
   const statuses = () => store.listApplications({ userId: user.id, page: 1, pageSize: 100 }).items.map((r) => `${r.vacancy.externalId}:${r.application.status}`).sort();
   return { user, habr, alert, run, statuses, llm };
@@ -100,9 +100,8 @@ const card = (id: string, title = `Go developer ${id}`, company = `Co${id}`, alr
 
 describe("habr run planning", () => {
   it("runs as its own source and inside all, never inside hh or career", () => {
-    expect(planHabr("habr", undefined)).toEqual({ search: true, decide: true, apply: true, chats: false, force: null });
-    expect(planHabr("all", undefined)).toMatchObject({ search: true, apply: true, chats: false });
-    expect(planHabr("all", "chats")).toEqual({ search: false, decide: false, apply: false, chats: true, force: null });
+    expect(planHabr("habr", undefined)).toEqual({ search: true, decide: true, apply: true, force: null });
+    expect(planHabr("all", undefined)).toMatchObject({ search: true, apply: true });
     expect(planHabr("habr", "decide")).toMatchObject({ search: true, decide: true, apply: false });
     expect(planHabr("habr", "force:7")).toMatchObject({ force: 7, search: false });
     expect(planHabr("all", "force:7")).toBeNull();
@@ -111,7 +110,6 @@ describe("habr run planning", () => {
     expect(planHabr("all", "rotate")).toBeNull();
     expect(planHH("habr", undefined)).toBeNull();
     expect(planCareer("habr", undefined)).toBeNull();
-    expect(planHH("all", "chats")).toMatchObject({ chats: true, search: false });
   });
 });
 
@@ -152,45 +150,5 @@ describe("runHabrUser", () => {
     await t.run({}, { dryRun: true });
     expect((t.habr.apply.mock.calls[0] as unknown as [unknown, { dryRun: boolean }])[1].dryRun).toBe(true);
     expect(t.statuses()).toEqual(["1:SKIP_DRY_RUN"]);
-  });
-});
-
-describe("habr chats", () => {
-  const conv = (login: string, isMine: boolean, kind = "message", id = "m2"): HabrConversation => ({ login, name: "HR", company: "Acme", subtitle: "", unread: 1, banned: false, lastMessage: { id, createdAt: "2026-09-24 10:00:00", isMine, kind, text: "?" } });
-
-  it("answers an employer-started chat with the chat rules and stores it as habr:<login>", async () => {
-    const t = setup([], { conversations: [conv("hr1", false)], messages: [{ id: "m2", mine: false, text: "Здравствуйте! Готовы к офису?" }] });
-    await t.run({ search: false, chats: true });
-    expect(t.habr.sendMessage).toHaveBeenCalledWith({}, "hr1", "Да, готов обсудить детали.");
-    const [thread] = store.listChatThreads(t.user.id);
-    expect(thread).toMatchObject({ hhNegotiationId: "habr:hr1", employer: "Acme (HR)" });
-    expect(store.listChatMessages(thread!.id).map((m) => [m.direction, m.answered])).toEqual([
-      ["in", true],
-      ["out", true],
-    ]);
-    await t.run({ search: false, chats: true }); // nothing new: no second read or reply
-    expect(t.habr.readConversation).toHaveBeenCalledTimes(1);
-  });
-
-  it("never replies in a chat the seeker started: forwards to Telegram; ignores Habr's own survey", async () => {
-    const t = setup([], {
-      conversations: [conv("friend", false), conv("habrbot", false, "question", "q1")],
-      messages: [
-        { id: "m0", mine: true, text: "Привет, закинешь резюме?" },
-        { id: "m2", mine: false, text: "Да, кинь файл" },
-      ],
-    });
-    await t.run({ search: false, chats: true });
-    expect(t.habr.sendMessage).not.toHaveBeenCalled();
-    expect(t.alert).toHaveBeenCalledTimes(1);
-    expect(String((t.alert.mock.calls[0] as unknown[])[1])).toContain("Да, кинь файл");
-  });
-
-  it("alerts an invitation once", async () => {
-    const t = setup([], { conversations: [conv("hr2", false, "job_invite")], messages: [{ id: "m1", mine: false, text: "Приглашаем на собеседование" }] });
-    t.llm.onAnswerChat = () => ({ reply: "", needs_human: false, reason: "" });
-    await t.run({ search: false, chats: true });
-    expect(String((t.alert.mock.calls[0] as unknown[])[0])).toContain("Приглашение");
-    expect(store.listChatThreads(t.user.id)[0]!.state).toBe("invited");
   });
 });

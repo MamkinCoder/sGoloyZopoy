@@ -1,4 +1,4 @@
-// sgz serve — HTTP API + panel, scheduler when configured, graceful shutdown.
+// sgz serve — HTTP API + panel, scheduler when configured, the always-on agent, graceful shutdown.
 import { serve as honoServe } from "@hono/node-server";
 import { createApp } from "../api/index.js";
 import { createAppContext } from "../app.js";
@@ -7,7 +7,10 @@ import { readMemAvailableMB } from "../runner/budget.js";
 import { createScheduler } from "../scheduler/index.js";
 import { telegramFetch } from "../notify/proxy.js";
 import { startTelegramCallbacks } from "../notify/telegram.js";
-import { parseSkillCallback, resolveSkill } from "../runner/skills.js";
+import { parseSkillCallback } from "../runner/skills.js";
+import { onCardTap, onLegacySkillTap } from "../agent/chats/tasks.js";
+import { parseCardCallback } from "../agent/chats/review.js";
+import { chatSchedules } from "../agent/chats/index.js";
 import { handleQueueTap, parseQueueCallback, startPendingSend } from "../runner/queue-cards.js";
 import { buildDigest, digestDue, queueList } from "../notify/digest.js";
 import { careerRotation } from "../runner/career.js";
@@ -48,6 +51,7 @@ export async function serve(): Promise<void> {
       }
     },
     memAvailableMB: readMemAvailableMB,
+    agent: { jobs: (state) => app.store.listJobs(state, 100), tasks: (userId) => app.store.latestChatTasks(userId) },
   } satisfies ApiDeps);
 
   const server = honoServe({ fetch: hono.fetch as never, hostname: app.cfg.bind.host, port: app.cfg.bind.port }, (info) => {
@@ -56,26 +60,14 @@ export async function serve(): Promise<void> {
   if (app.scheduler) app.scheduler.start();
   else console.error(`sgz serve: scheduler off (scheduleAt="${app.cfg.scheduleAt}", runnerEnabled=${app.cfg.runnerEnabled})`);
 
-  // Chat bot: answer employer chats (the auto «давайте пообщаемся» that follows an отклик) every
-  // SGZ_CHAT_POLL_MIN, counted from the last poll's end. It runs in the runner's chat lane with its own Chrome
-  // profile, so a long or wedged main run never holds it up. SGZ_CHAT_POLL_MIN=0 turns it off.
-  const chatPollMin = Number(process.env.SGZ_CHAT_POLL_MIN ?? 5);
-  const chatsOn = chatPollMin > 0;
-  let lastChatPoll = 0; // end of the last poll, any outcome
-  let lastChatDone = app.startedAt.getTime(); // end of the last successful poll (stall alert baseline)
+  // The always-on agent answers employer chats (chats.sync every SGZ_CHAT_POLL_MIN, reply tasks, Telegram
+  // cards) on its own Chrome profile, independent of batch runs. See docs/ARCHITECTURE.md §2-3.
+  const agent = app.cfg.runnerEnabled ? app.agent : null;
+  agent?.start();
+  const chatsOn = !!agent && chatSchedules().length > 0;
   const start = (req: Omit<RunRequest, "dryRun" | "limit" | "trigger">) =>
     app.runner.start({ ...req, dryRun: false, limit: 0, trigger: "schedule" }).catch((e: unknown) => console.error(`sgz serve: ${req.stage}: ${errMessage(e)}`));
-  const startChatPoll = () => {
-    if (!chatsOn || app.runner.activeChats()) return;
-    // source "all" + stage chats = hh chats, then Habr Career conversations. Main runs do no chats.
-    void start({ userSlug: "all", source: "all", stage: "chats" }).then(async (id) => {
-      if (typeof id !== "number") return;
-      const run = await app.runner.wait(id).catch(() => null);
-      lastChatPoll = Date.now();
-      if (run?.status === "done") lastChatDone = lastChatPoll;
-    });
-  };
-  // Every minute: the chat poll when due (own lane), then one main-lane job when the main slot is idle
+  // Every minute: reminders and health checks, then one batch job when the runner is idle
   // (see scheduler/autopilot.ts for the order).
   let lastHealth = Date.now();
   let lastLearn = 0;
@@ -88,7 +80,9 @@ export async function serve(): Promise<void> {
       void checkHeartbeat(app.store, app.notifier, app.startedAt, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: heartbeat: ${errMessage(e)}`));
     }
     if (chatsOn) {
-      if (Date.now() - lastChatPoll >= chatPollMin * 60_000) startChatPoll();
+      // Stall baseline: the last chats.sync job that finished done (boot when none yet).
+      const lastSync = Date.parse(app.store.lastJobAt("chats.sync", "done") ?? "");
+      const lastChatDone = Math.max(Number.isFinite(lastSync) ? lastSync : 0, app.startedAt.getTime());
       void checkChatStall(app.store, app.notifier, lastChatDone, app.cfg.tz).catch((e: unknown) => console.error(`sgz serve: chat stall: ${errMessage(e)}`));
     }
     if (app.runner.active()) return;
@@ -118,8 +112,9 @@ export async function serve(): Promise<void> {
     // touch_last_at only once the run really started: a RunBusyError must not skip the raise for 4 h.
     if (job?.kind === "touch") void start({ userSlug: "all", source: "hh", stage: "touch" }).then((id) => typeof id === "number" && app.store.setSetting("touch_last_at", new Date().toISOString())); else if (job?.kind === "career") void start({ userSlug: job.userSlug, source: "career", stage: "rotate" });
   };
-  // Telegram buttons: queue cards (send / skip), «📚 Чеклист» (runner/study.ts) and «есть / нет» answers for unknown skills (update the
-  // profile, then answer the waiting chats). /status and /queue answer from the configured chats.
+  // Telegram buttons: queue cards (send / skip), «📚 Чеклист» (runner/study.ts) and the chat reply cards'
+  // ✅/❌ per skill (agent/chats: the answer goes into the task, the card is edited in place; old one-skill
+  // «sk:» cards map to the open task). /status and /queue answer from the configured chats.
   const digestAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
   const retroAll = () => app.store.listUsers(true).map((u) => `${u.name}\n${buildRetro(app.store, u, app.cfg.tz, new Date()) ?? `Мало данных: за неделю меньше ${MIN_SENT} откликов`}`).join("\n\n");
   const onCommand = async (cmd: string, args = "", chatId = "") => {
@@ -149,12 +144,11 @@ export async function serve(): Promise<void> {
           app.store.setInterviewOutcome(io.threadId, io.outcome);
           return `Записал: ${OUTCOME_LABEL[io.outcome]}`;
         }
+        const card = parseCardCallback(data);
+        if (card && app.chats) return onCardTap(app.chats, card);
         const cb = parseSkillCallback(data);
-        if (!cb) return "неизвестная кнопка";
-        const skill = resolveSkill(app.store, cb.userId, cb.key, cb.has);
-        if (!skill) return "уже учтено";
-        startChatPoll();
-        return cb.has ? `✅ ${skill} добавлен в навыки, отвечаю работодателю` : `❌ ${skill} отмечен как «нет», отвечаю работодателю`;
+        if (cb && app.chats) return onLegacySkillTap(app.chats, cb);
+        return "неизвестная кнопка";
       }, { fetch: telegramFetch(), commands: { chatIds: [app.cfg.tgChatId, ...app.store.listUsers().map((u) => u.tgChatId)].filter(Boolean), onCommand, onText } })
     : null;
   const chatPoll = app.cfg.runnerEnabled ? setInterval(() => void tick(), 60_000) : null;

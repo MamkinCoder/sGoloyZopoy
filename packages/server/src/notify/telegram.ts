@@ -1,4 +1,4 @@
-import type { Notifier, Run, User } from "@sgz/shared";
+import type { Notifier, Run, TapReply, TgButton, User } from "@sgz/shared";
 import { chunkMessage, formatAlert, formatReport } from "./format.js";
 
 export interface TelegramOptions {
@@ -19,7 +19,8 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
   }
   const doFetch = opts.fetch ?? fetch;
 
-  async function sendOne(chat: string, text: string, extra: Record<string, unknown> = {}): Promise<void> {
+  /** Resolves to the sent message's id (null when Telegram's answer had none). */
+  async function sendOne(chat: string, text: string, extra: Record<string, unknown> = {}): Promise<number | null> {
     let lastErr = "";
     for (let attempt = 1; attempt <= RETRIES; attempt++) {
       let res: Response;
@@ -34,7 +35,10 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
         if (attempt < RETRIES) await sleep(1000 * 2 ** (attempt - 1));
         continue;
       }
-      if (res.ok) return;
+      if (res.ok) {
+        const j = (await res.json().catch(() => null)) as { result?: { message_id?: number } } | null;
+        return j?.result?.message_id ?? null;
+      }
       let body: { description?: string; parameters?: { retry_after?: number } } = {};
       try {
         body = (await res.json()) as typeof body;
@@ -66,10 +70,14 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
   return {
     report: (user: User, run: Run) => send(user.tgChatId || chatId, formatReport(user, run, panelUrl, opts.tz)),
     alert: (title: string, body: string) => send(chatId, formatAlert(title, body)),
-    ask: (text: string, buttons: { text: string; data: string }[]) =>
-      sendOne(chatId, text, buttons.length ? { reply_markup: { inline_keyboard: [buttons.map((b) => ({ text: b.text, callback_data: b.data }))] } } : {}),
+    ask: async (text: string, buttons: TgButton[] | TgButton[][]) => (await sendOne(chatId, text, buttons.length ? { reply_markup: keyboard(buttons) } : {})) ?? undefined,
   };
 }
+
+const isRows = (b: TgButton[] | TgButton[][]): b is TgButton[][] => Array.isArray(b[0]);
+const keyboard = (buttons: TgButton[] | TgButton[][]) => ({
+  inline_keyboard: (isRows(buttons) ? buttons : [buttons]).filter((row) => row.length).map((row) => row.map((b) => ({ text: b.text, callback_data: b.data }))),
+});
 
 /** Slash commands (/status, /queue …) accepted only from these chats; the reply is sent as plain text. */
 export interface TelegramCommands {
@@ -81,11 +89,12 @@ export interface TelegramCommands {
 }
 
 /**
- * Long-polls getUpdates for inline-button taps and hands each callback's data to `onTap`, whose return
- * text is appended to the original message. With `commands`, also answers «/command» messages.
+ * Long-polls getUpdates for inline-button taps and hands each callback's data to `onTap`. A string answer is
+ * appended to the original message (its buttons go away); a TapReply replaces the message text and buttons
+ * (a grouped card that stays tappable). With `commands`, also answers «/command» messages.
  * Returns a stop function. One consumer per bot token.
  */
-export function startTelegramCallbacks(token: string, onTap: (data: string) => Promise<string>, opts: TelegramOptions & { commands?: TelegramCommands } = {}): () => void {
+export function startTelegramCallbacks(token: string, onTap: (data: string) => Promise<string | TapReply>, opts: TelegramOptions & { commands?: TelegramCommands } = {}): () => void {
   const doFetch = opts.fetch ?? fetch;
   const warn = opts.warn ?? ((m: string) => console.error(m));
   const api = async <T>(method: string, body: unknown): Promise<T> => {
@@ -122,9 +131,13 @@ export function startTelegramCallbacks(token: string, onTap: (data: string) => P
           }
           const q = u.callback_query;
           if (!q?.data) continue;
-          const note = await onTap(q.data).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`);
+          const r = await onTap(q.data).catch((e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`);
+          const note = typeof r === "string" ? r : r.note;
           await api("answerCallbackQuery", { callback_query_id: q.id, text: note.slice(0, 190) }).catch(() => undefined);
-          if (q.message) await api("editMessageText", { chat_id: q.message.chat.id, message_id: q.message.message_id, text: `${q.message.text ?? ""}\n\n${note}` }).catch(() => undefined);
+          if (!q.message) continue;
+          const at = { chat_id: q.message.chat.id, message_id: q.message.message_id };
+          if (typeof r === "string") await api("editMessageText", { ...at, text: `${q.message.text ?? ""}\n\n${note}` }).catch(() => undefined);
+          else await api("editMessageText", { ...at, text: r.text, parse_mode: "HTML", disable_web_page_preview: true, reply_markup: keyboard(r.buttons) }).catch(() => undefined);
         }
       } catch (e) {
         warn(`telegram callbacks: ${e instanceof Error ? e.message : String(e)}`);

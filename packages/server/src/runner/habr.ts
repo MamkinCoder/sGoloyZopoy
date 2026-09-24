@@ -1,17 +1,14 @@
 // Habr Career stages for one user: search (logged-in listing) → filters → fetch → decide (the hh decide
-// with a one-resume pool: Habr allows one profile) → apply with a cover letter, no review queue. Plus the
-// Habr conversations in the chat poll. Same browser and Chrome profile as hh, Habr cookies injected.
-import { RunAbortError, Status, type ChatMessage, type Decision, type HHResume, type User, type Vacancy } from "@sgz/shared";
+// with a one-resume pool: Habr allows one profile) → apply with a cover letter, no review queue. Same browser
+// and Chrome profile as hh, Habr cookies injected. Habr conversations: the always-on agent (src/agent/chats).
+import { RunAbortError, Status, type Decision, type HHResume, type User, type Vacancy } from "@sgz/shared";
 import { MIN_RESPONSES_LEFT, type HabrClient } from "../habr/client.js";
-import { conversationUrl } from "../habr/state.js";
-import { asksQuestion } from "../hh/state.js";
 import { dayInTz } from "../scheduler/tz.js";
 import { dailyBudget } from "./budget.js";
 import type { RunContext } from "./context.js";
 import { classify, companyLimitSettings, createRunCompanyTracker, dedupWindowDays, ensureVacancy, isoDaysAgo, recordSkip, rejectWindowDays, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
 import { decideStage, newApp } from "./hh.js";
 import { readLessons } from "./learn.js";
-import { askSkill, skillCallback, threadWaiting } from "./skills.js";
 import type { UserRun } from "./user.js";
 import { errMessage, isStop, parseSalary } from "./util.js";
 
@@ -19,14 +16,12 @@ export interface HabrPlan {
   search: boolean;
   decide: boolean;
   apply: boolean;
-  chats: boolean;
   /** Stage force:<applicationId>: apply to that one filtered-out Habr vacancy. */
   force: number | null;
 }
 
 const MAX_PAGES_PER_QUERY = 3;
 export const HABR_DAILY_LIMIT_DEFAULT = 20;
-const CHAT_TRACK_SINCE_DEFAULT = "2026-09-23";
 
 /** Setting `habr_daily_limit` (applications per day), default 20. */
 export function habrDailyLimit(ctx: Pick<RunContext, "store">): number {
@@ -83,7 +78,6 @@ export async function runHabrUser(ctx: RunContext, u: UserRun, plan: HabrPlan): 
     ctx.log.warn("apply", e.message);
     if (!ctx.req.dryRun) await ctx.deps.notifier.alert("Хабр Карьера: отклики заканчиваются", `${user.name}: ${e.message}. Автоотклики на Хабре остановлены до пополнения лимита.`).catch(() => undefined);
   }
-  if (plan.chats) await chatsStage(ctx, u, habr);
 }
 
 async function searchStage(ctx: RunContext, u: UserRun, habr: HabrClient, budget: number, tracker: RunCompanyTracker): Promise<{ vacancy: Vacancy; companyKey: string; lockedDirection: string }[]> {
@@ -237,110 +231,3 @@ async function forceApply(ctx: RunContext, u: UserRun, habr: HabrClient, id: num
     ctx.log.warn("apply", e.message);
   });
 }
-
-// ------------------------------------------------------------ chats
-
-/** Chat threads of Habr conversations live next to hh ones, keyed "habr:<login>". */
-export const habrThreadKey = (login: string): string => `habr:${login}`;
-
-const unanswered = (msgs: ChatMessage[]): number[] => msgs.filter((m) => m.direction === "in" && !m.answered).map((m) => m.id);
-
-/**
- * Habr conversations are person-to-person (a recruiter writes after a response or on their own). A thread
- * the employer started gets the same answerChat rules as hh (always forward, verified skills = yes, unknown
- * skill → Telegram, test task / interview time → human). A thread the seeker started (e.g. a referral ask)
- * is never answered by the bot: new incoming messages there only go to Telegram. Invitations → Telegram.
- */
-async function chatsStage(ctx: RunContext, u: UserRun, habr: HabrClient): Promise<void> {
-  const { user, profile, stats } = u;
-  const s = await ctx.browser.openHabr(user);
-  const { conversations } = await habr.listConversations(s);
-  const known = new Map(ctx.store.listChatThreads(user.id).filter((t) => t.hhNegotiationId.startsWith("habr:")).map((t) => [t.hhNegotiationId, t]));
-  const sinceDay = ctx.store.getSetting("chat_track_since") || CHAT_TRACK_SINCE_DEFAULT;
-  let replies = 0;
-  for (const c of conversations) {
-    const lm = c.lastMessage;
-    if (!lm) continue;
-    const key = habrThreadKey(c.login);
-    const prev = known.get(key);
-    const stored = prev ? ctx.store.listChatMessages(prev.id) : [];
-    if (!prev && (lm.isMine || lm.createdAt.slice(0, 10) < sinceDay)) continue;
-    // Known thread, its last message already stored or ours (our replies are stored without Habr's id), nothing pending.
-    if (prev && (lm.isMine || stored.some((m) => m.hhMessageId === lm.id)) && !unanswered(stored).length && !threadWaiting(ctx.store, user.id, prev.id)) continue;
-    ctx.checkAbort();
-    const employer = c.company ? `${c.company} (${c.name})` : c.name;
-    const url = conversationUrl(c.login);
-    try {
-      const detail = await habr.readConversation(s, c.login);
-      const invited = /invit/i.test(lm.kind);
-      const next = { userId: user.id, hhNegotiationId: key, isBot: false, vacancyId: prev?.vacancyId ?? null, employer, state: invited ? ("invited" as const) : (prev?.state ?? ("new" as const)), lastSeenAt: ctx.now().toISOString() };
-      const thread = ctx.req.dryRun ? { ...next, id: prev?.id ?? 0 } : ctx.store.upsertChatThread({ ...next, ...(prev ? { id: prev.id } : {}) });
-      const msgs = detail.messages.map((m) => ({ hhMessageId: m.id, direction: m.mine ? ("out" as const) : ("in" as const), author: m.mine ? ("me" as const) : ("employer" as const), text: m.text, isQuestion: !m.mine && asksQuestion(m.text), answered: false }));
-      if (!ctx.req.dryRun) ctx.store.insertChatMessages(thread.id, msgs);
-      const history: ChatMessage[] = ctx.req.dryRun
-        ? msgs.map((m, i) => ({ ...m, id: -1 - i, threadId: thread.id, createdAt: ctx.now().toISOString(), answered: stored.some((x) => x.hhMessageId === m.hhMessageId && x.answered) }))
-        : ctx.store.listChatMessages(thread.id);
-      const done = () => {
-        if (!ctx.req.dryRun) ctx.store.markAnswered(unanswered(history));
-      };
-      const alert = async (title: string, body: string) => {
-        if (ctx.req.dryRun) ctx.log.info("chats", `[dry-run] would alert: ${title}`, { thread_id: thread.id });
-        else await ctx.deps.notifier.alert(title, body).catch(() => undefined);
-      };
-      const fresh = history.filter((m) => m.direction === "in" && !m.answered);
-      if (invited && prev?.state !== "invited") {
-        stats.invitation();
-        await alert(`🎉 Приглашение на Хабр Карьере: ${employer}`, `${user.name}: ${fresh.at(-1)?.text.slice(0, 800) ?? lm.text.slice(0, 800)}\n${url}`);
-      }
-      // Habr's own «вы договорились о работе?» survey (kind question) is not the employer talking.
-      if (lm.kind === "question" || !fresh.length || history.at(-1)?.direction === "out") {
-        done();
-        continue;
-      }
-      if (history[0]?.direction === "out") {
-        await alert(`Хабр Карьера: сообщение от ${employer}`, `${user.name}: ${fresh.map((m) => m.text).join("\n\n").slice(0, 1500)}\n${url}`);
-        done();
-        continue;
-      }
-      if (!detail.writable) {
-        done();
-        continue;
-      }
-      if (threadWaiting(ctx.store, user.id, thread.id)) continue;
-      const reply = await ctx.llm.answerChat(ctx.store.getProfile(user.id) ?? profile, null, history);
-      stats.llmCall();
-      if (reply.unknown_skills?.length) {
-        for (const skill of reply.unknown_skills) {
-          if (ctx.req.dryRun || !askSkill(ctx.store, user.id, thread.id, skill)) continue;
-          await ctx.deps.notifier.ask?.(`${employer} (Хабр) спрашивает про «${skill}»:\n\n${fresh.at(-1)!.text.slice(0, 600)}\n\nЕсть такой навык?`, [
-            { text: "✅ Есть", data: skillCallback(true, user.id, skill) },
-            { text: "❌ Нет", data: skillCallback(false, user.id, skill) },
-          ]);
-        }
-        ctx.log.info("chats", `habr ${employer}: asked about ${reply.unknown_skills.join(", ")}, reply on hold`, { thread_id: thread.id });
-        continue;
-      }
-      const text = reply.reply.trim();
-      if (reply.needs_human) {
-        if (!ctx.req.dryRun && thread.state !== "invited") ctx.store.upsertChatThread({ ...next, id: thread.id, state: "needs_human" });
-        await alert(`Хабр: чат требует внимания: ${employer}`, `${user.name}: ${fresh.at(-1)!.text}\n\n${text ? `Ответ бота: ${text}\n\n` : ""}${reply.reason}\n${url}`);
-      }
-      if (text && !ctx.req.dryRun) {
-        await habr.sendMessage(s, c.login, text);
-        ctx.store.insertChatMessages(thread.id, [{ hhMessageId: null, direction: "out", author: "me", text, isQuestion: false, answered: true }]);
-      }
-      done();
-      if (text) {
-        stats.chatReply();
-        replies++;
-        ctx.log.info("chats", `habr ${employer}: replied${ctx.req.dryRun ? " [dry-run]" : ""}: ${text.slice(0, 120)}`, { thread_id: thread.id });
-        await ctx.throttle.afterMutation();
-      }
-    } catch (e) {
-      if (e instanceof RunAbortError || isStop(e)) throw e;
-      ctx.log.error("chats", `habr ${employer}: ${errMessage(e)}`, { login: c.login });
-    }
-  }
-  ctx.log.info("chats", `habr: done, ${replies} replies`, { replies });
-}
-

@@ -1,0 +1,56 @@
+// Chat job kinds of the always-on agent and their schedule. Every task job is keyed by the task id.
+import type { Job } from "@sgz/shared";
+import { sendInterviewPrep } from "../../runner/interview.js";
+import { findThread } from "../../runner/study.js";
+import { errMessage } from "../../runner/util.js";
+import type { JobHandler, Schedule } from "../queue.js";
+import type { ChatEnv } from "./env.js";
+import { syncHabrChats } from "./habr.js";
+import { syncHHChats } from "./hh.js";
+import { draftTask, failTask, fallbackTask, remindTask, reviewTask, sendTask, triageTask } from "./tasks.js";
+
+const taskId = (job: Job): number => Number(job.payload.taskId);
+
+/** hh + Habr chats of every active user. One user's failure fails the job (retry, then alert) after the rest ran. */
+async function syncAll(env: ChatEnv): Promise<void> {
+  const errors: string[] = [];
+  for (const u of env.store.listUsers(true)) {
+    for (const [name, sync] of [
+      ["hh", syncHHChats],
+      ["habr", syncHabrChats],
+    ] as const) {
+      try {
+        await sync(env, u);
+      } catch (e) {
+        errors.push(`${name} ${u.slug}: ${errMessage(e)}`);
+      }
+    }
+  }
+  if (errors.length) throw new Error(errors.join("; "));
+}
+
+export function chatHandlers(env: ChatEnv): Record<string, JobHandler> {
+  const onFailed = (job: Job, error: string) => failTask(env, taskId(job), error);
+  return {
+    "chats.sync": { needs: "browser", leaseMs: 20 * 60_000, run: () => syncAll(env) },
+    "chats.triage": { needs: "llm", leaseMs: 15 * 60_000, run: (job) => triageTask(env, taskId(job)), onFailed },
+    "chats.review": { needs: "none", run: (job) => reviewTask(env, taskId(job)), onFailed },
+    "chats.remind": { needs: "none", run: (job) => remindTask(env, taskId(job)) },
+    "chats.fallback": { needs: "none", run: (job) => fallbackTask(env, taskId(job)), onFailed },
+    "chats.draft": { needs: "llm", leaseMs: 15 * 60_000, run: (job) => draftTask(env, taskId(job)), onFailed },
+    "chats.send": { needs: "browser", run: (job) => sendTask(env, taskId(job)), onFailed },
+    "chats.prep": {
+      needs: "llm",
+      leaseMs: 15 * 60_000,
+      async run(job) {
+        const thread = findThread(env.store, Number(job.payload.threadId));
+        if (thread) await sendInterviewPrep(env, thread, String(job.payload.invitation ?? ""));
+      },
+    },
+  };
+}
+
+/** SGZ_CHAT_POLL_MIN (default 5, 0 = off): how often chats.sync is enqueued. */
+export function chatSchedules(pollMin = Number(process.env.SGZ_CHAT_POLL_MIN ?? 5)): Schedule[] {
+  return pollMin > 0 ? [{ kind: "chats.sync", everyMs: pollMin * 60_000 }] : [];
+}

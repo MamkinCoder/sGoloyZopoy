@@ -78,7 +78,7 @@ application row replaces the filtered one as the vacancy's newest, so it drops o
 `GeneratedResume`: `id, vacancy_id, vacancy_title, company, pdf_url, tex_url, model, created_at`.
 
 ## Chats
-| GET | /users/:slug/chats | | `[{id, hh_negotiation_id, vacancy:{id,title,company,url}|null, employer, state, last_seen_at, unanswered:int}]` |
+| GET | /users/:slug/chats | | `[{id, hh_negotiation_id, vacancy:{id,title,company,url}|null, employer, state, last_seen_at, unanswered:int, task: ChatTaskDTO|null}]` |
 | GET | /chats/:id/messages | | `[ChatMessage]` |
 | PUT | /users/:slug/chats/:id/interview | `{interview_at: ISO string|null}` | `ChatThread` |
 | PUT | /users/:slug/chats/:id/outcome | `{outcome: next|rejected|silence|offer|null}` | `ChatThread` |
@@ -87,12 +87,20 @@ application row replaces the filtered one as the vacancy's newest, so it drops o
 
 ## Runs
 | GET | /runs?user=slug&limit=50 | | `[Run]` |
-| POST | /runs | `{user: slug\|"all", source: "hh"\|"habr"\|"career"\|"all"\|"pool", dry_run?:bool, limit?:int, stage?:string}` | `{run_id}` — 409 if a run is already active in that lane (stage `chats` = chat lane, anything else = main lane) |
+| POST | /runs | `{user: slug\|"all", source: "hh"\|"habr"\|"career"\|"all"\|"pool", dry_run?:bool, limit?:int, stage?:string}` | `{run_id}` — 409 if a run is already active (one at a time; runs never answer employer chats, the agent does) |
 | GET | /runs/:id | | `Run` |
 | POST | /runs/:id/stop | | `{ok}` |
 | GET | /runs/:id/events?after=0 | | `[RunEvent]` |
 | GET | /runs/:id/events/stream | SSE | `event: run_event\ndata: RunEvent` ; `event: done` when the run finishes |
-| GET | /runs/active | | `Run \| null` (main lane only; a chat poll runs beside it) |
+| GET | /runs/active | | `Run \| null` |
+
+## Always-on agent
+| GET | /agent/jobs?state=queued\|running\|done\|failed | | `[AgentJobDTO]` newest first, at most 100; `[]` when the agent is not running (CLI); 400 on another state |
+
+`AgentJobDTO`: `id, kind, key, state, attempts, max_attempts, run_after, last_error, updated_at`.
+`ChatTaskDTO` (the thread's latest reply task): `id, state, kind, pending:[topic], topics:[{name, answer: "yes"|"no"|null,
+by: "profile"|"human"|"fallback"|null}], draft, last_error, updated_at`. States: `new → triage → awaiting_review →
+drafting → ready → sending → sent`, plus `closed` (handled without a reply), `superseded`, `failed`.
 
 `Run`: `id, user_id, user_slug, source, trigger, started_at, finished_at, status, stats:{found, deduped,
 by_status:{}, chat_replies, invitations, rejections, top_vacancies:[], dry_run}, tg_sent, error`.
@@ -213,9 +221,9 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   `analytics.salary`) when there is enough data; the band is for the seeker only and never reaches employers.
 - `POST /runs` answers **202** `{run_id}` (docs table says `{run_id}`; status is 202, not 200).
   `user` must exist or be `"all"` (404 otherwise); `source` ∉ hh|habr|career|all|pool → 400. `habr` = Habr Career auto-apply (stages search / decide /
-  apply / chats / `force:<id>`); `all` = hh, then habr (no stage: career sites are left to the autopilot's
-  `rotate` chunks; `source: career` still runs them); the chat poll runs `all` + stage `chats`. Only stage
-  `chats` answers employers (hh + habr); full / `apply` runs do no chats.
+  apply / `force:<id>`); `all` = hh, then habr (no stage: career sites are left to the autopilot's
+  `rotate` chunks; `source: career` still runs them). Runs never answer employers: stage `chats` is gone
+  (the run fails with "nothing to do"); employer chats belong to the always-on agent (below).
   Vacancies from it have `source: "habr"`; `?source=career` means career sites only (not hh, not habr).
 - `GET /runs?user=all` is the same as omitting `user`. `limit` is capped at 500.
 - `GET /runs/:id/events/stream`: replays `store` events after `?after=` **or** the `Last-Event-ID`
@@ -237,7 +245,7 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
   - Company limiter: `company_limit_max`, `company_limit_window_days`, `company_limit_persona_lock`.
   - Chats: `feedback_request` (`"0"` = no feedback request after a rejection), `chat_track_since` (`YYYY-MM-DD`),
     `chat_followup_days` (default `"7"`, `"0"` = off): one fixed polite follow-up in a new/viewed chat after that
-    many days of employer silence, at most 3 chats checked per poll.
+    many days of employer silence, at most 3 chats checked per `chats.sync`.
   - Habr Career: `habr_daily_limit` (default `"20"`) applications per day. Internal: `habr_alert_day:<user id>`
     (a Habr fatal error inside `all` is alerted once a day).
   - Resume viewers: `viewers_enabled` (default `"1"`, `"0"` = off). Every hh run with the apply stage first reads
@@ -246,17 +254,44 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
     go through the usual filters, decide and apply (company limiter, daily budget), at most 3 sends per run, before
     cold search. One Telegram alert «Кто смотрел резюме» lists the outcome per employer. Internal keys:
     `viewers_checked_at:<user id>`, `viewer_seen:<user id>:<company key>`.
-  - Runner lanes (`sgz serve`): the runner has two independent slots. The chat lane runs only stage `chats`
-    (source `all`: hh chats, then Habr Career) every `SGZ_CHAT_POLL_MIN` minutes (default 5, `0` = off),
-    counted from the last poll's end, whatever the main lane is doing. It uses its own Chrome profile
-    `data/users/<slug>/chrome-profile-chat` and logs in with the saved `hh-cookies.json` / `habr-cookies.json`
-    when needed. Everything else (scheduled run, panel / CLI runs, queued sends, touch, career chunks) is the
-    main lane, one run at a time; `RunBusyError` / 409 is per lane. Each lane closes its browser when its run ends.
-    If no chat poll finishes `done` for 20 min, one Telegram alert «Чаты не проверялись N мин», and one
-    «✅ Чаты снова проверяются» when they resume (open state in setting `alert_open:chats`).
+  - Always-on agent (`sgz serve`, `src/agent`, docs/ARCHITECTURE.md §2-3): a persistent job queue (table `jobs`)
+    worked by one loop next to the runner; the two never wait for each other. The runner is one run at a time again
+    (scheduled run, panel / CLI runs, queued sends, touch, career chunks); `RunBusyError` / 409 when busy.
+    - Queue: `enqueue(kind, payload, {key, runAfter, priority})`; at most one open (queued/running) job per key, a
+      second enqueue only pulls `run_after` earlier. Resources: one `browser` job at a time (the agent's own Chrome,
+      `data/users/<slug>/chrome-profile-chat`, logged in with the saved `hh-cookies.json` / `habr-cookies.json`,
+      opened lazily, closed after `AGENT_BROWSER_IDLE_MS`, default 3 min, without browser jobs), `llm` jobs up to
+      `SGZ_CLAUDE_PARALLEL`, `none` freely. A throw retries after 30 s, 1, 2, 4 min … (cap 30 min); after
+      `max_attempts` (5) the job is `failed` and Telegram gets one «Агент: задача <kind> не выполнена» per kind
+      until a job of that kind succeeds (open state `alert_open:job:<kind>`). A job running past its lease
+      (default 10 min, sync 20) counts as a failed attempt. Boot requeues every job a dead process left `running`.
+      Finished jobs are pruned after 7 days. Logs go to stderr (`[agent] …`), not to run events.
+    - Chat jobs: `chats.sync` (browser, every `SGZ_CHAT_POLL_MIN` min, default 5, `0` = off; hh then Habr for every
+      active user) reads the chats, stores messages and keeps the old side effects (invitation alert + `chats.prep`
+      brief, rejection feedback request, forwarding feedback after a rejection, hh bot surveys, follow-ups), then
+      opens a reply task (`chat_tasks`) for every thread with unanswered employer messages. `chats.triage` (llm,
+      `prompts/triage_chat.md`, tier fast) → `kind` + `topics` (skills asked about); `ack_only` / `rejection` close
+      the task without a reply. `chats.review` (none): topics known from `verified_skills` / `never_claim_skills` /
+      learned answers are filled in; the rest go into ONE Telegram card per task. `chats.draft` (llm, `answer_chat`
+      with the task's answers: ✅ = verified, ❌ = never claim) → `ready`, or back to review when the draft finds
+      a skill triage missed; `needs_human` / interview time as before. `chats.send` (browser) re-reads the thread:
+      the reply already there → only marked sent (no double reply); a new employer message → the task is
+      `superseded` and a fresh task covers all unanswered messages (answers carried over); else send, re-read to
+      confirm, mark the messages handled, and `chats.sync` again 30 s later. A task whose job failed stays
+      `failed` until the employer writes again.
+    - Review card (callback `ct:<task id>:<topic index>:y|n`): one row «✅ Jest» «❌ Jest» per unknown topic. A tap
+      writes the answer into the task (and `skills_learned:<user>` + the profile lists, as before), and the same
+      card is edited (answered rows gone). The task drafts only when every topic is answered, any mix. A tap on a
+      superseded task's card goes to the thread's open task. `chats.remind` resends the card once after 2 h;
+      `chats.fallback` after 12 h drafts anyway with the unanswered topics treated as «нет» for that reply only
+      (honest «в продакшене не использовал»), plus an alert «Отвечаю без тебя». Old one-skill cards
+      (`sk:y|n:<user>:<key>`, settings `skill_pending:*`) still work: the tap answers that topic on the user's open
+      tasks, or is only remembered.
+    - Stall alert: if no `chats.sync` job finished `done` for 20 min, one Telegram alert «Чаты не проверялись N мин»,
+      and one «✅ Чаты снова проверяются» when they resume (open state in setting `alert_open:chats`).
   - Career autopilot (`sgz serve`): when the main lane is idle it runs `career` stage `rotate` chunks.
     - `career_autopilot`: `"0"` turns the chunks off.
-    - `career_sites_per_run`: sites per chunk, default 1 (keeps chat polls frequent); each chunk takes the
+    - `career_sites_per_run`: sites per chunk, default 1 (short batch runs); each chunk takes the
       highest-scoring sites not yet visited today: never-visited first, then any site unvisited for 7+ days,
       else `queued*3 + min(found,10)*0.2 + days since last visit - 5*fails` (30-day yield, see
       `GET /users/:slug/career-sites`). A site with 5+ consecutive failed visits waits a week.
@@ -310,11 +345,11 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       `mock:<chatId>` (JSON, `""` = none), expires after 2 h of silence. Prompts use only the profile's real
       experience; nothing goes to employers.
   - Reliability: `run_max_min` = watchdog limit per run in minutes, `"0"` (default) = built-in caps
-    (20 for `chats`/`touch`, 30 for `rotate` and `send:|inspect:|retailor:|force:`, 150 otherwise). On
+    (20 for `touch`, 30 for `rotate` and `send:|inspect:|retailor:|force:`, 150 otherwise). On
     timeout the run is aborted, the browser closed and a Telegram alert sent; the run ends with
     `error: "watchdog: exceeded N min"`. If a wedged call ignores the abort, the lane frees itself
     after 60 s more (run `failed`); the watchdog covers the report too, and closing a wedged browser is
-    bounded (then its processes are killed), so nothing after it can hold the lane. Per lane.
+    bounded (then its processes are killed), so nothing after it can hold the runner.
 - `sgz serve` boot closes runs left `running`/`queued` by a crash (`status: stopped`,
   `error: "orphaned by restart"`). While the runner is enabled it also checks every 30 min that some
   run finished `done` in the last 26 h (dead-man heartbeat): one Telegram alert when that breaks, one

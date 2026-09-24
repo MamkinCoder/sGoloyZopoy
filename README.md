@@ -89,13 +89,13 @@ pnpm sgz habr-resume --user <slug>                     # proposal for the ONE Ha
 pnpm sgz habr-resume --user <slug> --apply             # only after the proposal was approved
 ```
 
-- Runs inside `--source all` (the daily scheduled run: hh, then Habr; career sites go through the autopilot's rotate chunks) and in the chat poll.
+- Runs inside `--source all` (the daily scheduled run: hh, then Habr; career sites go through the autopilot's rotate chunks). Its conversations are answered by the always-on agent's `chats.sync` (see docs/ARCHITECTURE.md).
 - Daily limit: setting `habr_daily_limit` (default 20). The run stops when Habr's own response allowance
   (`createResponse.responsesLeft`) drops below 10 and says so in Telegram.
 - Cross-source dedup: the same company + title sent on hh is never sent on Habr and vice versa.
 - A dry run never clicks «Откликнуться»: on Habr that click creates the response at once (the letter is
   added right after it with «Дополнить отклик»).
-- Chats: employer-started Habr conversations get the same chat rules as hh; conversations the seeker started
+- Chats: employer-started Habr conversations get the same reply tasks as hh (one Telegram card per reply for unknown skills); conversations the seeker started
   (e.g. a referral ask) only forward new messages to Telegram. Threads are stored as `habr:<login>`.
 - The old career site `habr-career` (review queue) would apply to the same vacancies twice: disable it
   (`pnpm sgz site ...` or the panel) once the habr source runs.

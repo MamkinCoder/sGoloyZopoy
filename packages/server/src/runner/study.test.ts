@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Profile, StudyItem, StudyPack } from "@sgz/shared";
+import type { Profile, StudyItem, StudyPack, TgButton } from "@sgz/shared";
 import { defaultProfile } from "../config/profile.js";
 import { openStore, seedDefaultUsers } from "../db/index.js";
 import { FakeLLM } from "../llm/fake.js";
@@ -111,7 +111,7 @@ describe("study pack: build, resend, /study, /mock", () => {
     const llm = new FakeLLM();
     llm.onInterviewStudy = () => items;
     const sent: { text: string; data: string[] }[] = [];
-    const notifier = { report: async () => undefined, alert: async () => undefined, ask: async (text: string, b: { data: string }[]) => void sent.push({ text, data: b.map((x) => x.data) }) };
+    const notifier = { report: async () => undefined, alert: async () => undefined, ask: async (text: string, b: TgButton[] | TgButton[][]) => void sent.push({ text, data: b.flat().map((x) => x.data) }) };
     return { store, llm, notifier, sent, t, d: { store, llm, notifier } };
   }
   const settle = () => new Promise((r) => setTimeout(r, 0));

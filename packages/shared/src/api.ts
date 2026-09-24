@@ -1,5 +1,6 @@
 // HTTP API DTOs — the contract between packages/server (H) and packages/web (I).
 // Route list lives in docs/api.md; shapes live here so both sides type-check against the same thing.
+import type { ChatTaskDTO } from "./agent.js";
 import type {
   Application,
   CareerSite,
@@ -179,6 +180,8 @@ export interface ChatThreadDTO extends ChatThread {
   last_message: string | null;
   /** A study pack is stored (GET /users/:slug/chats/:id/study returns it); `study` itself is not in the list. */
   has_study: boolean;
+  /** The latest reply task of the always-on agent, null when the thread never had one. */
+  task: ChatTaskDTO | null;
 }
 export type ChatMessageDTO = ChatMessage;
 

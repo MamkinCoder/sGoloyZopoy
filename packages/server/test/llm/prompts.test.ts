@@ -28,6 +28,7 @@ const outputs: Record<string, unknown> = {
   decide_hh: [],
   answer_questionnaire: [],
   answer_chat: { reply: "", needs_human: true, reason: "x" },
+  triage_chat: { kind: "question", topics: ["Jest", "jest", "Vitest"] },
   summarize_resume: { direction: "go-backend", seniority: "middle", key_skills: [], one_line: "" },
   propose_pool_variants: [],
   tailor_cv: { cv, changes: [] },
@@ -46,6 +47,11 @@ describe("prompt templates", () => {
   it("decide_hh", async () => check("decide_hh", await capture("decide_hh", (l) => l.decide({ profile, resumes, vacancies }))));
   it("answer_questionnaire", async () => check("answer_questionnaire", await capture("answer_questionnaire", (l) => l.answerQuestionnaire(profile, vacancies[0]!, questions))));
   it("answer_chat", async () => check("answer_chat", await capture("answer_chat", (l) => l.answerChat(profile, vacancies[0]!, history))));
+  it("triage_chat", async () => check("triage_chat", await capture("triage_chat", (l) => l.triageChat(profile, history, history.slice(-1))), false));
+  it("triage_chat keeps one entry per skill", async () => {
+    const llm = createLLM(cfg, null, { env: stubEnv(stubDir(), "valid", outputs.triage_chat) });
+    expect(await llm.triageChat(profile, history, history.slice(-1))).toEqual({ kind: "question", topics: ["Jest", "Vitest"] });
+  });
   it("summarize_resume", async () =>
     check("summarize_resume", await capture("summarize_resume", (l) => l.summarizeResume("Go-разработчик. Опыт 2,5 года: Go, Redis, PostgreSQL, Docker. Биллинг и интеграции.")), false));
   it("propose_pool_variants", async () => check("propose_pool_variants", await capture("propose_pool_variants", (l) => l.proposePoolVariants(profile, resumes, 2))));

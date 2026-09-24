@@ -1,4 +1,5 @@
 import type {
+  AgentJobDTO,
   AnalyticsDTO,
   ApplicationDetailDTO,
   ApplicationDTO,
@@ -49,6 +50,7 @@ export const keys = {
   health: ["health"] as const,
   settings: ["settings"] as const,
   queue: (slug: string) => ["queue", slug] as const,
+  agentJobs: ["agent-jobs"] as const,
   filtered: (slug: string, source: string) => ["filtered", slug, source] as const,
 };
 
@@ -319,6 +321,9 @@ export function useCareerSiteMutations(slug: string) {
 }
 
 // ---- system
+/** The always-on agent's queue (newest first). */
+export const useAgentJobs = () => useQuery({ queryKey: keys.agentJobs, queryFn: () => api<AgentJobDTO[]>("/agent/jobs", { silent: true }), refetchInterval: 15_000 });
+
 export const useHealth = () =>
   useQuery({ queryKey: keys.health, queryFn: () => api<HealthDTO>("/health", { silent: true }), refetchInterval: 10_000, retry: false });
 

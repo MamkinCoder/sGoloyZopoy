@@ -30,4 +30,6 @@ export function createMutex(slots = 1): Mutex {
   };
 }
 
-export const claudeMutex: Mutex = createMutex(Math.max(1, Number(process.env.SGZ_CLAUDE_PARALLEL ?? 2) || 1));
+/** SGZ_CLAUDE_PARALLEL: how many `claude` processes may run at once (the agent sizes its LLM lane by it too). */
+export const CLAUDE_PARALLEL = Math.max(1, Number(process.env.SGZ_CLAUDE_PARALLEL ?? 2) || 1);
+export const claudeMutex: Mutex = createMutex(CLAUDE_PARALLEL);

@@ -4,6 +4,7 @@ import type {
   CV,
   ChatMessage,
   ChatReply,
+  ChatTriage,
   DecideInput,
   Decision,
   HHResume,
@@ -55,6 +56,8 @@ export class FakeLLM implements LLMClient {
     needs_human: false,
     reason: "fake",
   });
+
+  onTriageChat: (profile: Profile, history: ChatMessage[], fresh: ChatMessage[]) => ChatTriage = () => ({ kind: "question", topics: [] });
 
   onSummarizeResume: (text: string) => ResumeSummary = () => ({
     direction: "go-backend",
@@ -116,6 +119,10 @@ export class FakeLLM implements LLMClient {
   async answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[]): Promise<ChatReply> {
     this.record("answerChat", [profile, vacancy, history, choices]);
     return this.onAnswerChat(profile, vacancy, history);
+  }
+  async triageChat(profile: Profile, history: ChatMessage[], fresh: ChatMessage[]): Promise<ChatTriage> {
+    this.record("triageChat", [profile, history, fresh]);
+    return this.onTriageChat(profile, history, fresh);
   }
   async summarizeResume(resumeText: string): Promise<ResumeSummary> {
     this.record("summarizeResume", [resumeText]);

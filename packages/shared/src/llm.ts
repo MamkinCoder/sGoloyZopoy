@@ -1,4 +1,5 @@
 // LLM contract. Workstream D implements over `claude -p` (Claude Code headless, subscription).
+import type { ChatTurnKind } from "./agent.js";
 import type { StagehandLLM } from "./browser.js";
 import type { Answer, CV, ChatMessage, Decision, HHResume, InterviewPrep, Profile, Question, ResumeSummary, StudyItem, Vacancy } from "./model.js";
 
@@ -34,11 +35,19 @@ export interface ChatReply {
   interview_at?: string | null;
 }
 
+/** triageChat: the kind of an employer turn and the skills it asks about (canonical names). */
+export interface ChatTriage {
+  kind: ChatTurnKind;
+  topics: string[];
+}
+
 export interface LLMClient {
   decide(input: DecideInput): Promise<Decision[]>;
   answerQuestionnaire(profile: Profile, vacancy: Vacancy | null, qs: Question[]): Promise<Answer[]>;
   /** `choices`: quick-reply buttons on the employer's last message; the reply must be exactly one of them. */
   answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[]): Promise<ChatReply>;
+  /** Decides what an employer turn needs (no reply text): kind + asked-about skills. `fresh` = the new messages. */
+  triageChat(profile: Profile, history: ChatMessage[], fresh: ChatMessage[]): Promise<ChatTriage>;
   summarizeResume(resumeText: string): Promise<ResumeSummary>;
   proposePoolVariants(profile: Profile, existing: HHResume[], max: number): Promise<PoolVariant[]>;
   tailorCV(profile: Profile, base: CV, vacancy: Vacancy, tier?: Tier): Promise<{ cv: CV; changes: string[] }>;

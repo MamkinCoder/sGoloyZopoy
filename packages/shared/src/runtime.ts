@@ -29,7 +29,7 @@ export const paths = {
   habrCookies: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/habr-cookies.json`,
   habrResumeProposal: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/habr-resume.proposal.json`,
   chromeProfile: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/chrome-profile`,
-  /** The chat lane's own browser profile (runs next to the main one, same saved cookies). */
+  /** The always-on agent's own browser profile (runs next to the batch one, same saved cookies). */
   chatChromeProfile: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/chrome-profile-chat`,
   cvDir: (c: Config, slug: string) => `${c.dataDir}/users/${slug}/cv`,
   texDir: (c: Config) => `${c.dataDir}/tex`,
@@ -42,7 +42,7 @@ export const paths = {
 export interface RunRequest {
   userSlug: string | "all";
   source: RunSource;
-  stage?: string; // search | apply | chats | pool-sync | pool-expand | touch | onboard:<siteId>
+  stage?: string; // search | apply | pool-sync | pool-expand | touch | onboard:<siteId>
   dryRun: boolean;
   limit: number; // 0 → user's daily limit
   trigger: RunTrigger;
@@ -66,12 +66,25 @@ export interface RunService {
   wait(runId: number): Promise<Run>;
 }
 
+export interface TgButton {
+  text: string;
+  data: string;
+}
+
+/** A button tap's answer: `note` pops up; `text` + `buttons` replace the tapped message (HTML, escaped by the caller). */
+export interface TapReply {
+  note: string;
+  text: string;
+  buttons: TgButton[][];
+}
+
 export interface Notifier {
   report(user: User, run: Run): Promise<void>;
   alert(title: string, body: string): Promise<void>;
   /** HTML message (the caller escapes) with inline buttons, none when `buttons` is empty; `data` comes back
-   *  through the callback poller. Optional (tests, no token). */
-  ask?(text: string, buttons: { text: string; data: string }[]): Promise<void>;
+   *  through the callback poller. A flat list is one row; a list of lists is one row each. Resolves to the
+   *  Telegram message id when known. Optional (tests, no token). */
+  ask?(text: string, buttons: TgButton[] | TgButton[][]): Promise<number | void>;
 }
 
 export interface Logger {

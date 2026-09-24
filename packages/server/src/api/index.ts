@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { createAuth } from "./auth.js";
 import type { ApiDeps } from "./deps.js";
 import { errorHandler } from "./errors.js";
+import { agentRoutes } from "./routes/agent.js";
 import { applicationRoutes } from "./routes/applications.js";
 import { authRoutes } from "./routes/auth.js";
 import { careerRoutes } from "./routes/career.js";
@@ -54,6 +55,7 @@ export function createApp(deps: ApiDeps): Hono {
   api.route("/", runRoutes(deps));
   api.route("/", careerRoutes(deps));
   api.route("/", systemRoutes(deps));
+  api.route("/", agentRoutes(deps));
   app.route("/api", api);
 
   app.use("*", spaStatic(deps.spaDir));

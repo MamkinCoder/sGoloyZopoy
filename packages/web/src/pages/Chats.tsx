@@ -1,4 +1,4 @@
-import type { ChatThreadDTO, InterviewOutcome, InterviewPrep, StudyItem } from "@sgz/shared";
+import type { ChatTaskDTO, ChatThreadDTO, InterviewOutcome, InterviewPrep, StudyItem } from "@sgz/shared";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useChatMessages, useChats, useSetInterview, useSetOutcome, useStartStudy, useStudy } from "../api/hooks";
@@ -14,9 +14,10 @@ export function ChatsPage() {
   const chats = useChats(slug);
   const current = chats.data?.find((t) => t.id === threadId) ?? null;
 
+  const rank = (t: ChatThreadDTO) => (t.task?.state === "awaiting_review" || t.state === "needs_human" ? 0 : t.unanswered > 0 ? 1 : 2);
   const sorted = [...(chats.data ?? [])].sort((a, b) => {
-    const pa = a.state === "needs_human" ? 0 : a.unanswered > 0 ? 1 : 2;
-    const pb = b.state === "needs_human" ? 0 : b.unanswered > 0 ? 1 : 2;
+    const pa = rank(a);
+    const pb = rank(b);
     return pa - pb || b.lastSeenAt.localeCompare(a.lastSeenAt);
   });
 
@@ -51,6 +52,7 @@ export function ChatsPage() {
                   {upcoming(t.interviewAt) && <span className="chip py-0" title="Собеседование">📅 {fmtDateTime(t.interviewAt)}</span>}
                   <span className="faint ml-auto">{fmtRel(t.lastSeenAt)}</span>
                 </div>
+                {t.task && taskLabel(t.task) && <div className="mt-0.5"><TaskChip task={t.task} /></div>}
                 {t.last_message && <div className="faint text-[12px] truncate mt-0.5">{t.last_message}</div>}
               </button>
             </li>
@@ -66,6 +68,33 @@ export function ChatsPage() {
       </div>
     </div>
   );
+}
+
+/** The thread's reply task in words; "" for states not worth a line (closed / superseded). */
+function taskLabel(t: ChatTaskDTO): string {
+  switch (t.state) {
+    case "new":
+    case "triage":
+      return "разбираю сообщение";
+    case "awaiting_review":
+      return `ждёт тебя: ${t.pending.join(", ")}`;
+    case "drafting":
+      return "готовится ответ";
+    case "ready":
+    case "sending":
+      return "отправляю";
+    case "sent":
+      return "отправлено";
+    case "failed":
+      return "ошибка";
+    default:
+      return "";
+  }
+}
+
+function TaskChip({ task }: { task: ChatTaskDTO }) {
+  const tone = task.state === "awaiting_review" ? "text-[var(--human)] border-[var(--human)]" : task.state === "failed" ? "text-[var(--bad)]" : "";
+  return <span className={`chip py-0 text-[11px] ${tone}`} title={task.last_error || undefined}>{taskLabel(task)}</span>;
 }
 
 function ThreadView({ thread, threadId, slug }: { thread: ChatThreadDTO | null; threadId: number; slug: string }) {
@@ -105,6 +134,13 @@ function ThreadView({ thread, threadId, slug }: { thread: ChatThreadDTO | null; 
       {thread?.state === "needs_human" && (
         <div className="px-3 py-2 bg-[var(--human-soft)] text-[var(--human)] text-[13px]">
           Нужен человек: бот не стал отвечать сам. Ответьте на сайте вручную.
+        </div>
+      )}
+      {thread?.task && taskLabel(thread.task) && (
+        <div className={`px-3 py-2 text-[13px] ${thread.task.state === "awaiting_review" ? "bg-[var(--human-soft)] text-[var(--human)]" : "bg-[var(--surface-2)]"}`}>
+          Ответ бота: {taskLabel(thread.task)}
+          {thread.task.state === "awaiting_review" && " (ответь ✅/❌ в карточке в Telegram)"}
+          {thread.task.state === "failed" && thread.task.last_error && <span className="faint"> · {thread.task.last_error}</span>}
         </div>
       )}
       {thread && <InterviewBar thread={thread} slug={slug} />}

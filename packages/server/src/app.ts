@@ -1,12 +1,13 @@
-// Composition root: config, store, LLM, browser, hh, career, resume, notifier, runner, scheduler.
-import type { Config, LLMClient, Notifier, Store } from "@sgz/shared";
+// Composition root: config, store, LLM, browser, hh, career, resume, notifier, runner, scheduler, agent.
+import type { Config, LLMClient, Notifier } from "@sgz/shared";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { paths } from "@sgz/shared";
 import { createLauncher, loadCookies } from "./browser/index.js";
+import { createAppAgent, type Agent, type ChatEnv } from "./agent/index.js";
 import { createCareerAgent } from "./career/agent.js";
 import { ensureDirs, loadConfig } from "./config/index.js";
-import { openStore, seedDefaultUsers } from "./db/index.js";
+import { openStore, seedDefaultUsers, type SqliteStore } from "./db/index.js";
 import { createHabrClient } from "./habr/client.js";
 import { createHHClient } from "./hh/index.js";
 import { createLLM } from "./llm/index.js";
@@ -20,11 +21,14 @@ import { createScheduler, type Scheduler } from "./scheduler/index.js";
 
 export interface AppContext {
   cfg: Config;
-  store: Store;
+  store: SqliteStore;
   notifier: Notifier;
   llm: LLMClient;
   runner: Runner;
   scheduler: Scheduler | null;
+  /** The always-on agent (serve only; not started yet) and the env its chat jobs run with. */
+  agent: Agent | null;
+  chats: ChatEnv | null;
   version: string;
   startedAt: Date;
   close(): Promise<void>;
@@ -82,6 +86,7 @@ export async function createAppContext(opts: { withScheduler?: boolean } = {}): 
 
   const notifier = createTelegram(cfg.tgBotToken, cfg.tgChatId, cfg.panelUrl, { tz: cfg.tz, warn, fetch: telegramFetch() });
   const runner = createRunner({ cfg, store, launcher, hh, habr, career, llm, notifier, resume, loadCookies });
+  const always = opts.withScheduler ? createAppAgent({ cfg, store, launcher, loadCookies, hh, habr, llm, notifier }) : null;
   const scheduler =
     opts.withScheduler && cfg.scheduleAt && cfg.runnerEnabled ? createScheduler(runner, { at: cfg.scheduleAt, tz: cfg.tz, jitterMin: cfg.scheduleJitterMin, log: warn }) : null;
 
@@ -92,12 +97,15 @@ export async function createAppContext(opts: { withScheduler?: boolean } = {}): 
     llm,
     runner,
     scheduler,
+    agent: always?.agent ?? null,
+    chats: always?.chats ?? null,
     version: process.env.SGZ_VERSION ?? "dev",
     startedAt: new Date(),
     async close(this: AppContext) {
       this.scheduler?.stop();
-      for (const a of [runner.active(), runner.activeChats()]) if (a) await runner.stop(a.id);
-      await runner.drain();
+      const a = runner.active();
+      if (a) await runner.stop(a.id);
+      await Promise.all([runner.drain(), this.agent?.stop()]);
       store.close();
     },
   };

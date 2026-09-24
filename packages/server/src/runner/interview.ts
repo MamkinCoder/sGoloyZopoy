@@ -1,20 +1,19 @@
 // Chat extras around interviews: prep brief on an invitation, interview reminders, one polite follow-up
 // after employer silence. All hh-internal; the follow-up is a fixed text (no LLM, no links).
-import { INTERVIEW_OUTCOMES, RunAbortError, type BrowserSession, type ChatMessage, type ChatThread, type HHClient, type InterviewOutcome, type InterviewPrep, type Notifier, type Store, type Vacancy } from "@sgz/shared";
+import { INTERVIEW_OUTCOMES, type BrowserSession, type ChatMessage, type ChatThread, type HHClient, type InterviewOutcome, type InterviewPrep, type Notifier, type Store, type User, type Vacancy } from "@sgz/shared";
+import type { ChatEnv } from "../agent/chats/env.js";
 import { formatBand } from "../db/salary.js";
 import { mapNegotiationState } from "../hh/state.js";
 import { HH_ORIGIN } from "../hh/urls.js";
 import { shortStamp } from "../scheduler/tz.js";
-import type { RunContext } from "./context.js";
-import type { UserRun } from "./user.js";
 import { alertWithStudy } from "./study.js";
-import { errMessage, isStop } from "./util.js";
+import { errMessage } from "./util.js";
 
 type ThreadSummary = Awaited<ReturnType<HHClient["listThreads"]>>[number];
 
 export const FOLLOW_UP =
   "Здравствуйте! Хотел уточнить, актуальна ли ещё вакансия? С удовольствием расскажу подробнее о своём опыте и готов созвониться в удобное время.";
-/** Keeps follow-ups low-volume: at most this many per chat poll. */
+/** Keeps follow-ups low-volume: at most this many per chat sync. */
 const FOLLOWUP_PER_POLL = 3;
 export const FOLLOWUP_DAYS_DEFAULT = "7";
 /** Reminder lead time before an interview. */
@@ -32,60 +31,50 @@ export function followupDue(prev: ChatThread | undefined, t: Pick<ThreadSummary,
   return !(last?.direction === "in" && !last.answered); // an unhandled employer message is the main loop's job
 }
 
-/** Follow-up pass over the chats the main loop did not touch; returns the number sent. */
-export async function followupChats(ctx: RunContext, u: UserRun, s: BrowserSession, rest: ThreadSummary[], known: Map<string, ChatThread>): Promise<number> {
-  const days = Number(ctx.store.getSetting("chat_followup_days") ?? FOLLOWUP_DAYS_DEFAULT);
+/** Follow-up pass over the chats the sync did not touch; returns the number sent. */
+export async function followupChats(env: ChatEnv, _user: User, s: BrowserSession, rest: ThreadSummary[], known: Map<string, ChatThread>): Promise<number> {
+  const days = Number(env.store.getSetting("chat_followup_days") ?? FOLLOWUP_DAYS_DEFAULT);
   if (!Number.isFinite(days) || days <= 0) return 0;
   let sent = 0;
   let tried = 0; // every candidate costs a page read, sent or not
   for (const t of rest) {
     if (tried >= FOLLOWUP_PER_POLL) break;
     const prev = known.get(t.negotiationId);
-    if (!prev || ctx.store.getSetting(`followup_closed:${prev.id}`)) continue;
-    if (!followupDue(prev, t, ctx.store.listChatMessages(prev.id), ctx.now(), days)) continue;
-    ctx.checkAbort();
+    if (!prev || env.store.getSetting(`followup_closed:${prev.id}`)) continue;
+    if (!followupDue(prev, t, env.store.listChatMessages(prev.id), env.now(), days)) continue;
     tried++;
     const employer = prev.employer || t.employer;
-    if (ctx.req.dryRun) {
-      ctx.log.info("chats", `${employer}: silent ${days}+ days, would send a follow-up [dry-run]`, { thread_id: prev.id });
-      continue;
-    }
     try {
-      const detail = await ctx.hh.readThread(s, t.chatUrl);
-      ctx.store.insertChatMessages(prev.id, detail.messages);
+      const detail = await env.hh.readThread(s, t.chatUrl);
+      env.store.insertChatMessages(prev.id, detail.messages);
       // The page may know more than the list: a closed chat or a rejection never gets a follow-up; a fresh
       // employer message fails followupDue and goes to the main loop on the next poll.
-      if (detail.writable === false || detail.thread.state === "rejected") ctx.store.setSetting(`followup_closed:${prev.id}`, ctx.now().toISOString());
-      if (detail.writable === false || detail.thread.state === "rejected" || !followupDue(prev, t, ctx.store.listChatMessages(prev.id), ctx.now(), days)) {
-        await ctx.throttle.afterRead();
+      if (detail.writable === false || detail.thread.state === "rejected") env.store.setSetting(`followup_closed:${prev.id}`, env.now().toISOString());
+      if (detail.writable === false || detail.thread.state === "rejected" || !followupDue(prev, t, env.store.listChatMessages(prev.id), env.now(), days)) {
+        await env.throttle.afterRead();
         continue;
       }
-      await ctx.hh.sendMessage(s, t.chatUrl, FOLLOW_UP);
-      ctx.store.insertChatMessages(prev.id, [{ hhMessageId: null, direction: "out", author: "me", text: FOLLOW_UP, isQuestion: false, answered: true }]);
-      u.stats.chatReply();
+      await env.hh.sendMessage(s, t.chatUrl, FOLLOW_UP);
+      env.store.insertChatMessages(prev.id, [{ hhMessageId: null, direction: "out", author: "me", text: FOLLOW_UP, isQuestion: false, answered: true }]);
       sent++;
-      ctx.log.info("chats", `${employer}: silent ${days}+ days, sent a follow-up`, { thread_id: prev.id });
-      await ctx.throttle.afterMutation();
+      env.log.info("chats", `${employer}: silent ${days}+ days, sent a follow-up`, { thread_id: prev.id });
+      await env.throttle.afterMutation();
     } catch (e) {
-      if (e instanceof RunAbortError || isStop(e)) throw e;
-      ctx.log.warn("chats", `${employer}: follow-up failed: ${errMessage(e)}`, { thread_id: prev.id });
+      env.log.warn("chats", `${employer}: follow-up failed: ${errMessage(e)}`, { thread_id: prev.id });
     }
   }
   return sent;
 }
 
-/** Prep brief on an invitation: saved on the thread and sent to Telegram. Never fails the poll. */
-export async function sendInterviewPrep(ctx: RunContext, u: UserRun, threadId: number, employer: string, vacancy: Vacancy | null, invitation: string): Promise<void> {
-  if (!vacancy || ctx.req.dryRun) return;
-  try {
-    const prep = await ctx.llm.interviewPrep(ctx.store.getProfile(u.user.id) ?? u.profile, vacancy, invitation);
-    u.stats.llmCall();
-    ctx.store.setChatPrep(threadId, prep);
-    const market = marketLine(ctx.store, u.user.id, vacancy);
-    await alertWithStudy(ctx.deps.notifier, `📝 Подготовка: ${employer} (${vacancy.title})`, market ? `${formatPrep(prep).slice(0, 3350)}\n\n${market}` : formatPrep(prep), threadId);
-  } catch (e) {
-    ctx.log.warn("chats", `${employer}: interview prep failed: ${errMessage(e)}`, { thread_id: threadId });
-  }
+/** Prep brief on an invitation (job chats.prep): saved on the thread and sent to Telegram. Once per thread. */
+export async function sendInterviewPrep(env: Pick<ChatEnv, "store" | "llm" | "notifier">, thread: ChatThread, invitation: string): Promise<void> {
+  const vacancy: Vacancy | null = thread.vacancyId === null ? null : env.store.getVacancy(thread.vacancyId);
+  const profile = env.store.getProfile(thread.userId);
+  if (!vacancy || !profile || thread.prep) return;
+  const prep = await env.llm.interviewPrep(profile, vacancy, invitation);
+  env.store.setChatPrep(thread.id, prep);
+  const market = marketLine(env.store, thread.userId, vacancy);
+  await alertWithStudy(env.notifier, `📝 Подготовка: ${thread.employer} (${vacancy.title})`, market ? `${formatPrep(prep).slice(0, 3350)}\n\n${market}` : formatPrep(prep), thread.id);
 }
 
 export function formatPrep(p: InterviewPrep): string {

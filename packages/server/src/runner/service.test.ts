@@ -53,10 +53,10 @@ const req = (stage?: string, trigger: "schedule" | "manual" = "schedule"): RunRe
 
 describe("run watchdog", () => {
   it("picks caps per stage and honours the override", () => {
-    expect(maxRunMs({ stage: "chats" }, null)).toBe(20 * 60_000);
+    expect(maxRunMs({ stage: "touch" }, null)).toBe(20 * 60_000);
     expect(maxRunMs({ stage: "send:7" }, "0")).toBe(30 * 60_000);
     expect(maxRunMs({}, "")).toBe(150 * 60_000);
-    expect(maxRunMs({ stage: "chats" }, "45")).toBe(45 * 60_000);
+    expect(maxRunMs({ stage: "touch" }, "45")).toBe(45 * 60_000);
   });
 
   it.each([
@@ -65,12 +65,12 @@ describe("run watchdog", () => {
   ] as const)("ends a %s run past its limit", async (m, extra, status) => {
     pipeline = m === "cooperative" ? cooperative : never;
     const r = runner();
-    const id = await r.start(req("chats"));
+    const id = await r.start(req("touch"));
     await vi.advanceTimersByTimeAsync(20 * 60_000 + extra);
     const run = await r.wait(id);
     expect(run).toMatchObject({ status, error: "watchdog: exceeded 20 min" });
     expect(store.getRun(id)?.status).toBe(status);
-    expect(r.activeChats()).toBeNull();
+    expect(r.active()).toBeNull();
     expect(alerts).toEqual([`Прогон #${id} остановлен сторожем`]);
   });
 
@@ -100,33 +100,20 @@ describe("run watchdog", () => {
   });
 });
 
-describe("run lanes", () => {
-  it("runs chat polls next to a main run, one of each at a time", async () => {
+describe("one run at a time", () => {
+  it("refuses a second run while one is active; runs use the main Chrome profile", async () => {
     const r = runner();
     const main = await r.start(req(undefined));
-    const chats = await r.start(req("chats"));
-    expect(r.active()?.id).toBe(main);
-    expect(r.activeChats()?.id).toBe(chats);
-    await expect(r.start(req("chats"))).rejects.toBeInstanceOf(RunBusyError);
     await expect(r.start(req("touch"))).rejects.toBeInstanceOf(RunBusyError);
-    await r.stop(chats);
-    expect((await r.wait(chats)).status).toBe("stopped");
-    expect(r.activeChats()).toBeNull();
-    expect(r.active()?.id).toBe(main);
     await r.stop(main);
     await r.drain();
     expect(r.active()).toBeNull();
-  });
-
-  it("the chat lane has its own Chrome profile", async () => {
     pipeline = async (ctx) => {
       await ctx.browser.open(user);
       return done();
     };
-    const r = runner();
-    await r.wait(await r.start(req("chats")));
     await r.wait(await r.start(req(undefined)));
-    expect(launches).toEqual(["/d/users/u/chrome-profile-chat", "/d/users/u/chrome-profile"]);
+    expect(launches).toEqual(["/d/users/u/chrome-profile"]);
   });
 });
 
@@ -140,10 +127,10 @@ describe("repeatFailure", () => {
 
   it("reports a background failure once per 3h, ignoring digits; manual runs always", () => {
     const s = store();
-    expect(repeatFailure(s, req("chats"), "run #51: login expired", t0)).toBe(false);
-    expect(repeatFailure(s, req("chats"), "run #52: login expired", new Date(t0.getTime() + 5 * 60_000))).toBe(true);
-    expect(repeatFailure(s, req("chats"), "run #53: login expired", new Date(t0.getTime() + 3 * 3600_000 + 1))).toBe(false);
-    expect(repeatFailure(s, req("chats", "manual"), "run #54: login expired", t0)).toBe(false);
+    expect(repeatFailure(s, req("touch"), "run #51: login expired", t0)).toBe(false);
+    expect(repeatFailure(s, req("touch"), "run #52: login expired", new Date(t0.getTime() + 5 * 60_000))).toBe(true);
+    expect(repeatFailure(s, req("touch"), "run #53: login expired", new Date(t0.getTime() + 3 * 3600_000 + 1))).toBe(false);
+    expect(repeatFailure(s, req("touch", "manual"), "run #54: login expired", t0)).toBe(false);
     expect(repeatFailure(s, req("send:5"), "boom", t0)).toBe(false);
     expect(repeatFailure(s, req("send:5"), "boom", t0)).toBe(false);
   });

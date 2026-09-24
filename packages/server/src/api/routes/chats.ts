@@ -1,17 +1,29 @@
 import { Hono } from "hono";
-import type { ChatThreadDTO, StudyDTO } from "@sgz/shared";
+import type { ChatTask, ChatTaskDTO, ChatThreadDTO, StudyDTO } from "@sgz/shared";
 import type { ApiDeps } from "../deps.js";
 import { badRequest, HttpError, notFound } from "../errors.js";
 import { startStudy, studyStatus } from "../../runner/study.js";
 import { InterviewSchema, OutcomeSchema, parseBody } from "../validate.js";
 import { idParam, userOr404 } from "./common.js";
 
-export function chatRoutes({ store, llm }: ApiDeps): Hono {
+const taskDTO = (t: ChatTask): ChatTaskDTO => ({
+  id: t.id,
+  state: t.state,
+  kind: t.kind,
+  pending: t.topics.filter((x) => x.answer === null).map((x) => x.name),
+  topics: t.topics,
+  draft: t.draft,
+  last_error: t.lastError,
+  updated_at: t.updatedAt,
+});
+
+export function chatRoutes({ store, llm, agent }: ApiDeps): Hono {
   const r = new Hono();
 
   r.get("/users/:slug/chats", (c) => {
     const u = userOr404(store, c.req.param("slug"));
     const threads = store.listChatThreads(u.id, c.req.query("state") || undefined);
+    const tasks = agent?.tasks(u.id) ?? new Map<number, ChatTask>();
     // The study pack (~15 KB with the prompt) comes from GET …/study; the list only says whether one exists.
     const out: ChatThreadDTO[] = threads.map(({ study, ...t }) => {
       const msgs = store.listChatMessages(t.id);
@@ -19,6 +31,7 @@ export function chatRoutes({ store, llm }: ApiDeps): Hono {
       return {
         ...t,
         has_study: !!study,
+        task: tasks.has(t.id) ? taskDTO(tasks.get(t.id)!) : null,
         vacancy: v ? { id: v.id, title: v.title, company: v.company, url: v.url } : null,
         unanswered: msgs.filter((m) => m.direction === "in" && m.isQuestion && !m.answered).length,
         last_message: msgs.at(-1)?.text ?? null,

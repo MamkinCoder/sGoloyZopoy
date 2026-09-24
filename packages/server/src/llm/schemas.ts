@@ -36,6 +36,12 @@ export const ChatReplySchema = z.object({
   interview_at: z.string().nullable().default(null),
 });
 
+/** triage_chat: what an employer turn needs before a reply is written (agent chats.triage). */
+export const ChatTriageSchema = z.object({
+  kind: z.enum(["question", "scheduling", "test_task", "rejection", "bot_survey", "ack_only"]).catch("question"),
+  topics: z.array(z.string()).default([]),
+});
+
 export const InterviewPrepSchema = z.object({
   questions: z.array(z.string()).default([]),
   stories: z.array(z.object({ skill: z.string(), prompt: z.string() })).default([]),

@@ -5,6 +5,7 @@ import type {
   CV,
   ChatMessage,
   ChatReply,
+  ChatTriage,
   Config,
   DecideInput,
   Decision,
@@ -28,6 +29,7 @@ import { LIMITS, blockedTech, claimRegex, ensureDecisions, enforceMax, normalize
 import {
   AnswersSchema,
   ChatReplySchema,
+  ChatTriageSchema,
   CoverLetterSchema,
   DecisionsSchema,
   InterviewPrepSchema,
@@ -182,6 +184,23 @@ function makeClient(ctx: Ctx): LLMClient {
       }
       const reply = unknown_skills.length ? "" : sanitizeLetter(r.reply, blockedTech(profile), LIMITS.chatReply);
       return { reply, needs_human: r.needs_human, reason, unknown_skills, interview_at };
+    },
+
+    async triageChat(profile: Profile, history: ChatMessage[], fresh: ChatMessage[]): Promise<ChatTriage> {
+      const prompt = renderPrompt("triage_chat", {
+        verified: profile.verified_skills.join(", ") || "(список пуст)",
+        never_claim: neverClaimList(profile),
+        history: renderHistory(history.slice(-20)),
+        fresh: renderHistory(fresh),
+      });
+      const r = await call(ctx, { task: "triage_chat", tier: "fast", prompt, schema: ChatTriageSchema, jsonSchema: toJsonSchema(ChatTriageSchema) });
+      // One entry per skill, case-insensitive; a model that lists the whole vacancy stack is cut at 6.
+      const seen = new Set<string>();
+      const topics = r.topics
+        .map((t) => enforceMax(normalizeProse(t), 40))
+        .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+        .slice(0, 6);
+      return { kind: r.kind, topics };
     },
 
     async summarizeResume(resumeText: string): Promise<ResumeSummary> {

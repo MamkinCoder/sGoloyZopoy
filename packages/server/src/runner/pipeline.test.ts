@@ -4,7 +4,7 @@ import { planCareer, planHabr, planHH } from "./pipeline.js";
 describe("run planning", () => {
   it("keeps pool commands isolated from apply/search stages", () => {
     expect(planHH("pool", "sync")).toMatchObject({ poolSync: "force", search: false, apply: false });
-    expect(planHH("pool", "expand")).toMatchObject({ poolExpand: true, search: false, chats: false });
+    expect(planHH("pool", "expand")).toMatchObject({ poolExpand: true, search: false });
     expect(planHH("hh", "apply")).toMatchObject({ poolSync: "auto", search: true, decide: true, apply: true });
   });
 
@@ -21,14 +21,9 @@ describe("run planning", () => {
     expect(planCareer("hh", undefined)).toBeNull();
   });
 
-  it("main runs never do chats; only stage chats does (hh + habr)", () => {
-    for (const src of ["hh", "all"]) {
-      expect(planHH(src, undefined)).toMatchObject({ chats: false, apply: true });
-      expect(planHH(src, "apply")).toMatchObject({ chats: false });
-    }
-    for (const src of ["habr", "all"]) expect(planHabr(src, undefined)).toMatchObject({ chats: false, apply: true });
-    expect(planHH("all", "chats")).toMatchObject({ chats: true, apply: false, search: false });
-    expect(planHabr("all", "chats")).toMatchObject({ chats: true, apply: false });
+  it("runs never do chats: stage chats is gone (the always-on agent answers employers)", () => {
+    expect(planHH("all", "chats")).toBeNull();
+    expect(planHabr("all", "chats")).toBeNull();
     expect(planCareer("all", "chats")).toBeNull();
   });
 

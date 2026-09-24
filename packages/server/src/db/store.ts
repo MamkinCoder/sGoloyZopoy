@@ -5,8 +5,10 @@ import { DatabaseSync } from "node:sqlite";
 import type { Store } from "@sgz/shared";
 import { applicationsRepo } from "./applications.js";
 import { careerRepo } from "./career.js";
+import { chatTasksRepo, type ChatTasksRepo } from "./chat-tasks.js";
 import { chatsRepo } from "./chats.js";
 import { intelRepo } from "./intel.js";
+import { jobsRepo, type JobsRepo } from "./jobs.js";
 import { applyMigrations } from "./migrate.js";
 import { resumesRepo } from "./resumes.js";
 import { runsRepo } from "./runs.js";
@@ -16,7 +18,8 @@ import { statsRepo } from "./stats.js";
 import { usersRepo } from "./users.js";
 import { vacanciesRepo } from "./vacancies.js";
 
-export interface SqliteStore extends Store {
+/** The agent's tables live next to the Store contract, not in it: only the always-on agent uses them. */
+export interface SqliteStore extends Store, JobsRepo, ChatTasksRepo {
   readonly db: DatabaseSync;
   readonly path: string;
 }
@@ -45,5 +48,7 @@ export function openStore(path: string): SqliteStore {
     ...statsRepo(s),
     ...settingsRepo(s),
     ...intelRepo(s),
+    ...jobsRepo(s),
+    ...chatTasksRepo(s),
   };
 }

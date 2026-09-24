@@ -71,6 +71,24 @@ Jobs (all keyed by task id, so repeats are harmless):
 A Telegram tap or a typed story only writes to the DB and enqueues `chats.draft` / `kb.review` for that
 task: instant, restart-proof, independent of any run.
 
+### As built in phase 1 (deviations from the sketch above, 2026-09-24)
+
+- `chat_tasks` also has `user_id`, `target` (hh chat url / Habr login, where `chats.send` writes), `choices_json`
+  (quick-reply buttons of an hh chat-bot question), `kind` and `reminded`. Terminal state `closed` = handled
+  without a reply (ack-only, rejection, empty draft, answered by hand, chat closed); `sent` always means a reply
+  went out. State changes are compare-and-set, so a sync superseding a task while its draft is written is safe.
+- The review step is job `chats.review` behind `ReviewGate` (`agent/chats/review.ts`: `prefill / ask / record /
+  card`); phase 1's gate reads `verified_skills` / `never_claim_skills` + learned answers and sends one grouped
+  card (`ct:<task>:<topic>:y|n`). Phase 3 replaces the gate with the KB review without touching `tasks.ts`.
+  The 2 h reminder and 12 h fallback are delayed jobs `chats.remind` / `chats.fallback`; the invitation brief is
+  `chats.prep` (llm). A task whose job failed is not reopened until the employer writes again.
+- The re-sync after a send is the normal full `chats.sync` pulled to +30 s (key dedupe), not a per-thread sync:
+  unchanged threads cost one list read.
+- hh chat-bot surveys (the questionnaire widget) are still answered inside `chats.sync` (one LLM call inside a
+  browser job); a job of their own if they get frequent.
+- The agent's tables are on `SqliteStore` (`db/jobs.ts`, `db/chat-tasks.ts`), not on the shared `Store` contract:
+  only the agent and the API view (`ApiDeps.agent`) use them. Stage `chats` is gone from runs entirely.
+
 ## 4. Knowledge base (the seeker's experience, replacing "master CV" as the source of truth)
 
 ```

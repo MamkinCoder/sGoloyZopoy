@@ -1,6 +1,13 @@
 // Dependencies injected into createApp. Everything optional beyond cfg/store/runner/version is a
 // health hook the integrator wires from other workstreams (they may not exist yet when H ships).
-import type { Config, LLMClient, RunService, Store } from "@sgz/shared";
+import type { ChatTask, Config, Job, JobState, LLMClient, RunService, Store } from "@sgz/shared";
+
+/** Read-only view of the always-on agent's tables (jobs, chat reply tasks). */
+export interface AgentView {
+  jobs(state?: JobState): Job[];
+  /** Latest reply task per thread of a user, keyed by thread id. */
+  tasks(userId: number): Map<number, ChatTask>;
+}
 
 export interface HHSessionCheck {
   ok: boolean | null;
@@ -27,6 +34,8 @@ export interface ApiDeps {
   version: string;
   /** On-demand LLM calls outside runs (interview study pack). Absent: those endpoints answer 503. */
   llm?: LLMClient;
+  /** The always-on agent; absent (CLI, tests): /agent/jobs is empty and chats carry no task. */
+  agent?: AgentView;
   /** Registered career-site adapter names (GET /api/adapters). Defaults to the ATSKind list. */
   adapters?: string[];
   hhSessionCheck?: (slug: string) => HHSessionCheck;

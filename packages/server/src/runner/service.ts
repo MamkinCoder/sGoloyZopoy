@@ -1,4 +1,5 @@
-// RunService: one run per lane (main / chats), async pipeline, live events via the hub.
+// RunService: one run at a time (the batch plane), async pipeline, live events via the hub. Employer chats
+// are not runs: the always-on agent (src/agent) answers them.
 import { emptyRunStats, RunBusyError, type Run, type RunEvent, type RunRequest, type RunService } from "@sgz/shared";
 import { createContext } from "./context.js";
 import type { RunnerDeps } from "./deps.js";
@@ -14,15 +15,9 @@ interface Active {
 }
 
 export interface Runner extends RunService {
-  /** The chat-lane run (stage `chats`), if any. `active()` is the main lane only. */
-  activeChats(): Run | null;
   /** Resolves once the active runs (if any) have finished. For graceful shutdown. */
   drain(): Promise<void>;
 }
-
-/** Two independent slots: chat polls (stage `chats`) never wait for a main run, and vice versa. */
-export type Lane = "main" | "chats";
-export const laneOf = (req: Pick<RunRequest, "stage">): Lane => (req.stage === "chats" ? "chats" : "main");
 
 /** Cleanup awaits after the pipeline (browser close) get this long: a wedged Chrome must not hold the slot. */
 const CLEANUP_MS = 15_000;
@@ -36,7 +31,7 @@ export function maxRunMs(req: Pick<RunRequest, "stage">, override: string | null
   const o = Number(override);
   if (override && Number.isFinite(o) && o > 0) return o * 60_000;
   const st = req.stage ?? "";
-  if (st === "chats" || st === "touch") return 20 * 60_000;
+  if (st === "touch") return 20 * 60_000;
   if (st === "rotate" || /^(send|inspect|retailor|force):/.test(st)) return 30 * 60_000;
   return 150 * 60_000;
 }
@@ -44,7 +39,7 @@ export function maxRunMs(req: Pick<RunRequest, "stage">, override: string | null
 /** After the watchdog aborts, a wedged await that never reaches checkAbort gets this long before the runner moves on. */
 export const WATCHDOG_GRACE_MS = 60_000;
 
-const BACKGROUND_STAGES = new Set(["chats", "rotate", "touch"]);
+const BACKGROUND_STAGES = new Set(["rotate", "touch"]);
 const REPEAT_ALERT_MS = 3 * 3600_000;
 
 /** Autopilot runs repeat every few minutes: the same failure (e.g. an expired hh login) is reported
@@ -63,12 +58,12 @@ export function createRunner(deps: RunnerDeps): Runner {
   const hub = new EventHub();
   const store = deps.store;
   const stderr = deps.stderr ?? ((line: string) => console.error(line));
-  const slots: Record<Lane, Active | null> = { main: null, chats: null };
-  const find = (runId: number) => Object.values(slots).find((a) => a?.run.id === runId) ?? null;
+  let active: Active | null = null;
+  const find = (runId: number) => (active?.run.id === runId ? active : null);
 
   async function execute(run: Run, req: RunRequest, controller: AbortController): Promise<Run> {
     const log = createRunLogger(store, hub, run.id, stderr);
-    const ctx = createContext(deps, run, req, log, controller.signal, laneOf(req));
+    const ctx = createContext(deps, run, req, log, controller.signal);
     let final: Run = { ...run };
     let piped = false; // the pipeline returned; only the report was left
     // Watchdog: a hung page, LLM call or Telegram send must not hold the slot all day. It races the whole
@@ -92,12 +87,12 @@ export function createRunner(deps: RunnerDeps): Runner {
       const r = await runPipeline(ctx);
       final = { ...run, status: r.status, error: r.error, stats: aggregate(r.users, req.dryRun), finishedAt: ctx.now().toISOString() };
       piped = true;
-      // Chat polls and autopilot career chunks run all day: report only when something happened.
+      // Autopilot career chunks and touches run all day: report only when something happened.
       const s = final.stats;
       const quietPoll =
         req.trigger === "schedule" &&
         final.status === "done" &&
-        ((req.stage === "chats" && !s.chat_replies && !s.invitations && !s.rejections) || (req.stage === "rotate" && !s.by_status.QUEUED) || req.stage === "touch");
+        ((req.stage === "rotate" && !s.by_status.QUEUED) || req.stage === "touch");
       const repeated = final.status !== "done" && repeatFailure(store, req, final.error, ctx.now());
       if (!quietPoll && !repeated) final.tgSent = await sendReports(ctx, final, r.users);
     };
@@ -128,17 +123,16 @@ export function createRunner(deps: RunnerDeps): Runner {
 
   return {
     async start(req) {
-      const lane = laneOf(req);
-      if (slots[lane]) throw new RunBusyError();
+      if (active) throw new RunBusyError();
       const userId = req.userSlug === "all" ? null : (store.getUserBySlug(req.userSlug)?.id ?? null);
       if (req.userSlug !== "all" && userId === null) throw new Error(`unknown user "${req.userSlug}"`);
       const run = { ...store.insertRun({ userId, source: req.source, trigger: req.trigger, status: "running", stats: emptyRunStats(req.dryRun), tgSent: false, error: "" }), stage: req.stage };
       hub.open(run.id);
       const controller = new AbortController();
       const entry: Active = { run, controller, promise: Promise.resolve(run) };
-      slots[lane] = entry;
+      active = entry;
       entry.promise = execute(run, req, controller).finally(() => {
-        if (slots[lane] === entry) slots[lane] = null;
+        if (active === entry) active = null;
         hub.close(run.id);
       });
       // Nothing may escape: the promise is also awaited by wait(), so swallow here.
@@ -157,8 +151,7 @@ export function createRunner(deps: RunnerDeps): Runner {
       if (r && (r.status === "running" || r.status === "queued")) store.finishRun({ ...r, status: "stopped", error: "stopped (no active worker)", finishedAt: new Date().toISOString() });
     },
 
-    active: () => (slots.main ? { ...slots.main.run } : null),
-    activeChats: () => (slots.chats ? { ...slots.chats.run } : null),
+    active: () => (active ? { ...active.run } : null),
 
     subscribe: (runId): AsyncIterable<RunEvent> => hub.subscribe(runId),
 
@@ -171,7 +164,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     },
 
     async drain() {
-      await Promise.all(Object.values(slots).map((a) => a?.promise.catch(() => undefined)));
+      await active?.promise.catch(() => undefined);
     },
   };
 }

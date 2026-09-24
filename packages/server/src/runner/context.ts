@@ -34,33 +34,64 @@ export interface RunContext {
   fileExists(path: string): boolean;
 }
 
-/** `lane` "chats": the chat bot's own Chrome profile, so it runs next to a main run (same saved cookies). */
-export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: Logger, signal: AbortSignal, lane: "main" | "chats" = "main"): RunContext {
+export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: Logger, signal: AbortSignal): RunContext {
   const now = deps.now ?? (() => new Date());
   const sleepFn = deps.sleep ?? defaultSleep;
   const random = deps.random ?? Math.random;
   const mem = deps.memAvailableMB ?? readMemAvailableMB;
   const fileExists = deps.fileExists ?? existsSync;
-  const loadCookies = deps.loadCookies ?? defaultLoadCookies;
 
   const checkAbort = () => {
     if (signal.aborted) throw new RunStoppedError();
   };
+  const browser = createBrowserHandle(deps, { profileDir: paths.chromeProfile, snapshotDir: paths.snapshots(deps.cfg, run.id), log, checkAbort });
 
+  return {
+    deps,
+    cfg: deps.cfg,
+    store: deps.store,
+    hh: deps.hh,
+    llm: deps.llm.withRun(run.id),
+    run,
+    req,
+    log,
+    signal,
+    now,
+    checkAbort,
+    throttle: createThrottle(deps.cfg, sleepFn, random, signal),
+    browser,
+    memoryGuard: (stage) => guardMemory(stage, { cfg: deps.cfg, memAvailableMB: mem, sleep: (ms) => sleepFn(ms, signal), closeBrowser: browser.close, log }),
+    fileExists,
+  };
+}
+
+export interface BrowserHandleOpts {
+  /** Chrome profile per user: the runner's `chrome-profile`, the agent's `chrome-profile-chat`. */
+  profileDir: (cfg: Config, slug: string) => string;
+  snapshotDir: string;
+  log: Logger;
+  checkAbort?: () => void;
+}
+
+/** One lazily launched Chrome with the user's persistent profile; the hh / Habr login is verified on first use
+ *  and the saved cookies are injected when the profile is logged out. Shared by runs and the always-on agent. */
+export function createBrowserHandle(deps: Pick<RunnerDeps, "cfg" | "launcher" | "hh" | "habr" | "loadCookies">, o: BrowserHandleOpts): BrowserHandle {
+  const { log } = o;
+  const loadCookies = deps.loadCookies ?? defaultLoadCookies;
   let session: BrowserSession | null = null;
   let sessionSlug = "";
   let habrChecked: BrowserSession | null = null;
 
   const launch = async (user: User): Promise<BrowserSession> => {
-    checkAbort();
+    o.checkAbort?.();
     if (session && sessionSlug === user.slug) return session;
     if (session) await close();
     session = await deps.launcher.launch({
       executablePath: deps.cfg.chromiumBin,
       headless: true,
-      userDataDir: (lane === "chats" ? paths.chatChromeProfile : paths.chromeProfile)(deps.cfg, user.slug),
+      userDataDir: o.profileDir(deps.cfg, user.slug),
       userAgent: deps.cfg.userAgent || undefined,
-      snapshotDir: paths.snapshots(deps.cfg, run.id),
+      snapshotDir: o.snapshotDir,
       blockAssets: true,
       cacheDir: paths.actionCache(deps.cfg),
     });
@@ -82,7 +113,7 @@ export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: 
     }
   };
 
-  const browser: BrowserHandle = {
+  return {
     open: launch,
     async openHH(user) {
       const wasOpen = !!session && sessionSlug === user.slug;
@@ -121,24 +152,6 @@ export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: 
       return s;
     },
     close,
-  };
-
-  return {
-    deps,
-    cfg: deps.cfg,
-    store: deps.store,
-    hh: deps.hh,
-    llm: deps.llm.withRun(run.id),
-    run,
-    req,
-    log,
-    signal,
-    now,
-    checkAbort,
-    throttle: createThrottle(deps.cfg, sleepFn, random, signal),
-    browser,
-    memoryGuard: (stage) => guardMemory(stage, { cfg: deps.cfg, memAvailableMB: mem, sleep: (ms) => sleepFn(ms, signal), closeBrowser: close, log }),
-    fileExists,
   };
 }
 
