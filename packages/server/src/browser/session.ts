@@ -101,7 +101,7 @@ export class StagehandSession implements BrowserSession {
       const replay = await this.replay(cached, opts.variables, timeout);
       if (replay.ok) {
         this.d.cache.success(host, key, cached);
-        return { success: true, message: replay.message, usedCache: true };
+        return { success: true, message: replay.message, usedCache: true, selector: cached.selector };
       }
       this.d.cache.failure(host, key);
     }
@@ -116,7 +116,7 @@ export class StagehandSession implements BrowserSession {
     } else if (cached) {
       this.d.cache.invalidate(host, key);
     }
-    return { success: run.ok, message: run.message, usedCache: false };
+    return { success: run.ok, message: run.message, usedCache: false, selector: action.selector };
   }
 
   /** Deterministic Stagehand act on a known Action: xpath resolution + method dispatch, `%var%` substitution, no LLM. */

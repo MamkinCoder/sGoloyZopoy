@@ -5,6 +5,7 @@ import { Status } from "@sgz/shared";
 import type { Answer, BrowserSession, CareerApplyRequest, CareerApplyResult, Question } from "@sgz/shared";
 import { answerValues, byIdx, splitName } from "./ats/apply-common.js";
 import { copyFileSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 import { dirname, join } from "node:path";
 import { truncate } from "./http.js";
 import { confirmSchema, questionsSchema } from "./schemas.js";
@@ -53,6 +54,58 @@ export const LETTER_LIMIT_JS = `(() => {
   const m = ctx(t).match(/\\d+\\s*\\/\\s*(\\d{2,5})|(?:до|не более|максимум|max(?:imum)?)\\s*(\\d{2,5})\\s*(?:символ|знак|char)/i);
   return m ? Number(m[1] || m[2]) : 0;
 })()`;
+
+// Records what a submit click set off: a form submit event, a non-GET fetch / XHR, or leaving the page. A click
+// can "succeed" and still do nothing (corp.ivi.ru: the button was clicked, the form never left data-status=init),
+// so the flow checks this probe instead of trusting the click. Re-arming resets the log.
+export const SUBMIT_PROBE_JS = `(() => {
+  if (window.__sgzSubmit) { window.__sgzSubmit.what = []; return true; }
+  const p = (window.__sgzSubmit = { what: [] });
+  const hit = (w) => p.what.push(w);
+  document.addEventListener("submit", () => hit("submit"), true);
+  window.addEventListener("beforeunload", () => hit("unload"));
+  const f = window.fetch;
+  if (f) window.fetch = function (input, init) {
+    const m = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+    if (m !== "GET") hit("fetch " + m);
+    return f.apply(this, arguments);
+  };
+  const open = XMLHttpRequest.prototype.open, send = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (m) { this.__sgzMethod = String(m).toUpperCase(); return open.apply(this, arguments); };
+  XMLHttpRequest.prototype.send = function () { if (this.__sgzMethod && this.__sgzMethod !== "GET") hit("xhr " + this.__sgzMethod); return send.apply(this, arguments); };
+  return true;
+})()`;
+
+/** Probe log; null once the page is gone (navigated away = the submit went somewhere). */
+const PROBE_READ_JS = `(window.__sgzSubmit ? window.__sgzSubmit.what : null)`;
+
+// Submits the form of the button the click hit, the way the browser would: requestSubmit fires the submit event
+// the site's handlers listen for. No form around the button: a DOM click, which skips hit-testing.
+export const requestSubmitJs = (selector: string): string => `(() => {
+  let sel = ${JSON.stringify(selector)};
+  if (sel.startsWith("xpath=")) sel = sel.slice(6);
+  const b = sel.startsWith("/") || sel.startsWith("(") ? document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue : document.querySelector(sel);
+  if (!b) return "button gone";
+  const form = b.form || b.closest("form");
+  if (!form) { b.click(); return "click()"; }
+  try { form.requestSubmit(b); } catch { form.requestSubmit(); }
+  return "requestSubmit()";
+})()`;
+
+/** How long a submit gets to show an effect; tests shorten it. */
+export const submitTiming = { effectMs: 6000, pollMs: 500 };
+
+/** What the submit set off within a few seconds ("left the page" when the probe is gone), or "" for nothing. */
+async function submitEffect(s: BrowserSession): Promise<string> {
+  const deadline = Date.now() + submitTiming.effectMs;
+  for (;;) {
+    const what = await s.evaluate<string[] | null>(PROBE_READ_JS).catch(() => undefined);
+    if (what === null) return "left the page";
+    if (what?.length) return [...new Set(what)].join(", ");
+    if (Date.now() >= deadline) return "";
+    await sleep(submitTiming.pollMs);
+  }
+}
 
 /** «Петров_Иван_CV.pdf» instead of the internal «5.pdf» that recruiters would otherwise see. */
 export const cvFileName = (fullName: string): string => {
@@ -172,10 +225,21 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
       };
     }
 
+    const armed = await s.evaluate<boolean>(SUBMIT_PROBE_JS).catch(() => false);
     const submit = await s.act('Submit the application form: click the "Submit" / "Send" / "Отправить" / "Откликнуться" button', {
       cacheKey: "career.apply.submit",
     });
     if (!submit.success) return fail(Status.FAILED_UI, `submit failed: ${submit.message}`, { questions, answers });
+    let effect = armed ? await submitEffect(s) : "not checked";
+    if (!effect && submit.selector) {
+      await s.evaluate(SUBMIT_PROBE_JS).catch(() => undefined);
+      const how = await s.evaluate<string>(requestSubmitJs(submit.selector)).catch((e: unknown) => `error: ${errMessage(e)}`);
+      // Not in this document (a form in an iframe, which the probe cannot see): fall back to the confirmation check.
+      effect = how === "button gone" ? "not checked (button outside the main document)" : await submitEffect(s);
+      learned.push(`submit click did nothing; ${how}: ${effect || "nothing either"}`);
+    }
+    if (!effect) return fail(Status.FAILED_UI, "submit had no effect: no form submit, request or navigation after the click", { questions, answers });
+    learned.push(`submit set off: ${effect}`);
 
     const confirmed = await confirmSubmission(s);
     if (!confirmed) {

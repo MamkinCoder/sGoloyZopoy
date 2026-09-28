@@ -37,6 +37,8 @@ export interface ActResult {
   success: boolean;
   message: string;
   usedCache: boolean;
+  /** The element the action ran on (cached or observed), when there was one. */
+  selector?: string;
 }
 
 /**
