@@ -1,6 +1,6 @@
 import type { QueueItemDTO } from "@sgz/shared";
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useApplicationAction, useQueue } from "../api/hooks";
 import { RunProgress, runStartError } from "../components/RunProgress";
 import { FitBadge } from "../components/StatusBadge";
@@ -15,6 +15,150 @@ function answerText(q: { options?: string[] }, raw: unknown): string {
   if (a.option_idxs?.length) return a.option_idxs.map((i) => q.options?.[i] ?? `#${i}`).join(", ");
   if (a.option_idx !== undefined) return q.options?.[a.option_idx] ?? `#${a.option_idx}`;
   return a.text ?? "—";
+}
+
+const SORTS = {
+  new: { label: "Сначала новые", cmp: (a: QueueItemDTO, b: QueueItemDTO) => b.created_at.localeCompare(a.created_at) },
+  old: { label: "Сначала старые", cmp: (a: QueueItemDTO, b: QueueItemDTO) => a.created_at.localeCompare(b.created_at) },
+  fit: { label: "По совпадению", cmp: (a: QueueItemDTO, b: QueueItemDTO) => (b.fit_score ?? -1) - (a.fit_score ?? -1) },
+  salary: { label: "По зарплате", cmp: (a: QueueItemDTO, b: QueueItemDTO) => (b.vacancy.salary_to || b.vacancy.salary_from) - (a.vacancy.salary_to || a.vacancy.salary_from) },
+  company: { label: "Компания А-Я", cmp: (a: QueueItemDTO, b: QueueItemDTO) => a.vacancy.company.localeCompare(b.vacancy.company, "ru") },
+} as const;
+type SortKey = keyof typeof SORTS;
+const FIT_MINS = [50, 70, 80];
+const FILTER_KEYS = ["q", "site", "format", "fit", "how", "sort"];
+
+const uniq = (xs: string[]) => [...new Set(xs.filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru"));
+
+/** Search / filters / sort for the queue, kept in the query string so a reload keeps them. */
+function useQueueView(items: QueueItemDTO[]) {
+  const [sp, setSp] = useSearchParams();
+  const get = (k: string) => sp.get(k) ?? "";
+  const set = (patch: Record<string, string>) => {
+    const next = new URLSearchParams(sp);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    setSp(next, { replace: true });
+  };
+  const q = get("q");
+  const site = get("site");
+  const format = get("format");
+  const fit = Number(get("fit")) || 0;
+  const how = get("how");
+  const sort: SortKey = get("sort") in SORTS ? (get("sort") as SortKey) : "new";
+
+  const options = useMemo(
+    () => ({
+      sites: uniq(items.map((it) => it.site?.name ?? "")),
+      formats: uniq(items.map((it) => it.vacancy.work_format)),
+      hasFit: items.some((it) => it.fit_score !== null),
+      hasSalary: items.some((it) => it.vacancy.salary_from > 0 || it.vacancy.salary_to > 0),
+      mixedHow: items.some((it) => it.manual_apply) && items.some((it) => !it.manual_apply),
+    }),
+    [items],
+  );
+
+  const visible = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    // The Telegram link target stays visible whatever the filters say.
+    const pinned = location.hash.startsWith("#app-") ? Number(location.hash.slice(5)) : 0;
+    return items
+      .filter(
+        (it) =>
+          it.id === pinned ||
+          ((!needle || `${it.vacancy.title} ${it.vacancy.company} ${it.site?.name ?? ""} ${it.cover_letter}`.toLowerCase().includes(needle)) &&
+            (!site || it.site?.name === site) &&
+            (!format || it.vacancy.work_format === format) &&
+            (!fit || (it.fit_score ?? 0) >= fit) &&
+            (!how || (how === "manual") === it.manual_apply)),
+      )
+      .sort(SORTS[sort].cmp);
+  }, [items, q, site, format, fit, how, sort]);
+
+  const active = FILTER_KEYS.some((k) => sp.has(k));
+  const reset = () => {
+    const next = new URLSearchParams(sp);
+    for (const k of FILTER_KEYS) next.delete(k);
+    setSp(next, { replace: true });
+  };
+  return { q, site, format, fit, how, sort, set, options, visible, active, reset };
+}
+
+function QueueToolbar({ view, total }: { view: ReturnType<typeof useQueueView>; total: number }) {
+  const { options: o, set } = view;
+  const [draft, setDraft] = useState(view.q);
+  useEffect(() => {
+    const t = setTimeout(() => draft !== view.q && set({ q: draft }), 250);
+    return () => clearTimeout(t);
+  }, [draft]);
+  return (
+    <div className="card p-2 flex flex-wrap gap-2 items-center">
+      <input className="input flex-1 min-w-[160px]" placeholder="Поиск: вакансия, компания, сайт, письмо" value={draft} onChange={(e) => setDraft(e.target.value)} />
+      {o.sites.length > 1 && (
+        <select className="input w-auto" value={view.site} onChange={(e) => set({ site: e.target.value })}>
+          <option value="">Все сайты</option>
+          {o.sites.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      )}
+      {o.formats.length > 1 && (
+        <select className="input w-auto" value={view.format} onChange={(e) => set({ format: e.target.value })}>
+          <option value="">Любой формат</option>
+          {o.formats.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+      )}
+      {o.hasFit && (
+        <select className="input w-auto" value={view.fit || ""} onChange={(e) => set({ fit: e.target.value })}>
+          <option value="">Любое совпадение</option>
+          {FIT_MINS.map((m) => (
+            <option key={m} value={m}>
+              fit {m}+
+            </option>
+          ))}
+        </select>
+      )}
+      {o.mixedHow && (
+        <select className="input w-auto" value={view.how} onChange={(e) => set({ how: e.target.value })}>
+          <option value="">Бот и вручную</option>
+          <option value="bot">Отправит бот</option>
+          <option value="manual">Только вручную</option>
+        </select>
+      )}
+      <select className="input w-auto" value={view.sort} onChange={(e) => set({ sort: e.target.value === "new" ? "" : e.target.value })}>
+        {(Object.keys(SORTS) as SortKey[])
+          .filter((k) => (k !== "fit" || o.hasFit) && (k !== "salary" || o.hasSalary))
+          .map((k) => (
+            <option key={k} value={k}>
+              {SORTS[k].label}
+            </option>
+          ))}
+      </select>
+      <span className="text-[12px] muted whitespace-nowrap">
+        {view.visible.length} из {total}
+      </span>
+      {view.active && (
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            setDraft("");
+            view.reset();
+          }}
+        >
+          Сбросить
+        </button>
+      )}
+    </div>
+  );
 }
 
 function QueueCard({ item, slug, active }: { item: QueueItemDTO; slug: string; active: boolean }) {
@@ -43,7 +187,6 @@ function QueueCard({ item, slug, active }: { item: QueueItemDTO; slug: string; a
     ["Email", item.form.email],
     ["Телефон", item.form.phone],
     ["Файл CV", item.form.cv_file_name],
-    ["Письмо", letter.trim() ? "текст ниже" : "—"],
   ];
 
   return (
@@ -158,6 +301,7 @@ function QueueCard({ item, slug, active }: { item: QueueItemDTO; slug: string; a
 export function QueuePage() {
   const { slug = "" } = useParams();
   const q = useQueue(slug);
+  const view = useQueueView(q.data ?? []);
   const [cur, setCur] = useState(0);
   const [hint, setHint] = useState(() => {
     try {
@@ -171,7 +315,7 @@ export function QueuePage() {
   useEffect(() => {
     if (!loaded || !location.hash) return;
     document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "start" });
-    const i = (q.data ?? []).findIndex((it) => `#app-${it.id}` === location.hash);
+    const i = view.visible.findIndex((it) => `#app-${it.id}` === location.hash);
     if (i >= 0) setCur(i);
   }, [loaded]);
 
@@ -213,10 +357,12 @@ export function QueuePage() {
   }, [cur]);
 
   if (q.isLoading) return <Spinner />;
-  const items = q.data ?? [];
+  const all = q.data ?? [];
+  const items = view.visible;
   return (
     <div className="grid gap-4">
       <p className="text-[13px] muted">Отклики на сайты компаний. Ничего не отправляется без кнопки «Отправить».</p>
+      {all.length > 1 && <QueueToolbar view={view} total={all.length} />}
       {hint && items.length > 0 && (
         <p className="hidden sm:block text-[12px] faint">
           Клавиши: <span className="kbd">j</span>/<span className="kbd">k</span> - следующая/предыдущая, <span className="kbd">s</span> - отправить, <span className="kbd">x</span> - пропустить,{" "}
@@ -227,7 +373,7 @@ export function QueuePage() {
         items.map((it, i) => <QueueCard key={it.id} item={it} slug={slug} active={i === Math.min(cur, items.length - 1)} />)
       ) : (
         <Section>
-          <Empty>Очередь пуста</Empty>
+          <Empty>{all.length ? "Ничего не найдено" : "Очередь пуста"}</Empty>
         </Section>
       )}
     </div>
