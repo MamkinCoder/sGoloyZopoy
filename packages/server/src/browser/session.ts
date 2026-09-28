@@ -46,6 +46,24 @@ const fillJs = (selector: string, value: string): string => `(function(){
   return el.value === v;
 })()`;
 
+// A mouse click lands on whatever is on top at the element's centre: an open modal, its overlay, a cookie banner. The
+// click then "succeeds" on the wrong element (corp.ivi.ru: the submit click closed a popup and the form never left
+// data-status=init). Hit-tests the target first; when something else covers it, clicks the element through the DOM.
+// "clear" = the mouse click would hit it (or it is not in this document / has no box): Stagehand clicks as usual.
+export const coveredClickJs = (selector: string): string => `(function(){
+  var el = ${RESOLVE_JS}(${JSON.stringify(selector)});
+  if (!el || !el.getBoundingClientRect) return "clear";
+  var r = el.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) { el.scrollIntoView({ block: "center" }); r = el.getBoundingClientRect(); }
+  if (!r.width || !r.height) return "clear";
+  var top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  if (!top || top === el || el.contains(top)) return "clear";
+  var lbl = top.closest && top.closest("label");
+  if (lbl && lbl.control === el) return "clear";
+  el.click();
+  return "covered by " + top.tagName.toLowerCase() + (top.id ? "#" + top.id : "") + (typeof top.className === "string" && top.className ? "." + top.className.trim().split(/\\s+/).join(".") : "");
+})()`;
+
 const TEXT_JS = (max: number): string => `(document.body ? document.body.innerText : "").slice(0, ${max})`;
 
 export class StagehandSession implements BrowserSession {
@@ -126,6 +144,10 @@ export class StagehandSession implements BrowserSession {
     timeout: number,
   ): Promise<{ ok: boolean; message: string }> {
     try {
+      if (entry.method === "click") {
+        const hit = await this.page.evaluate<string>(coveredClickJs(entry.selector)).catch(() => "clear");
+        if (hit !== "clear") return { ok: true, message: `${hit}: clicked through the DOM` };
+      }
       const res = await this.d.stagehand.act({ selector: entry.selector, description: entry.description, method: entry.method, arguments: entry.arguments }, { timeout, ...(variables ? { variables } : {}) });
       return { ok: res.data.success, message: res.data.message };
     } catch (err) {
