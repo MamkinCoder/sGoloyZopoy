@@ -5,7 +5,6 @@ import { createLauncher } from "../browser/launcher.js";
 import { loadConfig } from "../config/index.js";
 import { createLLM } from "../llm/index.js";
 
-const LINUX_CHROME_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
 export const parseArgs = (args: string[]): Record<string, string | true> => {
   const out: Record<string, string | true> = {};
@@ -29,6 +28,7 @@ export const dataDir = (): string => resolve(process.env.SGZ_DATA_DIR ?? "./data
 export const chromiumBin = (flag: string): string =>
   flag || process.env.CHROMIUM_BIN || (process.platform === "darwin" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : "/usr/bin/chromium");
 
-export const userAgent = (): string => process.env.SGZ_USER_AGENT || LINUX_CHROME_UA;
+// Empty = the launcher's desktop UA of the installed Chromium, the same one the runs use.
+export const userAgent = (): string => process.env.SGZ_USER_AGENT || "";
 
 export const loadLauncher = (): BrowserLauncher => createLauncher(createLLM(loadConfig(), null).stagehand());

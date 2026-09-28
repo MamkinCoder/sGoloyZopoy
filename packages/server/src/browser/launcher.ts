@@ -3,6 +3,7 @@
 //   localBrowser.launch(LocalBrowserLaunchOptions)  → StagehandBrowser  (spawns Chromium over CDP)
 //   Stagehand.create({ browser, model: { generate }, selfHeal, logging, telemetry, domSettleTimeoutMs })
 //   browser.context.pages() / newPage()
+import { execFileSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,8 +34,34 @@ const CHROMIUM_ARGS: readonly string[] = [
   // Nothing we parse or click needs pixels (Stagehand reads the DOM/a11y tree); images only cost the Pi time.
   "--blink-settings=imagesEnabled=false",
   "--lang=ru-RU",
+  // Headless ignores --lang for navigator.languages / Accept-Language; this one it honours.
+  "--accept-lang=ru-RU,ru,en-US,en",
   `--window-size=${VIEWPORT.width},${VIEWPORT.height}`,
+  // Headless reports an 800x600 screen under a 1366x850 window and no WebGL: two bot tells for reCAPTCHA v3 and co.
+  `--screen-info={${VIEWPORT.width}x${VIEWPORT.height + 50}}`,
+  "--enable-unsafe-swiftshader",
 ];
+
+const desktopUA = new Map<string, string>();
+/** The desktop user agent of this Chromium build, in Chrome's reduced form: headless says "HeadlessChrome" (a bot
+ * tell sites read). Set as a launch flag, so navigator.userAgentData keeps the browser's own client hints. */
+export function desktopUserAgent(executablePath: string | undefined): string {
+  if (!executablePath) return "";
+  let ua = desktopUA.get(executablePath);
+  if (ua === undefined) {
+    let major = "";
+    try {
+      major = /(\d+)\.\d+\.\d+\.\d+/.exec(execFileSync(executablePath, ["--version"], { encoding: "utf8", timeout: 10_000 }))?.[1] ?? "";
+    } catch {
+      // unknown build: keep Chromium's own user agent
+    }
+    // Chrome's reduced UA: fixed platform tokens (x86_64 even on the Pi's arm64, 10_15_7 on any macOS).
+    const platform = process.platform === "darwin" ? "Macintosh; Intel Mac OS X 10_15_7" : "X11; Linux x86_64";
+    ua = major ? `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36` : "";
+    desktopUA.set(executablePath, ua);
+  }
+  return ua;
+}
 
 export function createLauncher(llm: StagehandLLM): BrowserLauncher {
   const generate = adaptLLM(llm);
@@ -50,7 +77,7 @@ export function createLauncher(llm: StagehandLLM): BrowserLauncher {
         headless: opts.headless,
         args: [
           ...CHROMIUM_ARGS,
-          ...(opts.userAgent ? [`--user-agent=${opts.userAgent}`] : []),
+          ...((opts.userAgent || desktopUserAgent(opts.executablePath)) ? [`--user-agent=${opts.userAgent || desktopUserAgent(opts.executablePath)}`] : []),
           `--disk-cache-dir=${diskCacheDir}`,
           `--disk-cache-size=${DISK_CACHE_BYTES}`,
         ],

@@ -8,8 +8,9 @@ import { loadEnvFile } from "./env.js";
 export { parseEnvText } from "./env.js";
 export { loadProfileYaml, saveProfileYaml } from "./profile.js";
 
-export const DEFAULT_USER_AGENT =
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+/** Empty = the launcher derives the desktop UA from the installed Chromium (a fixed version string would
+ * contradict the browser's own client hints). SGZ_USER_AGENT overrides. */
+export const DEFAULT_USER_AGENT = "";
 
 const DEFAULTS = {
   dataDir: "./data",
