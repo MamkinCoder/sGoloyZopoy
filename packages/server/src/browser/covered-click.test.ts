@@ -3,8 +3,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { coveredClickJs } from "./session.js";
 
-type El = { tagName: string; id: string; className: string; click: () => void; getBoundingClientRect: () => DOMRect; contains: (o: unknown) => boolean; closest: (s: string) => unknown; control?: El; scrollIntoView: () => void };
-const box = { left: 100, top: 100, right: 300, bottom: 150, width: 200, height: 50 } as DOMRect;
+type Rect = { left: number; top: number; right: number; bottom: number; width: number; height: number };
+type El = { tagName: string; id: string; className: string; click: () => void; getBoundingClientRect: () => Rect; contains: (o: unknown) => boolean; closest: (s: string) => unknown; control?: El; scrollIntoView: () => void };
+const box: Rect = { left: 100, top: 100, right: 300, bottom: 150, width: 200, height: 50 };
 const el = (tagName: string, over: Partial<El> = {}): El => ({
   tagName,
   id: "",
@@ -45,7 +46,7 @@ describe("coveredClickJs", () => {
 
   it("a target not in this document (iframe) or without a box is left to Stagehand", () => {
     expect(run(null, el("DIV"))).toBe("clear");
-    const hidden = el("BUTTON", { getBoundingClientRect: () => ({ ...box, width: 0, height: 0 }) as DOMRect });
+    const hidden = el("BUTTON", { getBoundingClientRect: () => ({ ...box, width: 0, height: 0 }) });
     expect(run(hidden, el("DIV"))).toBe("clear");
   });
 });
