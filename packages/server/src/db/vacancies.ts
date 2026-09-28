@@ -162,14 +162,16 @@ export function vacanciesRepo(s: Sql): VacanciesRepo {
       );
       return r !== undefined;
     },
-    countRecentApplicationsByCompany(userId, key, sinceISO) {
+    countRecentApplicationsByCompany(userId, key, sinceISO, excludeSources = []) {
       if (!key) return 0;
       const r = s.get(
         `SELECT COUNT(*) AS n FROM applications a JOIN vacancies v ON v.id = a.vacancy_id
-         WHERE a.user_id = ? AND v.company_key = ? AND a.status IN ('SENT','QUEUED') AND a.created_at >= ?`,
+         WHERE a.user_id = ? AND v.company_key = ? AND a.status IN ('SENT','QUEUED') AND a.created_at >= ?
+         ${excludeSources.length ? `AND v.source NOT IN (${excludeSources.map(() => "?").join(",")})` : ""}`,
         userId,
         key,
         sinceISO,
+        ...excludeSources,
       );
       return num((r as Row).n);
     },

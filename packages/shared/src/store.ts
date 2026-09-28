@@ -125,9 +125,9 @@ export interface Store {
   findVacancyByExternal(source: Source, externalId: string): Vacancy | null;
   hasRecentApplicationByDedup(userId: number, dedupHash: string, sinceISO: string): boolean;
 
-  // per-company spam limiter (cross-source: hh + career)
-  /** Count of SENT applications to `companyKey` since `sinceISO`, across all sources. */
-  countRecentApplicationsByCompany(userId: number, companyKey: string, sinceISO: string): number;
+  // per-company spam limiter (career sites only; hh and job boards are not limited)
+  /** Count of SENT/QUEUED applications to `companyKey` since `sinceISO`, across all sources but `excludeSources`. */
+  countRecentApplicationsByCompany(userId: number, companyKey: string, sinceISO: string, excludeSources?: string[]): number;
   /** CV direction of the earliest SENT application to `companyKey` since `sinceISO`, or "" if none/unknown. */
   companyLockDirection(userId: number, companyKey: string, sinceISO: string): string;
 

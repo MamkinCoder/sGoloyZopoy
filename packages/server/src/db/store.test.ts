@@ -258,6 +258,8 @@ describe("applications", () => {
     store.insertApplication(appFixture(u.id, careerVacancy.id, { direction: "node-backend" }));
     expect(store.countRecentApplicationsByCompany(u.id, key, past)).toBe(2);
     expect(store.companyLockDirection(u.id, key, past)).toBe("go-backend");
+    // The career-site quota leaves hh (and job-board) sends out of the count.
+    expect(store.countRecentApplicationsByCompany(u.id, key, past, ["hh", "habr"])).toBe(1);
 
     // Window expiry: a `since` after both sends sees nothing.
     expect(store.countRecentApplicationsByCompany(u.id, key, future)).toBe(0);

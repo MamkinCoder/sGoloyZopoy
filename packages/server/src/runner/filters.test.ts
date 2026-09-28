@@ -63,7 +63,7 @@ function fakeStore(over: Partial<Store> = {}): Store {
 const opts = (_store: Store, over: Partial<CompanyLimitSettings> = {}) => ({
   dedupSinceISO: "2000-01-01",
   rejectSinceISO: "2000-01-01",
-  company: { maxSent: 10, windowDays: 30, personaLockEnabled: true, ...over },
+  company: { maxSent: 10, windowDays: 30, personaLockEnabled: true, excludeSources: [], ...over },
   companySinceISO: "2000-01-01",
   runTracker: createRunCompanyTracker(),
 });
@@ -178,11 +178,11 @@ describe("filterOpts / companyQuotaSkip", () => {
 
   it("builds the windows from the settings, the dedup fallback per caller", () => {
     const t = createRunCompanyTracker();
-    const o = filterOpts({ store: fakeStore(settings({ company_limit_window_days: "10", reject_window_days: "5" })), now }, t, 60);
+    const o = filterOpts({ store: fakeStore(settings({ company_limit_window_days: "10", reject_window_days: "5" })), now }, t, 60, { excludeSources: ["hh"] });
     expect(o).toEqual({
       dedupSinceISO: "2026-07-26T00:00:00.000Z",
       rejectSinceISO: "2026-09-19T00:00:00.000Z",
-      company: { maxSent: 10, windowDays: 10, personaLockEnabled: true },
+      company: { maxSent: 10, windowDays: 10, personaLockEnabled: true, excludeSources: ["hh"] },
       companySinceISO: "2026-09-14T00:00:00.000Z",
       runTracker: t,
     });
@@ -191,11 +191,18 @@ describe("filterOpts / companyQuotaSkip", () => {
   it("counts the DB window plus this run's reservations; no key or limit 0 never skips", () => {
     const t = createRunCompanyTracker();
     const store = fakeStore({ ...settings({ company_limit_max: "2" }), countRecentApplicationsByCompany: () => 1 });
-    const o = filterOpts({ store, now }, t);
+    const o = filterOpts({ store, now }, t, 30, { excludeSources: [] });
     expect(companyQuotaSkip(store, 1, "ozon", o)).toBeNull();
     t.reserve("ozon", "");
     expect(companyQuotaSkip(store, 1, "ozon", o)).toBe("company limit reached: 2/2 sent in 30d");
     expect(companyQuotaSkip(store, 1, "", o)).toBeNull();
     expect(companyQuotaSkip(store, 1, "ozon", { ...o, company: { ...o.company, maxSent: 0 } })).toBeNull();
+  });
+
+  it("hh, Habr and job boards have no company quota: only a career site run gets one", () => {
+    const t = createRunCompanyTracker();
+    const store = fakeStore({ ...settings({ company_limit_max: "2" }), countRecentApplicationsByCompany: () => 99 });
+    expect(companyQuotaSkip(store, 1, "ozon", filterOpts({ store, now }, t))).toBeNull();
+    expect(companyQuotaSkip(store, 1, "ozon", filterOpts({ store, now }, t, 30, { excludeSources: ["hh"] }))).toBe("company limit reached: 99/2 sent in 30d");
   });
 });

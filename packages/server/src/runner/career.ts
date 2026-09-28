@@ -170,7 +170,9 @@ async function runSite(ctx: RunContext, u: UserRun, site: CareerSite, budget: nu
   stats.found(discovered.length);
   ctx.log.info("discover", `${site.name}: ${discovered.length} vacancies`, { site_id: site.id, found: discovered.length });
 
-  const o = filterOpts(ctx, companyTracker, 60);
+  // The company quota guards a company's own careers site; job boards (Habr Career) and hh/Habr sends are not limited.
+  const boards = ["hh", "habr", ...ctx.store.listCareerSites(user.id).filter((s) => atsClientFor(s.ats as ATSKind)?.aggregator).map((s) => s.slug)];
+  const o = filterOpts(ctx, companyTracker, 60, atsClientFor(site.ats as ATSKind)?.aggregator ? undefined : { excludeSources: boards });
   const candidates: { d: Discovered; vacancy: Vacancy; companyKey: string; lockedDirection: string }[] = [];
   for (const d of discovered) {
     const vacancy = ensureVacancy(ctx.store, skeletonVacancy(site.slug, d.externalId, d.url, d.title, d.company || site.name));

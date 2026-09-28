@@ -269,7 +269,9 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
 - `/settings`: an allowlist, values are strings (the `settings` table is text); GET falls back to defaults.
   Other keys → 400.
   - Schedule: `schedule_at` (`"HH:MM"` or `""`), `schedule_jitter_min`, `tz`, `dedup_window_days`.
-  - Company limiter: `company_limit_max`, `company_limit_window_days`, `company_limit_persona_lock`.
+  - Company limiter: `company_limit_max`, `company_limit_window_days`, `company_limit_persona_lock`. The quota
+    (`company_limit_max`) applies only to a company's own career site and counts only career-site sends; hh, Habr and
+    job boards (Habr Career) are not limited. The persona lock applies everywhere.
   - Chats: `feedback_request` (`"0"` = no feedback request after a rejection), `chat_track_since` (`YYYY-MM-DD`),
     `chat_followup_days` (default `"7"`, `"0"` = off): one fixed polite follow-up in a new/viewed chat after that
     many days of employer silence, at most 3 chats checked per `chats.sync`.

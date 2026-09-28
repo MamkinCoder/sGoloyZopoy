@@ -39,9 +39,11 @@ export type Classification =
 
 /** Settings for the per-company spam limiter (read by filterOpts). */
 export interface CompanyLimitSettings {
-  maxSent: number; // company_limit_max; 0 = disabled
+  maxSent: number; // company_limit_max; 0 = disabled (always 0 outside career sites)
   windowDays: number; // company_limit_window_days
   personaLockEnabled: boolean; // company_limit_persona_lock
+  /** Sources whose sends do not use up a career site's quota (hh, Habr, job boards). */
+  excludeSources: string[];
 }
 
 /**
@@ -102,15 +104,22 @@ export function classify(store: Store, user: User, profile: Profile, v: Vacancy,
  * Checked at classify and again right before a send, since earlier items of the same run may have used it. */
 export function companyQuotaSkip(store: Store, userId: number, key: string, o: ClassifyOpts): string | null {
   if (!key || o.company.maxSent <= 0) return null;
-  const total = store.countRecentApplicationsByCompany(userId, key, o.companySinceISO) + o.runTracker.count(key);
+  const total = store.countRecentApplicationsByCompany(userId, key, o.companySinceISO, o.company.excludeSources) + o.runTracker.count(key);
   return total >= o.company.maxSent ? `company limit reached: ${total}/${o.company.maxSent} sent in ${o.company.windowDays}d` : null;
 }
 
 /** Classify options of one run from the settings: dedup_window_days (fallback `dedupDays`), reject_window_days=30
- * (an LLM rejection blocks re-asking), company_limit_max=10, company_limit_window_days=30, company_limit_persona_lock on. */
-export function filterOpts(ctx: Pick<RunContext, "store" | "now">, tracker: RunCompanyTracker, dedupDays = 30): ClassifyOpts {
+ * (an LLM rejection blocks re-asking), company_limit_persona_lock on, company_limit_window_days=30. The company
+ * quota (company_limit_max=10) applies only with `quota`, i.e. to a company's own career site, and counts only
+ * sends outside `quota.excludeSources`: hh, Habr and job boards can be applied to without a limit. */
+export function filterOpts(ctx: Pick<RunContext, "store" | "now">, tracker: RunCompanyTracker, dedupDays = 30, quota?: { excludeSources: string[] }): ClassifyOpts {
   const { store } = ctx;
-  const company = { maxSent: settingInt(store, "company_limit_max", 10), windowDays: settingInt(store, "company_limit_window_days", 30), personaLockEnabled: store.getSetting("company_limit_persona_lock") !== "0" };
+  const company = {
+    maxSent: quota ? settingInt(store, "company_limit_max", 10) : 0,
+    windowDays: settingInt(store, "company_limit_window_days", 30),
+    personaLockEnabled: store.getSetting("company_limit_persona_lock") !== "0",
+    excludeSources: quota?.excludeSources ?? [],
+  };
   return {
     dedupSinceISO: isoDaysAgo(ctx.now(), settingInt(store, "dedup_window_days", dedupDays)),
     rejectSinceISO: isoDaysAgo(ctx.now(), settingInt(store, "reject_window_days", 30)),
