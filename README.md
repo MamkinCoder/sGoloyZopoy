@@ -19,7 +19,7 @@ packages/web          React + Vite + Tailwind panel
 deploy/ scripts/      systemd units, nginx vhost, install-pi.sh, deploy/sync scripts
 data.example/         templates for the gitignored data/ dir
 .claude/skills/       resume-writing skills (source material for prompts)
-docs/                 api.md (routes), CONTRACTS.md (ownership), RUNBOOK.md
+docs/                 api.md (routes), CONTRACTS.md (ownership), RUNBOOK.md, browser-machinery.md (reusable browser / scraping layer)
 ```
 
 Personal data (profiles, cookies, resumes, DB, .env) lives in `data/` which is gitignored and synced to
