@@ -172,10 +172,19 @@ Pitfalls found while doing this:
   same "error" text for spam and mail failure; read `data-status` on the form to tell which. CF7 6.x requests a fresh
   token at submit time, so slow form filling does not expire it.
 
+### Human-like presence before submit
+
+`session.humanize(targets, ms)` (`browser/session.ts`), called by `applyViaAgent` right before a real submit (never in
+a dry run), 20-40 s (`submitTiming.dwellMs`): 2-4 wheel scrolls down and 1-2 up, then eased curved mouse paths
+(Stagehand `page.hover(x, y)` = trusted `mouseMoved` events, 12-40 per path) through the filled fields to the submit
+button (`markSubmitJs` tags the button of the filled form with `data-sgz-submit`), then small drifts on the button
+until the time is up. Best effort: never throws. Verified on corp.ivi.ru with sending blocked: 50 trusted mousemoves,
+6 wheel events, the cursor ends inside the button.
+
 ### Not done (options if a site still rejects)
 
-Headful Chromium on a virtual display (xvfb), images on for apply runs, a profile signed in to Google, human-paced
-mouse movement / delays before submit. Paid captcha-solving services are out of scope.
+Headful Chromium on a virtual display (xvfb), images on for apply runs, a profile signed in to Google. Paid
+captcha-solving services are out of scope.
 
 ## 9. HTTP first: ATS clients
 

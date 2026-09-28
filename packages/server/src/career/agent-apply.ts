@@ -92,8 +92,20 @@ export const requestSubmitJs = (selector: string): string => `(() => {
   return "requestSubmit()";
 })()`;
 
-/** How long a submit gets to show an effect; tests shorten it. */
-export const submitTiming = { effectMs: 6000, pollMs: 500 };
+/** How long a submit gets to show an effect, and the human-like dwell before it; tests shorten them. */
+export const submitTiming = { effectMs: 6000, pollMs: 500, dwellMs: [20_000, 40_000] as [number, number] };
+
+// Marks the submit button of the form around `fieldSelector` (data-sgz-submit), so the dwell can end on it.
+export const markSubmitJs = (fieldSelector: string): string => `(() => {
+  let sel = ${JSON.stringify(fieldSelector)};
+  if (sel.startsWith("xpath=")) sel = sel.slice(6);
+  const f = sel.startsWith("/") || sel.startsWith("(") ? document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue : document.querySelector(sel);
+  const form = f && (f.form || f.closest("form"));
+  const b = form && form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+  if (!b) return false;
+  b.setAttribute("data-sgz-submit", "1");
+  return true;
+})()`;
 
 /** What the submit set off within a few seconds ("left the page" when the probe is gone), or "" for nothing. */
 async function submitEffect(s: BrowserSession): Promise<string> {
@@ -150,7 +162,7 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
     learned.push(opened.success ? "apply button opens the form" : "no apply button found; form assumed inline");
 
     const tagged = await s.evaluate<{ first?: boolean; last?: boolean }>(TAG_NAME_FIELDS_JS).catch(() => ({}) as { first?: boolean; last?: boolean });
-    let nameRes: { success: boolean };
+    let nameRes: { success: boolean; selector?: string };
     if (tagged.first && tagged.last) {
       await s.fill('[data-sgz-field="first"]', first);
       await s.fill('[data-sgz-field="last"]', last || first);
@@ -224,6 +236,15 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
         answers,
       };
     }
+
+    // reCAPTCHA v3 and similar score behaviour: scroll, move the mouse through the filled fields to the submit
+    // button, and spend a human amount of time on the page before submitting.
+    const fields = [...(tagged.first && tagged.last ? ['[data-sgz-field="first"]', '[data-sgz-field="last"]'] : [nameRes.selector]), emailRes.selector, "selector" in phoneRes ? phoneRes.selector : undefined, "selector" in coverRes ? coverRes.selector : undefined].filter(
+      (x): x is string => !!x,
+    );
+    const marked = fields.length ? await s.evaluate<boolean>(markSubmitJs(fields[fields.length - 1]!)).catch(() => false) : false;
+    const [lo, hi] = submitTiming.dwellMs;
+    await s.humanize([...fields, ...(marked ? ['[data-sgz-submit="1"]'] : [])], Math.round(lo + Math.random() * (hi - lo)));
 
     const armed = await s.evaluate<boolean>(SUBMIT_PROBE_JS).catch(() => false);
     const submit = await s.act('Submit the application form: click the "Submit" / "Send" / "Отправить" / "Откликнуться" button', {

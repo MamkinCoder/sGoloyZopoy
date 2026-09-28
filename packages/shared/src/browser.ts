@@ -73,6 +73,10 @@ export interface BrowserSession {
   waitForSelector(selector: string, timeoutMs: number): Promise<boolean>;
   evaluate<T = unknown>(js: string): Promise<T>;
   pressEscape(): Promise<void>;
+  /** Human-like presence before a scored action (reCAPTCHA v3 weighs behaviour): wheel-scrolls the page, moves the
+   * mouse along curved paths to each target (css / xpath; missing or boxless ones are skipped), idles until `ms`
+   * has passed. Best effort: never throws. */
+  humanize(targets: string[], ms: number): Promise<void>;
   pressKey(key: string): Promise<void>;
 
   /** Writes <dir>/<name>.html, .png, .url; returns the html path. */

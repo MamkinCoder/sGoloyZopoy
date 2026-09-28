@@ -30,7 +30,7 @@ function session(opts: { onClick?: (log: string[]) => void; onRequestSubmit?: (l
     { "https://acme.test/": { html: "<form></form>", existing: ['input[type="file"]'] } },
     {
       onAct: (instruction) => {
-        if (!instruction.startsWith("Submit")) return undefined;
+        if (!instruction.startsWith("Submit")) return { success: true, message: "ok", usedCache: true, selector: `#${instruction.split(" ")[2]}` };
         opts.onClick?.(log);
         return { success: true, message: "clicked", usedCache: true, selector: SUBMIT_SEL };
       },
@@ -41,6 +41,7 @@ function session(opts: { onClick?: (log: string[]) => void; onRequestSubmit?: (l
         }
         if (js.startsWith("(window.__sgzSubmit")) return [...log];
         if (js.includes("requestSubmit")) return opts.onRequestSubmit?.(log) ?? "requestSubmit()";
+        if (js.includes("data-sgz-submit")) return true;
         return js.includes("data-sgz-field") ? {} : 0; // name tagging, letter limit, consent boxes
       },
       onWaitForText: (t) => !!opts.confirm && t === "Спасибо",
@@ -51,7 +52,7 @@ function session(opts: { onClick?: (log: string[]) => void; onRequestSubmit?: (l
 
 describe("applyViaAgent submit check", () => {
   const saved = { ...submitTiming };
-  beforeAll(() => Object.assign(submitTiming, { effectMs: 30, pollMs: 5 }));
+  beforeAll(() => Object.assign(submitTiming, { effectMs: 30, pollMs: 5, dwellMs: [0, 0] }));
   afterAll(() => Object.assign(submitTiming, saved));
 
   it("a click that submits goes straight to the confirmation, no fallback", async () => {
@@ -81,5 +82,20 @@ describe("applyViaAgent submit check", () => {
     const s = session({ onRequestSubmit: () => "button gone", confirm: true });
     const r = await applyViaAgent(s, req);
     expect(r.status).toBe(Status.SENT);
+  });
+
+  it("dwells like a human (fields, then the submit button) right before the submit click, never in a dry run", async () => {
+    const s = session({ onClick: (log) => log.push("submit"), confirm: true });
+    await applyViaAgent(s, req);
+    const i = s.methods().indexOf("humanize");
+    expect(i).toBeGreaterThan(-1);
+    expect(s.calls[i]!.args[0]).toEqual(expect.arrayContaining(['[data-sgz-submit="1"]']));
+    expect((s.calls[i]!.args[0] as string[]).at(-1)).toBe('[data-sgz-submit="1"]');
+    const submitAct = s.calls.findIndex((c) => c.method === "act" && String(c.args[0]).startsWith("Submit"));
+    expect(i).toBeLessThan(submitAct);
+
+    const dry = session({});
+    await applyViaAgent(dry, { ...req, dryRun: true });
+    expect(dry.methods()).not.toContain("humanize");
   });
 });

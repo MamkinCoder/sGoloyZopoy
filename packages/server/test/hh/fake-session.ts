@@ -152,6 +152,9 @@ export class FakeSession implements BrowserSession {
     this.rec("evaluate", js);
     return (this.hooks.onEvaluate?.(js, this) ?? null) as T;
   }
+  async humanize(targets: string[], ms: number): Promise<void> {
+    this.rec("humanize", targets, ms);
+  }
   async pressEscape(): Promise<void> {
     this.rec("pressEscape");
   }
