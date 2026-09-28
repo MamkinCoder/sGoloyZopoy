@@ -89,8 +89,8 @@ class RawCdp {
 
 const withQuery = (exts: string[]): string[] => exts.flatMap((e) => [`*.${e}`, `*.${e}?*`]);
 
+const IMAGE_PATTERNS: readonly string[] = withQuery(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "svg"]);
 const ASSET_BLOCK_PATTERNS: readonly string[] = [
-  ...withQuery(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "svg"]),
   ...withQuery(["woff", "woff2", "ttf", "otf", "eot"]),
   ...withQuery(["mp4", "webm", "mp3", "ogg", "m4a", "wav"]),
   "*mc.yandex.ru*",
@@ -104,7 +104,8 @@ const ASSET_BLOCK_PATTERNS: readonly string[] = [
  * Attaches (flat sessions) to every current and future page target and installs the block list.
  * Returns a disposer. Failures are swallowed: blocking is an optimisation, never a hard dependency.
  */
-export async function installAssetBlocker(wsUrl: string): Promise<() => void> {
+export async function installAssetBlocker(wsUrl: string, opts: { images?: boolean } = {}): Promise<() => void> {
+  const urls = opts.images ? [...ASSET_BLOCK_PATTERNS] : [...IMAGE_PATTERNS, ...ASSET_BLOCK_PATTERNS];
   const cdp = await RawCdp.connect(wsUrl);
   const attached = new Set<string>();
   const arm = async (sessionId: string, targetId: string): Promise<void> => {
@@ -112,7 +113,7 @@ export async function installAssetBlocker(wsUrl: string): Promise<() => void> {
     attached.add(targetId);
     try {
       await cdp.send("Network.enable", {}, sessionId);
-      await cdp.send("Network.setBlockedURLs", { urls: [...ASSET_BLOCK_PATTERNS] }, sessionId);
+      await cdp.send("Network.setBlockedURLs", { urls }, sessionId);
     } catch {
       attached.delete(targetId);
     }

@@ -31,8 +31,6 @@ const CHROMIUM_ARGS: readonly string[] = [
   // Linux Chromium would honor it and hh.ru answers 451 to that exit. Browsing always goes direct.
   "--no-proxy-server",
   "--renderer-process-limit=2",
-  // Nothing we parse or click needs pixels (Stagehand reads the DOM/a11y tree); images only cost the Pi time.
-  "--blink-settings=imagesEnabled=false",
   "--lang=ru-RU",
   // Headless ignores --lang for navigator.languages / Accept-Language; this one it honours.
   "--accept-lang=ru-RU,ru,en-US,en",
@@ -77,6 +75,9 @@ export function createLauncher(llm: StagehandLLM): BrowserLauncher {
         headless: opts.headless,
         args: [
           ...CHROMIUM_ARGS,
+          // Nothing we parse or click needs pixels (Stagehand reads the DOM/a11y tree); images only cost the Pi time.
+          // Sends keep them (loadImages): a browser that never loads an image is a bot tell for form spam filters.
+          ...(opts.loadImages ? [] : ["--blink-settings=imagesEnabled=false"]),
           ...((opts.userAgent || desktopUserAgent(opts.executablePath)) ? [`--user-agent=${opts.userAgent || desktopUserAgent(opts.executablePath)}`] : []),
           `--disk-cache-dir=${diskCacheDir}`,
           `--disk-cache-size=${DISK_CACHE_BYTES}`,
@@ -108,7 +109,7 @@ export function createLauncher(llm: StagehandLLM): BrowserLauncher {
         const wsUrl = stagehand.rpcClient?.browserWebSocketDebuggerUrl;
         if (wsUrl) {
           try {
-            cleanup.push(await installAssetBlocker(wsUrl));
+            cleanup.push(await installAssetBlocker(wsUrl, { images: !!opts.loadImages }));
           } catch {
             // blocking is an optimisation; keep going without it
           }

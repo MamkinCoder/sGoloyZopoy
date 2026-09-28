@@ -10,6 +10,7 @@ export interface BrowserOptions {
   userAgent?: string;
   snapshotDir: string; // html+png bundles on failure
   blockAssets?: boolean; // abort images/fonts/media/analytics (RAM + bandwidth on the Pi)
+  loadImages?: boolean; // keep images on even with blockAssets (sends: a browser without images is a bot tell)
   cacheDir?: string; // action cache file dir (observe → selector cache)
   actionTimeoutMs?: number; // default 15000
 }
@@ -77,6 +78,10 @@ export interface BrowserSession {
    * mouse along curved paths to each target (css / xpath; missing or boxless ones are skipped), idles until `ms`
    * has passed. Best effort: never throws. */
   humanize(targets: string[], ms: number): Promise<void>;
+  /** Re-enters a filled field the way a person does: mouse to it and click (focus when something covers it), clear,
+   * then type its current value key by key with human delays and corrected typos. Restores the value and returns
+   * false when the typed result differs. */
+  retype(selector: string): Promise<boolean>;
   pressKey(key: string): Promise<void>;
 
   /** Writes <dir>/<name>.html, .png, .url; returns the html path. */

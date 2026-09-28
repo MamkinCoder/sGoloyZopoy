@@ -155,6 +155,10 @@ export class FakeSession implements BrowserSession {
   async humanize(targets: string[], ms: number): Promise<void> {
     this.rec("humanize", targets, ms);
   }
+  async retype(selector: string): Promise<boolean> {
+    this.rec("retype", selector);
+    return true;
+  }
   async pressEscape(): Promise<void> {
     this.rec("pressEscape");
   }

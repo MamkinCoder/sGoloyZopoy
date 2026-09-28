@@ -44,7 +44,13 @@ export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: 
   const checkAbort = () => {
     if (signal.aborted) throw new RunStoppedError();
   };
-  const browser = createBrowserHandle(deps, { profileDir: paths.chromeProfile, snapshotDir: paths.snapshots(deps.cfg, run.id), log, checkAbort });
+  const browser = createBrowserHandle(deps, {
+    profileDir: paths.chromeProfile,
+    snapshotDir: paths.snapshots(deps.cfg, run.id),
+    log,
+    checkAbort,
+    loadImages: String(req.stage ?? "").startsWith("send:"),
+  });
 
   return {
     deps,
@@ -71,6 +77,8 @@ export interface BrowserHandleOpts {
   snapshotDir: string;
   log: Logger;
   checkAbort?: () => void;
+  /** Keep images on (career `send:<id>` runs submit a form; everything else reads pages). */
+  loadImages?: boolean;
 }
 
 /** One lazily launched Chrome with the user's persistent profile; the hh / Habr login is verified on first use
@@ -96,6 +104,7 @@ export function createBrowserHandle(deps: Pick<RunnerDeps, "cfg" | "launcher" | 
       userAgent: deps.cfg.userAgent || undefined,
       snapshotDir: o.snapshotDir,
       blockAssets: true,
+      ...(o.loadImages ? { loadImages: true } : {}),
       cacheDir: paths.actionCache(deps.cfg),
     });
     sessionSlug = user.slug;

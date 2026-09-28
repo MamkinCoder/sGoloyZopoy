@@ -52,7 +52,7 @@ function session(opts: { onClick?: (log: string[]) => void; onRequestSubmit?: (l
 
 describe("applyViaAgent submit check", () => {
   const saved = { ...submitTiming };
-  beforeAll(() => Object.assign(submitTiming, { effectMs: 30, pollMs: 5, dwellMs: [0, 0] }));
+  beforeAll(() => Object.assign(submitTiming, { effectMs: 30, pollMs: 5, dwellMs: [0, 0], googleMs: [0, 0], homeMs: [0, 0] }));
   afterAll(() => Object.assign(submitTiming, saved));
 
   it("a click that submits goes straight to the confirmation, no fallback", async () => {
@@ -87,7 +87,7 @@ describe("applyViaAgent submit check", () => {
   it("dwells like a human (fields, then the submit button) right before the submit click, never in a dry run", async () => {
     const s = session({ onClick: (log) => log.push("submit"), confirm: true });
     await applyViaAgent(s, req);
-    const i = s.methods().indexOf("humanize");
+    const i = s.methods().lastIndexOf("humanize"); // the pre-submit one (the warm-up visits humanize too)
     expect(i).toBeGreaterThan(-1);
     expect(s.calls[i]!.args[0]).toEqual(expect.arrayContaining(['[data-sgz-submit="1"]']));
     expect((s.calls[i]!.args[0] as string[]).at(-1)).toBe('[data-sgz-submit="1"]');
@@ -97,5 +97,19 @@ describe("applyViaAgent submit check", () => {
     const dry = session({});
     await applyViaAgent(dry, { ...req, dryRun: true });
     expect(dry.methods()).not.toContain("humanize");
+    expect(dry.methods()).not.toContain("retype");
+  });
+
+  it("a real send warms up (google, the site home) before the vacancy and retypes every filled field", async () => {
+    const s = session({ onClick: (log) => log.push("submit"), confirm: true });
+    await applyViaAgent(s, req);
+    expect(s.calls.filter((c) => c.method === "goto").map((c) => c.args[0])).toEqual(["https://www.google.com/", "https://acme.test/", "https://acme.test/job/1"]);
+    const retyped = s.calls.filter((c) => c.method === "retype").map((c) => c.args[0]);
+    expect(retyped.length).toBeGreaterThanOrEqual(2); // name + email at least
+    expect(s.methods().lastIndexOf("retype")).toBeLessThan(s.methods().indexOf("upload"));
+
+    const dry = session({});
+    await applyViaAgent(dry, { ...req, dryRun: true });
+    expect(dry.calls.filter((c) => c.method === "goto").map((c) => c.args[0])).toEqual(["https://acme.test/job/1"]);
   });
 });

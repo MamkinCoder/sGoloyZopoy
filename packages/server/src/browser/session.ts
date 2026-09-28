@@ -70,8 +70,22 @@ const boxJs = (selector: string): string => `(function(){
   if (!el || !el.getBoundingClientRect) return null;
   el.scrollIntoView({ block: "center", behavior: "instant" });
   var r = el.getBoundingClientRect();
-  return r.width && r.height ? { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height } : null;
+  if (!r.width || !r.height) return null;
+  var cx = r.left + r.width / 2, cy = r.top + r.height / 2, top = document.elementFromPoint(cx, cy);
+  return { x: cx, y: cy, w: r.width, h: r.height, covered: !!top && top !== el && !el.contains(top) };
 })()`;
+type Box = { x: number; y: number; w: number; h: number; covered: boolean };
+
+// The field's value; focus() + select() so a Backspace clears it. Null when missing or not a text field.
+const selectValueJs = (selector: string): string => `(function(){
+  var el = ${RESOLVE_JS}(${JSON.stringify(selector)});
+  if (!el || typeof el.value !== "string") return null;
+  el.focus();
+  if (el.select) el.select();
+  return el.value;
+})()`;
+const valueJs = (selector: string): string => `(function(){ var el = ${RESOLVE_JS}(${JSON.stringify(selector)}); return el && typeof el.value === "string" ? el.value : null; })()`;
+const norm = (v: string): string => v.replace(/\r\n/g, "\n").trim();
 
 const rnd = (a: number, b: number): number => a + Math.random() * (b - a);
 
@@ -79,6 +93,7 @@ const TEXT_JS = (max: number): string => `(document.body ? document.body.innerTe
 
 export class StagehandSession implements BrowserSession {
   private closing: Promise<void> | undefined;
+  private mouse = { x: rnd(300, 900), y: rnd(200, 600) };
 
   constructor(private readonly d: SessionDeps) {}
 
@@ -239,51 +254,89 @@ export class StagehandSession implements BrowserSession {
     return this.page.evaluate<T>(js);
   }
 
+  /** An eased curve (one random control point off the straight line), 12-40 trusted mouseMoved events. */
+  private async moveMouse(to: { x: number; y: number }): Promise<void> {
+    const from = this.mouse;
+    const dist = Math.hypot(to.x - from.x, to.y - from.y);
+    const bend = { x: (from.x + to.x) / 2 + rnd(-0.25, 0.25) * dist, y: (from.y + to.y) / 2 + rnd(-0.25, 0.25) * dist };
+    const steps = Math.max(12, Math.min(40, Math.round(dist / 25)));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+      const x = (1 - e) ** 2 * from.x + 2 * (1 - e) * e * bend.x + e * e * to.x;
+      const y = (1 - e) ** 2 * from.y + 2 * (1 - e) * e * bend.y + e * e * to.y;
+      await this.page.hover(Math.round(x), Math.round(y));
+      await sleep(rnd(6, 20));
+    }
+    this.mouse = to;
+  }
+
+  private box(selector: string): Promise<Box | null> {
+    return this.page.evaluate<Box | null>(boxJs(selector)).catch(() => null);
+  }
+
   async humanize(targets: string[], ms: number): Promise<void> {
     const end = Date.now() + ms;
-    let pos = { x: rnd(300, 900), y: rnd(200, 600) };
-    // An eased curve (one random control point off the straight line), 12-40 mouseMoved events, a few ms apart.
-    const move = async (to: { x: number; y: number }): Promise<void> => {
-      const from = pos;
-      const dist = Math.hypot(to.x - from.x, to.y - from.y);
-      const bend = { x: (from.x + to.x) / 2 + rnd(-0.25, 0.25) * dist, y: (from.y + to.y) / 2 + rnd(-0.25, 0.25) * dist };
-      const steps = Math.max(12, Math.min(40, Math.round(dist / 25)));
-      for (let i = 1; i <= steps; i++) {
-        const t = i / steps;
-        const e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
-        const x = (1 - e) ** 2 * from.x + 2 * (1 - e) * e * bend.x + e * e * to.x;
-        const y = (1 - e) ** 2 * from.y + 2 * (1 - e) * e * bend.y + e * e * to.y;
-        await this.page.hover(Math.round(x), Math.round(y));
-        await sleep(rnd(6, 20));
-      }
-      pos = to;
-    };
+    const at = () => ({ x: Math.round(this.mouse.x), y: Math.round(this.mouse.y) });
     try {
-      await this.page.hover(Math.round(pos.x), Math.round(pos.y));
+      await this.page.hover(at().x, at().y);
       for (let i = 0, n = 2 + Math.floor(rnd(0, 3)); i < n; i++) {
-        await this.page.scroll(Math.round(pos.x), Math.round(pos.y), 0, Math.round(rnd(200, 600)));
+        await this.page.scroll(at().x, at().y, 0, Math.round(rnd(200, 600)));
         await sleep(rnd(400, 1200));
       }
       for (let i = 0, n = 1 + Math.floor(rnd(0, 2)); i < n; i++) {
-        await this.page.scroll(Math.round(pos.x), Math.round(pos.y), 0, -Math.round(rnd(200, 500)));
+        await this.page.scroll(at().x, at().y, 0, -Math.round(rnd(200, 500)));
         await sleep(rnd(300, 900));
       }
       for (const sel of targets) {
-        const box = await this.page.evaluate<{ x: number; y: number; w: number; h: number } | null>(boxJs(sel)).catch(() => null);
-        if (!box) continue;
-        await move({ x: box.x + rnd(-0.3, 0.3) * box.w, y: box.y + rnd(-0.3, 0.3) * box.h });
+        const b = await this.box(sel);
+        if (!b) continue;
+        await this.moveMouse({ x: b.x + rnd(-0.3, 0.3) * b.w, y: b.y + rnd(-0.3, 0.3) * b.h });
         await sleep(rnd(300, 900));
       }
       // Idle near the last target (the submit button) until the time is up, with small drifts.
       while (Date.now() < end) {
         await sleep(Math.min(Math.max(0, end - Date.now()), rnd(1500, 4000)));
-        if (Date.now() < end) await move({ x: pos.x + rnd(-20, 20), y: pos.y + rnd(-12, 12) });
+        if (Date.now() < end) await this.moveMouse({ x: this.mouse.x + rnd(-20, 20), y: this.mouse.y + rnd(-12, 12) });
       }
     } catch {
       // presence is best effort: a failed mouse event must not fail the apply
       const left = end - Date.now();
       if (left > 0) await sleep(left);
     }
+  }
+
+  async retype(selector: string): Promise<boolean> {
+    const before = await this.page.evaluate<string | null>(valueJs(selector)).catch(() => null);
+    if (!before) return false;
+    try {
+      const b = await this.box(selector);
+      if (b) {
+        await this.moveMouse({ x: b.x + rnd(-0.3, 0.3) * b.w, y: b.y + rnd(-0.25, 0.25) * b.h });
+        await sleep(rnd(150, 450));
+        // A covered field (open modal) would lose the click to the overlay: focus comes from selectValueJs instead.
+        if (!b.covered) await this.page.click(Math.round(this.mouse.x), Math.round(this.mouse.y));
+      }
+      if ((await this.page.evaluate<string | null>(selectValueJs(selector))) === null) return false;
+      await sleep(rnd(200, 600));
+      await this.page.keyPress("Backspace");
+      // Word by word with a fresh per-key delay, the odd corrected typo, a pause between words; Enter for newlines.
+      const lines = before.replace(/\r\n/g, "\n").split("\n");
+      for (let li = 0; li < lines.length; li++) {
+        if (li > 0) await this.page.keyPress("Enter");
+        for (const word of lines[li]!.match(/\S+\s*|\s+/g) ?? []) {
+          await this.page.type(word, { delay: Math.round(rnd(55, 150)), withMistakes: Math.random() < 0.08 });
+          if (Math.random() < 0.15) await sleep(rnd(250, 900));
+        }
+      }
+      await sleep(rnd(200, 500));
+      const after = await this.page.evaluate<string | null>(valueJs(selector));
+      if (after !== null && norm(after) === norm(before)) return true;
+    } catch {
+      // fall through to the restore below
+    }
+    await this.fill(selector, before).catch(() => undefined);
+    return false;
   }
 
   async pressEscape(): Promise<void> {

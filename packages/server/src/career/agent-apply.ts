@@ -93,7 +93,30 @@ export const requestSubmitJs = (selector: string): string => `(() => {
 })()`;
 
 /** How long a submit gets to show an effect, and the human-like dwell before it; tests shorten them. */
-export const submitTiming = { effectMs: 6000, pollMs: 500, dwellMs: [20_000, 40_000] as [number, number] };
+export const submitTiming = {
+  effectMs: 6000,
+  pollMs: 500,
+  dwellMs: [20_000, 40_000] as [number, number],
+  /** Warm-up before the vacancy page: google.com (its cookies feed reCAPTCHA), then the site's home page. */
+  googleMs: [3_000, 6_000] as [number, number],
+  homeMs: [8_000, 15_000] as [number, number],
+};
+const between = ([lo, hi]: [number, number]): number => Math.round(lo + Math.random() * (hi - lo));
+
+/** A person reaches a vacancy from somewhere: a short visit to google.com and the site's home page first. Best effort. */
+async function warmUp(s: BrowserSession, vacancyUrl: string): Promise<void> {
+  for (const [url, ms] of [
+    ["https://www.google.com/", submitTiming.googleMs],
+    [new URL(vacancyUrl).origin + "/", submitTiming.homeMs],
+  ] as const) {
+    try {
+      await s.goto(url);
+      await s.humanize([], between(ms));
+    } catch {
+      // unreachable or slow: skip this stop
+    }
+  }
+}
 
 // Marks the submit button of the form around `fieldSelector` (data-sgz-submit), so the dwell can end on it.
 export const markSubmitJs = (fieldSelector: string): string => `(() => {
@@ -154,6 +177,7 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
   const learned: string[] = [];
 
   try {
+    if (!req.dryRun) await warmUp(s, req.vacancy.url);
     await s.goto(req.vacancy.url);
     const opened = await s.act(
       `Open the application form for this vacancy: click the button labelled like "Apply", "Apply now", "Откликнуться", "Отправить резюме", "Хочу в команду".${hints}`,
@@ -195,6 +219,16 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
     learned.push(
       `fields: name${nameRes.success ? "" : "(missing)"}, email${emailRes.success ? "" : "(missing)"}, phone${phoneRes.success ? "" : "(none)"}, cover letter${coverRes.success ? "" : "(none)"}`,
     );
+
+    // Fields the flow filled, top to bottom: retyped by hand on a real send, then the mouse path before submit.
+    const fields = [...(tagged.first && tagged.last ? ['[data-sgz-field="first"]', '[data-sgz-field="last"]'] : [nameRes.selector]), emailRes.selector, "selector" in phoneRes ? phoneRes.selector : undefined, "selector" in coverRes ? coverRes.selector : undefined].filter(
+      (x): x is string => !!x,
+    );
+    if (!req.dryRun) {
+      let retyped = 0;
+      for (const f of fields) if (await s.retype(f)) retyped++;
+      learned.push(`retyped ${retyped}/${fields.length} fields`);
+    }
 
     const fileSelector = await findFileInput(s);
     if (!fileSelector) return fail(Status.FAILED_UI, "no file input for resume upload found");
@@ -239,12 +273,8 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
 
     // reCAPTCHA v3 and similar score behaviour: scroll, move the mouse through the filled fields to the submit
     // button, and spend a human amount of time on the page before submitting.
-    const fields = [...(tagged.first && tagged.last ? ['[data-sgz-field="first"]', '[data-sgz-field="last"]'] : [nameRes.selector]), emailRes.selector, "selector" in phoneRes ? phoneRes.selector : undefined, "selector" in coverRes ? coverRes.selector : undefined].filter(
-      (x): x is string => !!x,
-    );
     const marked = fields.length ? await s.evaluate<boolean>(markSubmitJs(fields[fields.length - 1]!)).catch(() => false) : false;
-    const [lo, hi] = submitTiming.dwellMs;
-    await s.humanize([...fields, ...(marked ? ['[data-sgz-submit="1"]'] : [])], Math.round(lo + Math.random() * (hi - lo)));
+    await s.humanize([...fields, ...(marked ? ['[data-sgz-submit="1"]'] : [])], between(submitTiming.dwellMs));
 
     const armed = await s.evaluate<boolean>(SUBMIT_PROBE_JS).catch(() => false);
     const submit = await s.act('Submit the application form: click the "Submit" / "Send" / "Отправить" / "Откликнуться" button', {

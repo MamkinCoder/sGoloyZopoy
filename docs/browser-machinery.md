@@ -181,6 +181,22 @@ button (`markSubmitJs` tags the button of the filled form with `data-sgz-submit`
 until the time is up. Best effort: never throws. Verified on corp.ivi.ru with sending blocked: 50 trusted mousemoves,
 6 wheel events, the cursor ends inside the button.
 
+### Human typing, images, warm-up (real sends only)
+
+- `session.retype(selector)`: after the flow fills a field, it is re-entered like a person would: a mouse path to it
+  and a click (a covered field, e.g. under an open modal, gets `focus()` instead so the overlay is not clicked),
+  select + Backspace, then its value typed word by word with Stagehand `page.type(word, { delay, withMistakes })`
+  (55-150 ms per key, ~8% of words with a corrected typo, pauses between words, Enter for newlines). The value is
+  compared afterwards; a mismatch restores it with the plain fill. On corp.ivi.ru: 117 trusted keydowns, values
+  exact, 6 / 6 / 16 s for name / email / a two-line letter.
+- Images on for `send:<id>` runs (`BrowserOptions.loadImages`, set by the runner): the launcher drops
+  `imagesEnabled=false` and the CDP blocker stops blocking image URLs (fonts, media, trackers stay blocked).
+  Measured: ~1 MB of images on corp.ivi.ru/vacancies/ vs 0 bytes when blocked.
+- Warm-up (`warmUp` in `agent-apply.ts`): google.com for 3-6 s (sets NID / AEC cookies in the persistent profile,
+  which reCAPTCHA reads), then the site's home page for 8-15 s, then the vacancy.
+
+A real career send now takes ~1.5-2.5 minutes longer than a dry run. Dry runs skip all of this.
+
 ### Not done (options if a site still rejects)
 
 Headful Chromium on a virtual display (xvfb), images on for apply runs, a profile signed in to Google. Paid
