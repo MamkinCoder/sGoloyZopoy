@@ -14,6 +14,35 @@ const SUCCESS_PHRASES = ["Спасибо", "Thank you", "received", "отпра�
 
 const WAIT_PER_PHRASE_MS = 2500;
 
+/** The site's answer to a submit, read from the page. `spam`: an anti-bot verdict; `error`: any other refusal. */
+export type SubmitVerdict = { kind: "ok" | "spam" | "error"; text: string };
+
+// New text after a submit that reads like a refusal / a thank-you. Only lines that were not on the page before
+// the click count, so a footer «Ошибка 404?» link or a standing «Спасибо» does not decide anything.
+const REFUSAL_RE = "ошибк|не удалось|попробуй(?:те)? (?:ещё|еще) раз|повторите попытку|something went wrong|\\berror\\b|\\bfailed\\b|captcha|капч|спам|\\bspam\\b|отклонен|rejected|некорректн";
+// \b is ASCII-only in JS: Cyrillic words get an explicit letter boundary.
+const BOT_RE = "спам|\\bspam\\b|captcha|капч|робот|robot|(?:^|[^а-яё])бот(?:$|[^а-яё])";
+const THANKS_RE = SUCCESS_PHRASES.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+
+/** Verdict on the page after a submit, or null while there is none yet. Contact Form 7 (WordPress; the form's
+ * data-status + its message) first, then new lines of page text against `before` (the text just before the click). */
+export const verdictJs = (before: string[]): string => `(() => {
+  for (const f of document.querySelectorAll("form.wpcf7-form")) {
+    const st = f.getAttribute("data-status");
+    const out = f.querySelector(".wpcf7-response-output");
+    const msg = ((out && out.textContent) || "").trim();
+    if (st === "sent") return { kind: "ok", text: msg || "sent" };
+    if (st === "spam") return { kind: "spam", text: "spam" + (msg ? ": " + msg : "") };
+    if (st === "failed" || st === "aborted" || st === "invalid") return { kind: "error", text: st + (msg ? ": " + msg : "") };
+  }
+  const seen = new Set(${JSON.stringify(before)});
+  const fresh = (document.body ? document.body.innerText : "").split("\\n").map((l) => l.trim()).filter((l) => l && l.length < 300 && !seen.has(l));
+  const bad = fresh.find((l) => new RegExp(${JSON.stringify(REFUSAL_RE)}, "i").test(l));
+  if (bad) return { kind: new RegExp(${JSON.stringify(BOT_RE)}, "i").test(bad) ? "spam" : "error", text: bad };
+  const good = fresh.find((l) => new RegExp(${JSON.stringify(THANKS_RE)}, "i").test(l));
+  return good ? { kind: "ok", text: good } : null;
+})()`;
+
 // Tags name inputs by what they are for (label / placeholder / aria / name), so «Фамилия» gets the last
 // name and «Имя» the first name deterministically; the LLM step alone mixed them up on rabota.sber.ru.
 const TAG_NAME_FIELDS_JS = `(() => {
@@ -96,6 +125,8 @@ export const requestSubmitJs = (selector: string): string => `(() => {
 export const submitTiming = {
   effectMs: 6000,
   pollMs: 500,
+  /** How long the page gets to show the site's answer (thank-you / refusal) after a submit. */
+  verdictMs: 12_000,
   dwellMs: [20_000, 40_000] as [number, number],
   /** Warm-up before the vacancy page: google.com (its cookies feed reCAPTCHA), then the site's home page. */
   googleMs: [3_000, 6_000] as [number, number],
@@ -276,6 +307,7 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
     const marked = fields.length ? await s.evaluate<boolean>(markSubmitJs(fields[fields.length - 1]!)).catch(() => false) : false;
     await s.humanize([...fields, ...(marked ? ['[data-sgz-submit="1"]'] : [])], between(submitTiming.dwellMs));
 
+    const before = (await s.text(20_000).catch(() => "")).split("\n").map((l) => l.trim()).filter(Boolean);
     const armed = await s.evaluate<boolean>(SUBMIT_PROBE_JS).catch(() => false);
     const submit = await s.act('Submit the application form: click the "Submit" / "Send" / "Отправить" / "Откликнуться" button', {
       cacheKey: "career.apply.submit",
@@ -292,7 +324,11 @@ export async function applyViaAgent(s: BrowserSession, req: CareerApplyRequest):
     if (!effect) return fail(Status.FAILED_UI, "submit had no effect: no form submit, request or navigation after the click", { questions, answers });
     learned.push(`submit set off: ${effect}`);
 
-    const confirmed = await confirmSubmission(s);
+    // The site's own answer: a refusal is reported as such (with its text) instead of "no confirmation".
+    const verdict = await waitVerdict(s, before);
+    if (verdict?.kind === "spam") return fail(Status.FAILED_ANTI_BOT, `site rejected as spam: ${truncate(verdict.text, 200)}`, { questions, answers });
+    if (verdict?.kind === "error") return fail(Status.FAILED_UI, `site rejected: ${truncate(verdict.text, 200)}`, { questions, answers });
+    const confirmed = verdict?.kind === "ok" ? verdict.text : await confirmSubmission(s);
     if (!confirmed) {
       return fail(Status.FAILED_NO_CONFIRMATION, "no success message after submit", { questions, answers });
     }
@@ -325,6 +361,17 @@ async function extractQuestions(s: BrowserSession): Promise<Question[]> {
     )
     .catch(() => ({ questions: [] as Question[] }));
   return res.questions.map((q, idx) => ({ ...q, idx }));
+}
+
+/** Polls the page for the site's verdict after a submit (a form's answer usually lands within a few seconds). */
+async function waitVerdict(s: BrowserSession, before: string[]): Promise<SubmitVerdict | null> {
+  const deadline = Date.now() + submitTiming.verdictMs;
+  for (;;) {
+    const v = await s.evaluate<SubmitVerdict | null>(verdictJs(before)).catch(() => null);
+    if (v) return v;
+    if (Date.now() >= deadline) return null;
+    await sleep(submitTiming.pollMs);
+  }
 }
 
 async function confirmSubmission(s: BrowserSession): Promise<string | null> {

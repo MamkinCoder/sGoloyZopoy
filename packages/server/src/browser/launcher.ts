@@ -3,7 +3,9 @@
 //   localBrowser.launch(LocalBrowserLaunchOptions)  → StagehandBrowser  (spawns Chromium over CDP)
 //   Stagehand.create({ browser, model: { generate }, selfHeal, logging, telemetry, domSettleTimeoutMs })
 //   browser.context.pages() / newPage()
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,6 +42,33 @@ const CHROMIUM_ARGS: readonly string[] = [
   "--enable-unsafe-swiftshader",
 ];
 
+const XVFB = "/usr/bin/Xvfb";
+const XVFB_DISPLAY = ":99";
+let xvfbStarted: Promise<boolean> | undefined;
+
+/** A visible (headful) Chrome needs a screen. On a Linux box without one (the Pi) this starts one virtual screen,
+ * Xvfb, for the life of the process (systemd's control-group kill ends it with the service) and points DISPLAY at
+ * it; Chrome inherits the env. False when there is no display and no Xvfb: the caller falls back to headless. */
+export function ensureDisplay(): Promise<boolean> {
+  if (process.platform !== "linux" || process.env.DISPLAY) return Promise.resolve(true);
+  if (!existsSync(XVFB)) return Promise.resolve(false);
+  xvfbStarted ??= (async () => {
+    const child = spawn(XVFB, [XVFB_DISPLAY, "-screen", "0", `${VIEWPORT.width}x${VIEWPORT.height + 50}x24`, "-nolisten", "tcp"], { stdio: "ignore", detached: false });
+    child.unref();
+    let exited = false;
+    child.once("exit", () => {
+      exited = true;
+      xvfbStarted = undefined; // gone: the next headful launch starts a new one
+      if (process.env.DISPLAY === XVFB_DISPLAY) delete process.env.DISPLAY;
+    });
+    await sleep(1000); // Xvfb takes a moment to accept clients
+    if (exited) return false;
+    process.env.DISPLAY = XVFB_DISPLAY;
+    return true;
+  })();
+  return xvfbStarted;
+}
+
 const desktopUA = new Map<string, string>();
 /** The desktop user agent of this Chromium build, in Chrome's reduced form: headless says "HeadlessChrome" (a bot
  * tell sites read). Set as a launch flag, so navigator.userAgentData keeps the browser's own client hints. */
@@ -72,7 +101,8 @@ export function createLauncher(llm: StagehandLLM): BrowserLauncher {
       const browser = await localBrowser.launch({
         executablePath: opts.executablePath,
         userDataDir: opts.userDataDir,
-        headless: opts.headless,
+        // Headful needs a screen: a virtual one on the Pi, else headless as before.
+        headless: opts.headless || !(await ensureDisplay()),
         args: [
           ...CHROMIUM_ARGS,
           // Nothing we parse or click needs pixels (Stagehand reads the DOM/a11y tree); images only cost the Pi time.

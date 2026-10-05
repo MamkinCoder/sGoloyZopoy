@@ -77,7 +77,7 @@ export interface BrowserHandleOpts {
   snapshotDir: string;
   log: Logger;
   checkAbort?: () => void;
-  /** Keep images on (career `send:<id>` runs submit a form; everything else reads pages). */
+  /** Keep images on and run headful (career `send:<id>` runs submit a form; everything else reads pages). */
   loadImages?: boolean;
 }
 
@@ -99,7 +99,8 @@ export function createBrowserHandle(deps: Pick<RunnerDeps, "cfg" | "launcher" | 
     await closing;
     session = await deps.launcher.launch({
       executablePath: deps.cfg.chromiumBin,
-      headless: true,
+      // Sends run a real (headful) Chrome on a virtual screen: form spam filters score headless browsers lower.
+      headless: !o.loadImages,
       userDataDir: o.profileDir(deps.cfg, user.slug),
       userAgent: deps.cfg.userAgent || undefined,
       snapshotDir: o.snapshotDir,
