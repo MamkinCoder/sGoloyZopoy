@@ -1,16 +1,16 @@
 // Career-site stages for one user: onboard → discover → dedup → fetch → decide → tailor CV (browser
 // closed) → build PDF → cover letter → QUEUED for human review. Nothing is submitted automatically:
 // the panel starts stage send:<id> (submit) or inspect:<id> (fill the form, don't submit) per item.
-import { mkdirSync } from "node:fs";
-import { notifierFor, paths, RunAbortError, Status, type ATSKind, type Answer, type CV, type CareerSite, type Decision, type Discovered, type Question, type Vacancy } from "@sgz/shared";
+import { notifierFor, paths, RunAbortError, Status, type ATSKind, type Answer, type CareerSite, type Decision, type Discovered, type Question, type Vacancy } from "@sgz/shared";
+import { tailorToPdf, tierFor, type TailorPipelineResult } from "./tailor-pipeline.js";
 import { dailyBudget } from "./budget.js";
 import { atsClientFor } from "../career/ats/index.js";
 import { manualApplyOnly } from "../career/agent.js";
 import type { RunContext } from "./context.js";
 import { newApp } from "./board.js";
 import { classify, companyQuotaSkip, createRunCompanyTracker, ensureVacancy, filterOpts, isoDaysAgo, recordSkip, settingInt, skeletonVacancy, titleScore, type RunCompanyTracker } from "./filters.js";
-import { decideExtras, readLessons } from "./learn.js";
-import { kbBrief, kbForVacancy, withKbNever } from "../kb/context.js";
+import { decideExtras } from "./learn.js";
+import { kbForVacancy } from "../kb/context.js";
 import { renderQuestions } from "../llm/format.js";
 import { dayInTz } from "../scheduler/tz.js";
 import { formatQueueCard, queueButtons, unparkSend } from "./queue-cards.js";
@@ -282,45 +282,24 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
     return null;
   }
   const base = await resume.loadCV(picked.path);
-  const tier = user.opusEnabled ? "tailor" : "write";
   await ctx.browser.close();
-  let cv: CV;
-  let pdfPath: string;
-  let generatedId: number;
-  let coverLetter: string;
+  const outDir = paths.generatedDir(ctx.cfg, user.slug);
+  let result: TailorPipelineResult;
   try {
-    await ctx.memoryGuard("tailor");
-    ctx.log.info("tailor", `${vacancy.title} @ ${vacancy.company}: tailoring (${tier})`, { vacancy_id: vacancy.id });
-    // The KB for the CV: only stories of the base CV's own companies (bullet material, never a new job).
-    const tailorKb = kbBrief(ctx.store, user.id, { text: `${vacancy.title}\n${vacancy.descriptionText}`, companies: base.jobs.map((j) => j.company) });
-    const t = await ctx.llm.tailorCV(profile, base, vacancy, tier, tailorKb);
-    stats.llmCall();
-    ctx.checkAbort(); // stopped / watchdog-abandoned while tailoring: no xelatex, no QUEUED row next to the next run
-    cv = t.cv;
-    const violations = resume.validateCV(base, cv, withKbNever(profile, tailorKb).never_claim_skills);
-    if (violations.length) {
-      stats.record(Status.FAILED_LLM);
-      ctx.store.insertApplication(newApp(ctx, user.id, vacancy.id, Status.FAILED_LLM, `cv validation: ${violations.join("; ")}`));
-      ctx.log.error("tailor", `${vacancy.title}: tailored CV rejected: ${violations.join("; ")}`, { vacancy_id: vacancy.id });
-      return null;
-    }
-    const tex = resume.renderTex(cv);
-    await ctx.memoryGuard("build");
-    const outDir = paths.generatedDir(ctx.cfg, user.slug);
-    try {
-      mkdirSync(outDir, { recursive: true });
-    } catch {
-      /* fake fs in tests / read-only dir: buildPdf will report */
-    }
-    // One file per run: a retailor must not overwrite the PDF the still-queued item (and its letter) points to.
-    const built = await resume.buildPdf({ tex, texDir: paths.texDir(ctx.cfg), outPdf: `${outDir}/${vacancy.id}-r${ctx.run.id}.pdf`, xelatexBin: ctx.cfg.xelatexBin });
-    ctx.checkAbort();
-    pdfPath = built.pdfPath;
-    generatedId = ctx.store.insertGeneratedResume({ userId: user.id, vacancyId: vacancy.id, texPath: built.texPath, pdfPath, model: tier }).id;
-    ctx.log.info("build", `${vacancy.title}: pdf ready`, { vacancy_id: vacancy.id, pdf: pdfPath });
-    coverLetter = await ctx.llm.coverLetterCareer(profile, cv, vacancy, readLessons(ctx.store, user.id).lessons, kbForVacancy(ctx.store, user.id, vacancy));
-    stats.llmCall();
-    ctx.checkAbort();
+    ctx.log.info("tailor", `${vacancy.title} @ ${vacancy.company}: tailoring (${tierFor(user)})`, { vacancy_id: vacancy.id });
+    result = await tailorToPdf(
+      { llm: ctx.llm, resume, store: ctx.store, cfg: ctx.cfg },
+      {
+        user,
+        profile,
+        base,
+        vacancy,
+        // One file per run: a retailor must not overwrite the PDF the still-queued item (and its letter) points to.
+        outPdf: `${outDir}/${vacancy.id}-r${ctx.run.id}.pdf`,
+        // stopped / watchdog-abandoned while tailoring: no xelatex, no QUEUED row next to the next run
+        hooks: { guard: (stage) => ctx.memoryGuard(stage), checkAbort: () => ctx.checkAbort(), onLlmCall: () => stats.llmCall() },
+      },
+    );
   } catch (e) {
     if (e instanceof RunAbortError || isStop(e)) throw e;
     const status = /xelatex|latex/i.test(errMessage(e)) ? Status.FAILED_LATEX : Status.FAILED_LLM;
@@ -329,6 +308,14 @@ async function queueVacancy(ctx: RunContext, u: UserRun, vacancy: Vacancy, effec
     ctx.log.error("build", `${vacancy.title}: ${errMessage(e)}`, { vacancy_id: vacancy.id });
     return null;
   }
+  if (!result.ok) {
+    stats.record(Status.FAILED_LLM);
+    ctx.store.insertApplication(newApp(ctx, user.id, vacancy.id, Status.FAILED_LLM, `cv validation: ${result.violations.join("; ")}`));
+    ctx.log.error("tailor", `${vacancy.title}: tailored CV rejected: ${result.violations.join("; ")}`, { vacancy_id: vacancy.id });
+    return null;
+  }
+  const { pdfPath, generatedResumeId: generatedId, coverLetter } = result;
+  ctx.log.info("build", `${vacancy.title}: pdf ready`, { vacancy_id: vacancy.id, pdf: pdfPath });
 
   // Career sites never auto-submit: the ready CV + letter wait in the panel's review queue
   // (stage send:<id> / inspect:<id> below). A dry run only reports what would be queued.
@@ -412,7 +399,17 @@ async function reviewQueued(ctx: RunContext, u: UserRun, review: NonNullable<Car
     ctx.store.deleteQuestionnaireAnswers(id);
     if (qs?.length && as?.length) ctx.store.insertQuestionnaireAnswers(id, qs, as);
     if (inspect) keepQueued(`form checked: ${qs?.length ?? 0} question(s)${r.status === Status.SKIP_DRY_RUN ? "" : ` · ${r.status}`}${r.reasonDetail ? ` · ${r.reasonDetail}` : ""}`);
-    else recordSend(r.status, r.reasonDetail);
+    else {
+      recordSend(r.status, r.reasonDetail);
+      // The site answered the submit with a refusal (spam verdict / error): a retry will not help, a human will.
+      if (r.status === Status.FAILED_ANTI_BOT || r.reasonDetail.startsWith("site rejected"))
+        await notifierFor(ctx.deps.notifier, user)
+          .alert(
+            `✋ ${vacancy.company}: сайт не пропустил отправку`,
+            `${vacancy.title}\nСайт ответил: «${r.reasonDetail.replace(/^site rejected(?: as spam)?: /, "")}»\nОтправь вручную: ${vacancy.url}\nПотом «Отправил вручную» в очереди.`,
+          )
+          .catch((e: unknown) => ctx.log.warn("apply", `telegram alert failed: ${errMessage(e)}`));
+    }
     if (r.learnedHints && !ctx.req.dryRun) site = ctx.store.upsertCareerSite({ ...site, profile: { ...site.profile, apply_hints: r.learnedHints } });
     ctx.log.info("apply", `${vacancy.title} @ ${vacancy.company}: ${inspect ? "form checked" : r.status}${r.reasonDetail ? ` (${r.reasonDetail})` : ""}`, { vacancy_id: vacancy.id, status: r.status });
   } catch (e) {

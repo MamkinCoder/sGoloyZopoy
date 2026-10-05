@@ -28,8 +28,10 @@ function proxiedFetch(proxyUrl: string): typeof fetch {
 
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
-    const body = typeof init?.body === "string" ? init.body : "";
-    const headers = { ...(init?.headers as Record<string, string> | undefined), ...(body ? { "content-length": String(Buffer.byteLength(body)) } : {}) };
+    const raw = init?.body;
+    // Telegram sends JSON (string) and sendDocument (a prebuilt multipart Buffer); forward both verbatim.
+    const body: string | Buffer = typeof raw === "string" ? raw : Buffer.isBuffer(raw) ? raw : raw instanceof Uint8Array ? Buffer.from(raw) : "";
+    const headers = { ...(init?.headers as Record<string, string> | undefined), ...(body.length ? { "content-length": String(Buffer.byteLength(body)) } : {}) };
     return new Promise<Response>((resolve, reject) => {
       const req = https.request({ host: url.hostname, path: url.pathname + url.search, method: init?.method ?? "GET", headers, agent }, (res) => {
         const chunks: Buffer[] = [];

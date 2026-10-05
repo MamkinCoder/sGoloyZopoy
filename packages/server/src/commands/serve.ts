@@ -1,9 +1,11 @@
 // sgz serve — HTTP API + panel, scheduler when configured, the always-on agent, graceful shutdown. Wiring only:
 // every recurring job (chats, reminders, health, digest, retro, lessons, autopilot) is an agent schedule.
-import type { User } from "@sgz/shared";
+import { errMessage, paths, type User } from "@sgz/shared";
 import { serve as honoServe } from "@hono/node-server";
 import { createApp } from "../api/index.js";
-import { createAppContext } from "../app.js";
+import { createAppContext, resume } from "../app.js";
+import { loadProfileYaml } from "../config/profile.js";
+import { generateManualCV, parseVacancyText, pickBaseCV } from "../runner/manual-cv.js";
 import type { ApiDeps } from "../api/deps.js";
 import { readMemAvailableMB } from "../runner/budget.js";
 import { createScheduler } from "../scheduler/index.js";
@@ -67,7 +69,38 @@ export async function serve(): Promise<void> {
   const usersOf = (chatId: string) => app.store.listUsers(true).filter((u) => chatId === app.cfg.tgChatId || u.tgChatId === chatId);
   const digestAll = (chatId: string) => usersOf(chatId).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
   const retroAll = (chatId: string) => usersOf(chatId).map((u) => `${u.name}\n${buildRetro(app.store, u, app.cfg.tz, new Date()) ?? `Мало данных: за неделю меньше ${MIN_SENT} откликов`}`).join("\n\n");
+  const HELP = [
+    "Команды:",
+    "/cv <вакансия> - резюме и сопроводительное под вакансию (PDF + текст письма)",
+    "/status - итоги дня",
+    "/queue - очередь откликов",
+    "/week - итоги недели",
+    "/company <название> - история откликов по компании",
+    "/salary <слово> - рынок зарплат",
+    "/study [компания] - чеклист и промпт к собеседованию",
+    "/mock [компания] - тренировка собеседования",
+    "/stop - закончить тренировку",
+    "/help - этот список",
+  ].join("\n");
+  const BOT_MENU = [
+    { command: "cv", description: "Резюме и письмо под вакансию" },
+    { command: "status", description: "Итоги дня" },
+    { command: "queue", description: "Очередь откликов" },
+    { command: "week", description: "Итоги недели" },
+    { command: "company", description: "История откликов по компании" },
+    { command: "salary", description: "Рынок зарплат по слову" },
+    { command: "study", description: "Чеклист к собеседованию" },
+    { command: "mock", description: "Тренировка собеседования" },
+    { command: "stop", description: "Закончить тренировку" },
+    { command: "help", description: "Список команд" },
+  ];
   const onCommand = async (cmd: string, args = "", chatId = "") => {
+    if (cmd === "/start") {
+      // Access is managed in the panel (users.tgChatId); a chat reaching here is already allowlisted.
+      const who = app.store.listUsers().find((u) => u.tgChatId === chatId);
+      return `Привет${who ? `, ${who.name}` : ""}! Пришли мне текст вакансии командой /cv - верну резюме под неё в PDF и сопроводительное письмо. Я также веду отклики и собеседования.\n\n${HELP}`;
+    }
+    if (cmd === "/help") return HELP;
     if (cmd === "/status") return `${app.runner.active() ? `Идёт прогон #${app.runner.active()!.id}` : "Бот свободен"}\n\n${digestAll(chatId)}`;
     if (cmd === "/queue") return usersOf(chatId).map((u) => queueList(app.store, u, app.cfg.panelUrl)).join("\n\n");
     if (cmd === "/company") return companyReport(app.store, args, usersOf(chatId));
@@ -80,7 +113,20 @@ export async function serve(): Promise<void> {
     if (cmd === "/mock") return startMock(app.store, chatId, args, new Date());
     if (cmd === "/stop") return stopMock(app.store, chatId, new Date());
     if (cmd === "/study") return studyCommand(app, chatId, args, new Date());
-    return "Команды: /status - итоги дня, /queue - очередь, /week - итоги недели, /company <название> - история откликов, /salary <слово> - рынок зарплат, /study [компания] - чеклист и промпт к собеседованию, /mock [компания] - тренировка собеседования, /stop - закончить тренировку";
+    if (cmd === "/cv") {
+      const text = args.trim();
+      if (!text) return "Пришли текст вакансии одним сообщением: /cv <вставь описание вакансии>";
+      // Owner's chat → the primary seeker; a seeker's own chat → herself.
+      const user = usersOf(chatId).find((u) => u.tgChatId === chatId) ?? usersOf(chatId)[0];
+      if (!user) return "Не нашёл пользователя для этого чата";
+      const profile = loadProfileYaml(paths.profile(app.cfg, user.slug));
+      const parsed = parseVacancyText(text);
+      const base = pickBaseCV(app.cfg, user.slug, profile.directions, parsed.descriptionText);
+      if (!base) return `Нет базового резюме в ${paths.cvDir(app.cfg, user.slug)} (ожидается base-<direction>.yaml)`;
+      void generateManualCV({ llm: app.llm, resume, store: app.store, cfg: app.cfg, notifier: app.notifier }, { user, profile, base, parsed }).catch((e: unknown) => console.error(`/cv: ${errMessage(e)}`));
+      return `Делаю резюме «${parsed.title}»${parsed.company ? ` (${parsed.company})` : ""} на базе base-${base.direction || "default"}. Пришлю PDF и сопроводительное через пару минут.`;
+    }
+    return HELP;
   };
   // A seeker's chat acts only on that seeker's cards (callback data can be crafted); the owner's chat on anyone's.
   const NOT_YOURS = "это не твоя карточка";
@@ -105,7 +151,19 @@ export async function serve(): Promise<void> {
           return `Записал: ${OUTCOME_LABEL[io.outcome]}`;
         }
         return "кнопка устарела"; // old cards (phase-1 «ct:», one-skill «sk:») and anything unknown
-      }, { fetch: telegramFetch(), store: app.store, commands: { chatIds: [app.cfg.tgChatId, ...app.store.listUsers().map((u) => u.tgChatId)].filter(Boolean), onCommand, onText } })
+      }, {
+        fetch: telegramFetch(),
+        store: app.store,
+        commands: {
+          // A getter, read on every update: setting a user's Telegram id in the panel takes effect without a restart.
+          get chatIds() {
+            return [app.cfg.tgChatId, ...app.store.listUsers().map((u) => u.tgChatId)].filter(Boolean);
+          },
+          menu: BOT_MENU,
+          onCommand,
+          onText,
+        },
+      })
     : null;
   let closing = false;
   const shutdown = (sig: string) => {

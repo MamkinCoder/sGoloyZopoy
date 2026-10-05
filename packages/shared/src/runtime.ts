@@ -89,6 +89,8 @@ export interface Notifier {
   ask?(text: string, buttons: TgButton[] | TgButton[][]): Promise<number | void>;
   /** Replaces the text and buttons of a message sent by `ask` (same chat). Optional like `ask`. */
   edit?(messageId: number, text: string, buttons: TgButton[][]): Promise<void>;
+  /** Uploads a file (e.g. a generated CV PDF) to the chat via sendDocument. Optional like `ask`. */
+  document?(doc: { path: string; filename?: string; caption?: string }): Promise<void>;
   /** The same notifier bound to the seeker's own chat (`user.tgChatId`, else the owner's): alert/ask/edit go there. */
   forUser?(user: Pick<User, "tgChatId">): Notifier;
 }

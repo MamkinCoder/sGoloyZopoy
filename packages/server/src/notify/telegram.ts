@@ -1,4 +1,6 @@
 import { errMessage } from "@sgz/shared";
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Notifier, Run, Store, TapReply, TgButton, User } from "@sgz/shared";
 import { chunkMessage, formatAlert, formatReport } from "./format.js";
@@ -70,6 +72,48 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
     for (const part of chunkMessage(text)) await sendOne(chat, part);
   }
 
+  /** sendDocument via a hand-built multipart body (a Buffer, not FormData): the Pi's CONNECT-proxy fetch
+   *  only forwards string/Buffer bodies, so FormData/Blob would arrive empty. Retries like `call`. */
+  async function sendDocument(chat: string, doc: { path: string; filename?: string; caption?: string }): Promise<void> {
+    if (!chat) {
+      warn("telegram: no chat id, document dropped");
+      return;
+    }
+    const data = await readFile(doc.path);
+    const fields: Record<string, string> = { chat_id: chat };
+    if (doc.caption) fields.caption = doc.caption.slice(0, 1024);
+    const { body, contentType } = multipart(fields, { field: "document", filename: doc.filename || basename(doc.path), contentType: "application/pdf", data });
+    let lastErr = "";
+    for (let attempt = 1; attempt <= RETRIES; attempt++) {
+      let res: Response;
+      try {
+        res = await doFetch(`${BASE}/bot${token}/sendDocument`, { method: "POST", headers: { "content-type": contentType }, body });
+      } catch (e) {
+        lastErr = errMessage(e);
+        if (attempt < RETRIES) await sleep(1000 * 2 ** (attempt - 1));
+        continue;
+      }
+      if (res.ok) return;
+      let errBody: { description?: string; parameters?: { retry_after?: number } } = {};
+      try {
+        errBody = (await res.json()) as typeof errBody;
+      } catch {
+        /* non-json error body */
+      }
+      lastErr = `${res.status} ${errBody.description ?? ""}`.trim();
+      if (res.status === 429 && attempt < RETRIES) {
+        await sleep(Math.max(1, errBody.parameters?.retry_after ?? 1) * 1000);
+        continue;
+      }
+      if (res.status >= 500 && attempt < RETRIES) {
+        await sleep(1000 * 2 ** (attempt - 1));
+        continue;
+      }
+      throw new Error(`telegram sendDocument: ${lastErr}`);
+    }
+    throw new Error(`telegram sendDocument: giving up after ${RETRIES} attempts: ${lastErr}`);
+  }
+
   // Every method of a bound notifier talks to one chat; `edit` edits a card sent by `ask` of the same binding.
   const bound = (chat: string): Notifier => ({
     report: (user: User, run: Run) => send(user.tgChatId || chat, formatReport(user, run, panelUrl, opts.tz)),
@@ -79,9 +123,23 @@ export function createTelegram(token: string, chatId: string, panelUrl: string, 
     edit: async (messageId: number, text: string, buttons: TgButton[][]) => {
       await call("editMessageText", { chat_id: chat, message_id: messageId, text, reply_markup: keyboard(buttons) }).catch((e: unknown) => warn(`telegram: editMessageText: ${errMessage(e)}`));
     },
+    document: (doc) => sendDocument(chat, doc),
     forUser: (user) => bound(user.tgChatId || chatId),
   });
   return bound(chatId);
+}
+
+/** multipart/form-data body as a single Buffer (one text/file part set) plus its content-type header. */
+function multipart(fields: Record<string, string>, file: { field: string; filename: string; contentType: string; data: Buffer }): { body: Buffer; contentType: string } {
+  const boundary = `----sgz${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
+  const parts: Buffer[] = [];
+  for (const [name, value] of Object.entries(fields)) {
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`, "utf8"));
+  }
+  parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${file.field}"; filename="${file.filename}"\r\nContent-Type: ${file.contentType}\r\n\r\n`, "utf8"));
+  parts.push(file.data);
+  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"));
+  return { body: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
 const isRows = (b: TgButton[] | TgButton[][]): b is TgButton[][] => Array.isArray(b[0]);
@@ -91,7 +149,10 @@ const keyboard = (buttons: TgButton[] | TgButton[][]) => ({
 
 /** Slash commands (/status, /queue …) accepted only from these chats; the reply is sent as plain text. */
 export interface TelegramCommands {
+  /** Chats allowed to use commands. Read on every update, so a getter can grow it (e.g. a panel-set user id). */
   chatIds: string[];
+  /** Registered once via setMyCommands as the bot's command menu (the client-side tooltip / «/» autocomplete). */
+  menu?: { command: string; description: string }[];
   /** `args`: the rest of the message after the command; `chatId`: where it came from. */
   onCommand: (command: string, args?: string, chatId?: string) => Promise<string>;
   /** Plain (non-command) messages from those chats; null = no reply. Not awaited by the poll loop. */
@@ -124,6 +185,10 @@ export function startTelegramCallbacks(
   };
   let stopped = false;
   let offset = Number(opts.store?.getSetting(TG_OFFSET)) || 0;
+  // Register the command menu (tooltip) once; a failure here must not stop the poller.
+  if (opts.commands?.menu?.length) {
+    void api("setMyCommands", { commands: opts.commands.menu }).catch((e: unknown) => warn(`telegram setMyCommands: ${errMessage(e)}`));
+  }
   void (async () => {
     while (!stopped) {
       try {

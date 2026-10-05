@@ -34,7 +34,7 @@ export interface AppContext {
   close(): Promise<void>;
 }
 
-const resume: ResumeDeps = {
+export const resume: ResumeDeps = {
   loadCV: async (p) => loadCV(p),
   renderTex,
   async buildPdf(o) {
