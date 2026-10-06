@@ -262,7 +262,9 @@ describe("chats.sync", () => {
     h = chatHarness({ habr: client });
     h.hh.listThreads.mockResolvedValue([]);
     await h.sync();
-    expect(client.sendMessage).toHaveBeenCalledTimes(1);
-    expect(h.tasks()[0]!.state).toBe("sent");
+    // HABR_AUTO_REPLY is off: the recruiter's question is forwarded to Telegram, not swallowed by the survey.
+    expect(client.sendMessage).not.toHaveBeenCalled();
+    expect(h.tasks()).toHaveLength(0);
+    expect(String(h.notifier.alert.mock.calls[0]![1])).toContain("Готовы к офису?");
   });
 });

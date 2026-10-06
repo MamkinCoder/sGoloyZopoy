@@ -194,19 +194,19 @@ describe("chats.sync (Habr)", () => {
     };
   };
 
-  it("answers an employer-started chat through a task and stores it as habr:<login>", async () => {
+  it("does not answer an employer-started chat (HABR_AUTO_REPLY off): forwards to Telegram once, stores it as habr:<login>", async () => {
     const hb = habrClient([conv("hr1", false)], [{ id: "m2", mine: false, text: "Здравствуйте! Готовы к офису?" }]);
     h = chatHarness({ habr: hb.client });
     h.hh.listThreads.mockResolvedValue([]);
     await h.sync();
-    expect(hb.client.sendMessage).toHaveBeenCalledWith({}, "hr1", "Да, готов обсудить детали.");
+    await h.sync();
+    expect(hb.client.sendMessage).not.toHaveBeenCalled();
+    expect(h.tasks()).toHaveLength(0);
+    expect(h.notifier.alert).toHaveBeenCalledTimes(1);
+    expect(String(h.notifier.alert.mock.calls[0]![0])).toContain("ждёт ответа");
     const thread = h.store.listChatThreads(h.user.id).find((t) => t.hhNegotiationId === "habr:hr1")!;
     expect(thread.employer).toBe("Acme (HR)");
-    expect(h.store.listChatMessages(thread.id).map((m) => [m.direction, m.answered])).toEqual([
-      ["in", true],
-      ["out", true],
-    ]);
-    expect(h.tasks()[0]).toMatchObject({ state: "sent", target: "hr1" });
+    expect(h.store.listChatMessages(thread.id).map((m) => [m.direction, m.answered])).toEqual([["in", false]]);
   });
 
   it("never replies in a chat the seeker started: forwards to Telegram; ignores Habr's own survey", async () => {
@@ -233,7 +233,8 @@ describe("chats.sync (Habr)", () => {
     h = chatHarness({ habr: hb.client });
     h.hh.listThreads.mockResolvedValue([]);
     await h.sync();
-    expect(hb.client.sendMessage).toHaveBeenCalledTimes(1); // the recruiter's question is answered
+    expect(hb.client.sendMessage).not.toHaveBeenCalled();
+    expect(String(h.notifier.alert.mock.calls[0]![1])).toContain("Когда удобно созвониться?"); // the recruiter's question reaches Telegram
     await h.sync();
     await h.sync();
     // The survey card (q1) never appears among the page's messages: remembered, so no page load per sync.

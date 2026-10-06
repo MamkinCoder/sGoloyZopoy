@@ -311,7 +311,8 @@ spellings where the docs and the model differ (`tg_chat_id`/`tgChatId`, `base_ur
       active user) reads the chats, stores messages and keeps the old side effects (invitation alert + `chats.prep`
       brief, rejection feedback request, forwarding feedback after a rejection, hh bot surveys, follow-ups), then
       opens a reply task (`chat_tasks`) for every thread with unanswered employer messages (only those after our
-      last message in the thread). hh threads come from `/applicant/negotiations` plus the hh.ru/chat list (first
+      last message in the thread). Habr Career threads get no reply task while `HABR_AUTO_REPLY` (`agent/chats/habr.ts`)
+      is off: a new employer message there is only sent to Telegram («ждёт ответа») and answered by hand. hh threads come from `/applicant/negotiations` plus the hh.ru/chat list (first
       page + its paging call while the list is newer than `chat_track_since`, or than the previous read minus an hour
       (internal key `chat_list_read:<userId>`), at most 5 pages; at most 10 chats
       found only there are opened per sync): employer-initiated chats (hh «ИИ-помощник» outreach) have no

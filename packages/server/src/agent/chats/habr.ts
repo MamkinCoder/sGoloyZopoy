@@ -1,5 +1,6 @@
 // chats.sync, Habr Career part. Conversations are person-to-person (a recruiter writes after a response or on
-// their own). A thread the employer started gets a reply task like hh; a thread the seeker started (e.g. a
+// their own). With HABR_AUTO_REPLY a thread the employer started gets a reply task like hh; otherwise a new
+// employer message only goes to Telegram and the seeker answers by hand. A thread the seeker started (e.g. a
 // referral ask) is never answered by the bot: new incoming messages there only go to Telegram. Invitations
 // and Habr's own «вы договорились о работе?» survey are handled here too.
 import type { ChatMessage, User } from "@sgz/shared";
@@ -8,6 +9,9 @@ import { errMessage } from "../../runner/util.js";
 import { userNotifier, type ChatEnv } from "./env.js";
 import { CHAT_TRACK_SINCE_DEFAULT } from "./hh.js";
 import { habrPageMessage, reconcileThread, settleThread, unansweredIds } from "./tasks.js";
+
+/** Off: the bot never answers in Habr Career chats (hh is unaffected). Flip to true to bring the reply tasks back. */
+export const HABR_AUTO_REPLY = false;
 
 /** Chat threads of Habr conversations live next to hh ones, keyed "habr:<login>". */
 export const habrThreadKey = (login: string): string => `habr:${login}`;
@@ -30,7 +34,8 @@ export async function syncHabrChats(env: ChatEnv, user: User): Promise<void> {
     // messages) or ours (our replies are stored without Habr's id), nothing pending.
     const seenKey = `habr_last_seen:${key}`;
     const seen = lm.isMine || stored.some((m) => m.hhMessageId === lm.id) || env.store.getSetting(seenKey) === lm.id;
-    if (prev && seen && !unansweredIds(stored).length) continue;
+    // Without auto-reply an unanswered message stays unanswered, so only the seen check decides (no re-alert per sync).
+    if (prev && seen && (!HABR_AUTO_REPLY || !unansweredIds(stored).length)) continue;
     const employer = c.company ? `${c.company} (${c.name})` : c.name;
     const url = conversationUrl(c.login);
     try {
@@ -67,6 +72,10 @@ export async function syncHabrChats(env: ChatEnv, user: User): Promise<void> {
       }
       if (!detail.writable) {
         settleThread(env, thread.id, "чат закрыт для сообщений");
+        continue;
+      }
+      if (!HABR_AUTO_REPLY) {
+        await userNotifier(env, user.id).alert(`Хабр Карьера: ${employer} ждёт ответа`, `${user.name}: ${fresh.map((m) => m.text).join("\n\n").slice(0, 1500)}\n${url}`).catch(() => undefined);
         continue;
       }
       reconcileThread(env, thread, c.login);
