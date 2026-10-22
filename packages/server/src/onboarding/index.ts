@@ -37,6 +37,10 @@ export function wireOnboarding(app: AppContext) {
       if (!made) throw new Error("мастер создания резюме на hh.ru не дошёл до конца");
       return "Резюме на hh.ru есть. Дальше я сам размножу его под нужные направления и начну откликаться.";
     },
+    showHabr(user) {
+      const out = paths.habrResumeProposal(cfg, user.slug);
+      return existsSync(out) ? renderProposal((JSON.parse(readFileSync(out, "utf8")) as { proposal: HabrResumeProposal }).proposal) : null;
+    },
     async proposeHabr(user) {
       await connector.exclusive(() => habrResume(["--user", user.slug]));
       const out = paths.habrResumeProposal(cfg, user.slug);

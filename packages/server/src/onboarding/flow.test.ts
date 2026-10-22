@@ -39,6 +39,7 @@ function setup(over: Partial<OnboardDeps> = {}) {
     proposeHabr: async () => "proposal",
     applyHabr: async () => undefined,
     habrLoggedIn: () => true,
+    showHabr: () => "proposal",
     now: () => new Date("2026-10-19T00:00:00Z"),
     ...over,
   };
@@ -134,6 +135,24 @@ describe("onboarding conversation", () => {
     expect(await ob.text("7", "готово")).toContain("Готовлю резюме");
     await vi.waitFor(async () => expect(await ob.text("7", "ок")).toContain("Готово"));
     expect(users[0]!.active).toBe(true);
+  });
+
+  it("a long Habr proposal goes out in parts, and /onboard or «покажи» sends it again", async () => {
+    const asks: string[] = [];
+    const long = "строка про опыт\n".repeat(600);
+    const { ob, users } = setup({
+      proposeHabr: async () => long,
+      showHabr: () => long,
+      notifier: { report: async () => undefined, alert: async () => undefined, ask: async (t: string) => void asks.push(t) },
+    });
+    const code = /\/start (\w+)/.exec(ob.invite())![1]!;
+    ob.redeem("7", `/start ${code}`);
+    for (const t of ["Аня", "нет", "devops", "Docker", "2 года", "пропустить", "Москва", "ок", "пропустить", "готово"]) await ob.text("7", t);
+    await vi.waitFor(() => expect(asks.length).toBeGreaterThan(1));
+    expect(asks.every((a) => a.length <= 4096)).toBe(true);
+    const first = asks.length;
+    expect(ob.resume(users[0]!, "7")).toContain("несколькими сообщениями");
+    await vi.waitFor(() => expect(asks.length).toBe(first * 2));
   });
 
   it("rejects a non-PDF and a chat without onboarding stays silent", async () => {

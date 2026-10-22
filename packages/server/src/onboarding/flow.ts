@@ -5,7 +5,7 @@
 // slow parts (resume creation) run in the background and report through the notifier.
 import { randomBytes } from "node:crypto";
 import { errMessage, notifierFor, type Notifier, type Profile, type Store, type User } from "@sgz/shared";
-import { escapeHtml } from "../notify/format.js";
+import { chunkMessage, escapeHtml } from "../notify/format.js";
 import type { CVDoc } from "../resume/yaml.js";
 import { buildProfile, summaryText, type Answers } from "./build.js";
 import type { Connector, Site } from "./connect.js";
@@ -38,6 +38,8 @@ export interface OnboardDeps {
   prepareHh(user: User): Promise<string>;
   /** Habr: builds the proposal from the saved profile (nothing is written on Habr) and returns it as text; `apply` writes it. */
   proposeHabr(user: User): Promise<string>;
+  /** The proposal already built for this user as text (no new LLM call), null when there is none. */
+  showHabr(user: User): string | null;
   applyHabr(user: User): Promise<void>;
   /** The owner has already saved this user's Habr login (`sgz habr-login`, copied to the Pi): no password through Telegram needed. */
   habrLoggedIn(user: User): boolean;
@@ -63,7 +65,7 @@ const ASK: Record<Step, (s: State) => string> = {
   hh_code: () => "Пришли код сюда. Если не пришёл, напиши «заново» или «пропустить».",
   habr_id: () => "Теперь Хабр Карьера: пришли e-mail от аккаунта (аккаунта нет - зарегистрируйся на career.habr.com и пришли e-mail). Если Хабр просит капчу или вход тебе уже подключил владелец, напиши «готово». Или «пропустить».",
   habr_pass: () => "Пришли пароль. Сообщение с ним я сразу удалю, пароль нигде не храню, сохраняется только вход. Или «пропустить».",
-  habr_review: () => "Применить это резюме на Хабре? «ок» или «пропустить».",
+  habr_review: () => "Применить это резюме на Хабре? «ок», «пропустить» или «покажи» (пришлю ещё раз).",
 };
 
 export function createOnboarding(d: OnboardDeps) {
@@ -77,7 +79,13 @@ export function createOnboarding(d: OnboardDeps) {
     if (!u) throw new Error("пользователь не найден");
     return u;
   };
-  const tell = (user: User, text: string): void => void notifierFor(d.notifier, user, "dm").ask?.(escapeHtml(text), [])?.catch(() => undefined);
+  // A Telegram message holds 4096 chars; a Habr proposal is longer, so it goes in parts.
+  const tell = (user: User, text: string): void => {
+    const n = notifierFor(d.notifier, user, "dm");
+    void (async () => {
+      for (const part of chunkMessage(escapeHtml(text))) await n.ask?.(part, []);
+    })().catch(() => undefined);
+  };
   const go = (chatId: string, s: State, step: Step, lead = ""): string => {
     save(chatId, { ...s, step });
     return `${lead ? `${lead}\n\n` : ""}${ASK[step]({ ...s, step })}`;
@@ -101,6 +109,7 @@ export function createOnboarding(d: OnboardDeps) {
   /** An unfinished onboarding asks its current question again; `restart` (or nothing in progress) starts over. */
   function resume(user: User, chatId: string, restart = false): string {
     const s = load(chatId);
+    if (s?.step === "habr_review" && s.proposalReady && !restart) return sendProposal(user, s);
     return s && !restart ? `Продолжаем с того места, где остановились.\n\n${ASK[s.step](s)}` : start(user, chatId);
   }
 
@@ -132,6 +141,14 @@ export function createOnboarding(d: OnboardDeps) {
       return `${errMessage(e)}. Попробуй ещё раз или «пропустить».`;
     }
     return site === "hh" ? go(chatId, s, "hh_code", `Запросил код для ${id.trim()}.`) : go(chatId, s, "habr_pass");
+  }
+
+  /** Shows the built Habr proposal again (in parts); true when there was one. */
+  function sendProposal(user: User, s: State): string {
+    const p = d.showHabr(user);
+    if (!p) return ASK.habr_review(s);
+    tell(user, `Резюме для Хабра:\n\n${p}\n\n${ASK.habr_review(s)}`);
+    return "Присылаю резюме для Хабра, оно длинное, придёт несколькими сообщениями.";
   }
 
   /** Habr login is in place: the proposal is built in the background and shown for «ок». */
@@ -220,6 +237,7 @@ export function createOnboarding(d: OnboardDeps) {
       }
       case "habr_review":
         if (!s.proposalReady) return "Ещё готовлю резюме, минутку.";
+        if (/^(покажи|показать|пришли)/i.test(t)) return sendProposal(user, s);
         if (YES.test(t)) {
           try {
             await d.applyHabr(user);

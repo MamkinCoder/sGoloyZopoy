@@ -263,8 +263,11 @@ export async function writeHabrProfile(s: BrowserSession, p: HabrResumeProposal,
     q.value = ${JSON.stringify(String(QUALIFICATIONS[p.qualification]))};
     q.dispatchEvent(new Event("change", { bubbles: true }));
     const specs = ${JSON.stringify(p.specializations.map(String))};
-    for (const cb of f.querySelectorAll('input[name="user[raw_specialization_ids][]"]')) if (cb.checked && !specs.includes(cb.value)) cb.click();
-    for (const cb of f.querySelectorAll('input[name="user[raw_specialization_ids][]"]')) if (!cb.checked && specs.includes(cb.value)) cb.click();
+    // No known specialization for this person (e.g. a manager): leave what the profile has, never clear it.
+    if (specs.length) {
+      for (const cb of f.querySelectorAll('input[name="user[raw_specialization_ids][]"]')) if (cb.checked && !specs.includes(cb.value)) cb.click();
+      for (const cb of f.querySelectorAll('input[name="user[raw_specialization_ids][]"]')) if (!cb.checked && specs.includes(cb.value)) cb.click();
+    }
     for (const i of f.querySelectorAll('input[name="user[user_skills_ids][]"]')) i.disabled = true;
     for (const id of ids.slice(0, ${MAX_SKILLS})) {
       const i = document.createElement("input");
