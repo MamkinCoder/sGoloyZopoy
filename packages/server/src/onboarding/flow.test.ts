@@ -38,6 +38,7 @@ function setup(over: Partial<OnboardDeps> = {}) {
     prepareHh: async () => "ok",
     proposeHabr: async () => "proposal",
     applyHabr: async () => undefined,
+    habrLoggedIn: () => true,
     now: () => new Date("2026-10-19T00:00:00Z"),
     ...over,
   };
@@ -123,6 +124,16 @@ describe("onboarding conversation", () => {
     const user = users[0]!;
     expect(ob.resume(user, "7")).toMatch(/Продолжаем.*\n\nОткуда ты/s);
     expect(ob.resume(user, "7", true)).toContain("Как тебя зовут");
+  });
+
+  it("«готово» at the Habr step uses a login the owner saved: no password, straight to the proposal", async () => {
+    const { ob, users } = setup();
+    const code = /\/start (\w+)/.exec(ob.invite())![1]!;
+    ob.redeem("7", `/start ${code}`);
+    for (const t of ["Аня", "нет", "devops", "Docker", "2 года", "пропустить", "Москва", "ок", "пропустить"]) await ob.text("7", t);
+    expect(await ob.text("7", "готово")).toContain("Готовлю резюме");
+    await vi.waitFor(async () => expect(await ob.text("7", "ок")).toContain("Готово"));
+    expect(users[0]!.active).toBe(true);
   });
 
   it("rejects a non-PDF and a chat without onboarding stays silent", async () => {

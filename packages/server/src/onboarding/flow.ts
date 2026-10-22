@@ -39,6 +39,8 @@ export interface OnboardDeps {
   /** Habr: builds the proposal from the saved profile (nothing is written on Habr) and returns it as text; `apply` writes it. */
   proposeHabr(user: User): Promise<string>;
   applyHabr(user: User): Promise<void>;
+  /** The owner has already saved this user's Habr login (`sgz habr-login`, copied to the Pi): no password through Telegram needed. */
+  habrLoggedIn(user: User): boolean;
   now(): Date;
 }
 
@@ -59,7 +61,7 @@ const ASK: Record<Step, (s: State) => string> = {
   confirm: () => "Всё верно? Напиши «ок», либо «заново».",
   hh_id: () => "Профиль сохранён. Подключаем hh.ru: пришли телефон или e-mail от аккаунта hh, я запрошу код (аккаунта нет - создастся при входе). Или «пропустить».",
   hh_code: () => "Пришли код сюда. Если не пришёл, напиши «заново» или «пропустить».",
-  habr_id: () => "Теперь Хабр Карьера: пришли e-mail от аккаунта (аккаунта нет - зарегистрируйся на career.habr.com и пришли e-mail). Или «пропустить».",
+  habr_id: () => "Теперь Хабр Карьера: пришли e-mail от аккаунта (аккаунта нет - зарегистрируйся на career.habr.com и пришли e-mail). Если Хабр просит капчу или вход тебе уже подключил владелец, напиши «готово». Или «пропустить».",
   habr_pass: () => "Пришли пароль. Сообщение с ним я сразу удалю, пароль нигде не храню, сохраняется только вход. Или «пропустить».",
   habr_review: () => "Применить это резюме на Хабре? «ок» или «пропустить».",
 };
@@ -132,6 +134,21 @@ export function createOnboarding(d: OnboardDeps) {
     return site === "hh" ? go(chatId, s, "hh_code", `Запросил код для ${id.trim()}.`) : go(chatId, s, "habr_pass");
   }
 
+  /** Habr login is in place: the proposal is built in the background and shown for «ок». */
+  function habrConnected(chatId: string, s: State, user: User): string {
+    const next: State = { ...s, connected: [...s.connected, "habr"], proposalReady: false };
+    save(chatId, { ...next, step: "habr_review" });
+    void d.proposeHabr(user).then((p) => {
+      save(chatId, { ...(load(chatId) ?? next), step: "habr_review", proposalReady: true });
+      tell(user, `Резюме для Хабра:\n\n${p}\n\n${ASK.habr_review(next)}`);
+    }).catch((e: unknown) => {
+      tell(user, "Вошёл на Хабр, но резюме подготовить не вышло. Передал владельцу.");
+      void d.notifier.alert(`Онбординг ${user.slug}: резюме Хабр`, errMessage(e)).catch(() => undefined);
+      save(chatId, { ...(load(chatId) ?? next), step: "habr_review", proposalReady: true });
+    });
+    return "Вошёл на Хабр. Готовлю резюме и пришлю на проверку, пара минут.";
+  }
+
   async function text(chatId: string, raw: string, msg?: { remove(): Promise<void> }): Promise<string | null> {
     const s = load(chatId);
     if (!s) return null;
@@ -187,6 +204,7 @@ export function createOnboarding(d: OnboardDeps) {
         return go(chatId, { ...s, connected: [...s.connected, "hh"] }, "habr_id", "hh.ru подключён. Резюме готовлю в фоне, напишу, когда будет готово.");
       }
       case "habr_id":
+        if (/^(готово|вошёл|вошел)\W*$/i.test(t)) return d.habrLoggedIn(user) ? habrConnected(chatId, s, user) : "Входа на Хабр пока нет. Попроси владельца подключить его или напиши «пропустить».";
         return SKIP.test(t) ? finish(chatId, s) : connect(chatId, s, "habr", t);
       case "habr_pass": {
         if (SKIP.test(t)) return finish(chatId, s);
@@ -198,17 +216,7 @@ export function createOnboarding(d: OnboardDeps) {
           return `${errMessage(e)}. Пришли e-mail заново или «пропустить».`;
         }
         if (!ok) return go(chatId, s, "habr_id", "Не вошёл: e-mail или пароль не подошли.");
-        const next: State = { ...s, connected: [...s.connected, "habr"], proposalReady: false };
-        save(chatId, { ...next, step: "habr_review" });
-        void d.proposeHabr(user).then((p) => {
-          save(chatId, { ...(load(chatId) ?? next), step: "habr_review", proposalReady: true });
-          tell(user, `Резюме для Хабра:\n\n${p}\n\n${ASK.habr_review(next)}`);
-        }).catch((e: unknown) => {
-          tell(user, "Вошёл на Хабр, но резюме подготовить не вышло. Передал владельцу.");
-          void d.notifier.alert(`Онбординг ${user.slug}: резюме Хабр`, errMessage(e)).catch(() => undefined);
-          save(chatId, { ...(load(chatId) ?? next), step: "habr_review", proposalReady: true });
-        });
-        return "Вошёл на Хабр. Готовлю резюме и пришлю на проверку, пара минут.";
+        return habrConnected(chatId, s, user);
       }
       case "habr_review":
         if (!s.proposalReady) return "Ещё готовлю резюме, минутку.";

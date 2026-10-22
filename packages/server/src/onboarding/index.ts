@@ -44,6 +44,7 @@ export function wireOnboarding(app: AppContext) {
       const { proposal } = JSON.parse(readFileSync(out, "utf8")) as { proposal: HabrResumeProposal };
       return renderProposal(proposal);
     },
+    habrLoggedIn: (user) => existsSync(paths.habrCookies(cfg, user.slug)),
     async applyHabr(user) {
       await connector.exclusive(() => habrResume(["--user", user.slug, "--apply"]));
     },
