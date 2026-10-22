@@ -146,8 +146,16 @@ export function createConnector(cfg: Config, launcher: BrowserLauncher): Connect
         } else {
           await wait(l.s, HABR.password, "поле пароля");
           await l.s.fill(HABR.password, secret);
-          await l.s.pressKey("Enter");
+          // fill() does not focus the field, so a bare Enter goes nowhere: press the form's own «Войти» button.
+          await l.s.evaluate(`(() => { const f = document.querySelector(${JSON.stringify(HABR.password)}).form; const b = [...f.querySelectorAll("button, input[type=submit]")].find((x) => /войти/i.test(x.textContent || x.value || "")); if (b) b.click(); else f.requestSubmit(); })()`);
           for (let i = 0; i < 20 && /account\.habr\.com/.test(await l.s.url().catch(() => "")); i++) await new Promise((r) => setTimeout(r, 1000));
+          if (/account\.habr\.com/.test(await l.s.url().catch(() => ""))) {
+            // Still on the login form: say what Habr says (wrong password, captcha, a code) instead of guessing.
+            const said = await l.s.evaluate<string>(`(() => { const e = [...document.querySelectorAll("[class*=error], [class*=alert], [class*=flash], [class*=invalid], [role=alert]")].map((x) => (x.textContent || "").trim()).filter(Boolean)[0]; return (e || document.body.innerText.replace(/\\s+/g, " ")).slice(0, 220); })()`).catch(() => "");
+            await l.s.snapshot("onboard-habr-login-failed").catch(() => "");
+            if (/капч|анти-робот/i.test(said)) throw new Error("Пароль, скорее всего, верный: Хабр просит пройти капчу, а бот её пройти не может. Напиши «пропустить», Хабр подключим другим способом");
+            throw new Error(`Хабр не пустил: «${said}»`);
+          }
           await l.s.goto("https://career.habr.com/");
           if (!(await habr.checkLogin(l.s))) return false;
           await save(paths.habrCookies(cfg, slug), (await l.s.cookies()).filter((c) => HABR_COOKIE.test(c.domain.replace(/^\./, ""))));
