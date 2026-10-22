@@ -39,14 +39,14 @@ export function wireOnboarding(app: AppContext) {
     },
     showHabr(user) {
       const out = paths.habrResumeProposal(cfg, user.slug);
-      return existsSync(out) ? renderProposal((JSON.parse(readFileSync(out, "utf8")) as { proposal: HabrResumeProposal }).proposal) : null;
+      return existsSync(out) ? renderProposal((JSON.parse(readFileSync(out, "utf8")) as { proposal: HabrResumeProposal }).proposal, true) : null;
     },
     async proposeHabr(user) {
       await connector.exclusive(() => habrResume(["--user", user.slug]));
       const out = paths.habrResumeProposal(cfg, user.slug);
       if (!existsSync(out)) throw new Error("предложение не создано");
       const { proposal } = JSON.parse(readFileSync(out, "utf8")) as { proposal: HabrResumeProposal };
-      return renderProposal(proposal);
+      return renderProposal(proposal, true);
     },
     habrLoggedIn: (user) => existsSync(paths.habrCookies(cfg, user.slug)),
     async applyHabr(user) {

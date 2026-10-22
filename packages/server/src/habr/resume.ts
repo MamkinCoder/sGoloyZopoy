@@ -9,13 +9,14 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { BrowserSession, Profile } from "@sgz/shared";
 import { claimRegex, stripNeverClaimSentences } from "../llm/guards.js";
+import { parsePeriod, type Period } from "./period.js";
+import { SPECIALIZATIONS } from "./specializations.js";
 import { HABR_ORIGIN, extractSsrState, loginFromHeader, parseExperiences, parseResumeState, type HabrResumeState } from "./state.js";
 
 export const MAX_SKILLS = 30;
 export const MAX_TITLE = 80;
 export const QUALIFICATIONS: Record<string, number> = { Junior: 3, Middle: 4, Senior: 5 };
-/** Development group of Habr specializations (id → title); a profile holds at most 2. */
-export const SPECIALIZATIONS: Record<number, string> = { 2: "Бэкенд разработчик", 3: "Фронтенд разработчик", 4: "Фулстек разработчик", 82: "Веб-разработчик", 72: "Разработчик приложений" };
+export { SPECIALIZATIONS };
 
 export interface HabrResumeProposal {
   title: string;
@@ -24,7 +25,16 @@ export interface HabrResumeProposal {
   about: string;
   skills: string[];
   experiences: { company: string; description: string }[];
+  /** Jobs from the base CVs that the Habr profile does not have yet: created on apply. Everything but the description is the CV's own. */
+  newExperiences?: NewExperience[];
   notes: string[];
+}
+
+export interface NewExperience {
+  company: string;
+  position: string;
+  period: Period;
+  description: string;
 }
 
 const norm = (s: string): string => s.toLowerCase().replace(/\.js\b/g, "").replace(/[^a-zа-яё0-9+#]+/gi, "");
@@ -114,7 +124,10 @@ export async function resolveHabrSkills(names: string[], get: (url: string) => P
 }
 
 /** Human-readable proposal for the terminal / the orchestrator. */
-export function renderProposal(p: HabrResumeProposal): string {
+/** `brief` (Telegram): job texts cut to their start and at most 6 short notes; the full text is what gets written. */
+export function renderProposal(p: HabrResumeProposal, brief = false): string {
+  const cut = (s: string, n: number) => (brief && s.length > n ? `${s.slice(0, n).trimEnd()}… (полностью запишу при «ок»)` : s);
+  const notes = brief ? p.notes.filter((n) => !/^guard:/.test(n)).slice(0, 6).map((n) => (n.length > 220 ? `${n.slice(0, 220)}…` : n)) : p.notes;
   return [
     `Заголовок: ${p.title}`,
     `Специализации: ${p.specializations.map((id) => SPECIALIZATIONS[id] ?? id).join(", ")}`,
@@ -123,10 +136,78 @@ export function renderProposal(p: HabrResumeProposal): string {
     "",
     "О себе:",
     p.about,
-    ...p.experiences.flatMap((e) => ["", `Опыт - ${e.company}:`, e.description]),
-    ...(p.notes.length ? ["", "Заметки:", ...p.notes.map((n) => `- ${n}`)] : []),
+    ...p.experiences.flatMap((e) => ["", `Опыт - ${e.company}:`, cut(e.description, 350)]),
+    ...(p.newExperiences ?? []).flatMap((e) => ["", `НОВОЕ место работы - ${e.company} (${e.position}, ${ymd(e.period.start)} - ${e.period.end ? ymd(e.period.end) : "по настоящее время"}):`, cut(e.description, 350)]),
+    ...(notes.length ? ["", "Заметки:", ...notes.map((n) => `- ${n}`)] : []),
   ].join("\n");
 }
+
+const ymd = (x: { y: number; m: number }): string => `${String(x.m).padStart(2, "0")}.${x.y}`;
+const MAX_AGE_YEARS = 4;
+const alnum = (s: string): string => s.toLowerCase().replace(/[^a-zа-яё0-9]+/g, "");
+
+/**
+ * Jobs of the base CVs the Habr profile lacks (company names compared loosely): company, position, dates and place come from
+ * the CV only, the description is the model's (`written`, by company) or, without one, the CV's own summary and bullets.
+ * Sentences about never-claim skills are dropped; a job whose period cannot be read is left out and said in `notes`.
+ */
+export function newExperiencesFrom(
+  cvJobs: { company: string; role: string; period: string; summary: string; bullets: string[]; stack: string[] }[],
+  habr: { title: string; duration?: string }[],
+  written: { company: string; description: string }[],
+  profile: Pick<Profile, "never_claim_skills">,
+  now = new Date(),
+): { items: NewExperience[]; notes: string[] } {
+  const have = habr.map((h) => alnum(h.title)).filter(Boolean);
+  const habrStarts = habr.map((h) => parsePeriod(h.duration ?? "")?.start).filter((x): x is NonNullable<typeof x> => !!x);
+  const months = (x: { y: number; m: number }) => x.y * 12 + x.m;
+  const seen = new Set<string>();
+  const items: NewExperience[] = [];
+  const notes: string[] = [];
+  for (const j of cvJobs) {
+    const k = alnum(j.company);
+    if (!k || seen.has(k) || have.some((h) => h.includes(k) || k.includes(h))) continue;
+    seen.add(k);
+    const period = parsePeriod(j.period);
+    if (!period) {
+      notes.push(`место «${j.company}» не добавлено на Хабр: не разобрал срок «${j.period}», добавь руками`);
+      continue;
+    }
+    // The same job under another spelling («ТРОФФКОНС» / «TROFFCONS»): it starts when a Habr job starts.
+    if (habrStarts.some((h) => Math.abs(months(h) - months(period.start)) <= 2)) continue;
+    // Old jobs are left to the person: adding them to a public profile is her call, not the bot's.
+    if (period.start.y < now.getFullYear() - MAX_AGE_YEARS) {
+      notes.push(`старое место «${j.company}» (${j.period}) на Хабр не добавлял, добавь руками, если нужно`);
+      continue;
+    }
+    const own = written.find((w) => alnum(w.company) === k)?.description.trim();
+    const fallback = [j.summary, ...j.bullets.map((b) => `- ${b}`), j.stack.length ? `Технологии: ${j.stack.join(", ")}` : ""].filter(Boolean).join("\n");
+    const description = stripNeverClaimSentences(own || fallback, profile.never_claim_skills).trim();
+    if (description) items.push({ company: j.company.trim(), position: j.role.trim(), period, description });
+  }
+  return { items, notes };
+}
+
+/** Submits the «Добавить опыт работы» form (the new_experience form; required by Habr: company, specialization, qualification). */
+export const createExperienceJs = (e: NewExperience, html: string, spec: string, qual: string): string => `(async () => {
+  const f = document.getElementById("new_experience");
+  if (!f) return { status: 0, body: "no form", filled: [] };
+  const fd = new FormData(f);
+  fd.set("experience[company_name]", ${JSON.stringify(e.company)});
+  fd.set("experience[position]", ${JSON.stringify(e.position)});
+  fd.set("experience[specialization_id]", ${JSON.stringify(spec)});
+  fd.set("experience[qualification_id]", ${JSON.stringify(qual)});
+  fd.set("experience[start_date(1i)]", ${JSON.stringify(String(e.period.start.y))});
+  fd.set("experience[start_date(2i)]", ${JSON.stringify(String(e.period.start.m))});
+  fd.set("experience[start_date(3i)]", "1");
+  ${e.period.end
+    ? `fd.set("experience[end_date(1i)]", ${JSON.stringify(String(e.period.end.y))}); fd.set("experience[end_date(2i)]", ${JSON.stringify(String(e.period.end.m))}); fd.set("experience[end_date(3i)]", "1");`
+    : `fd.set("experience[end_date(1i)]", ""); fd.set("experience[end_date(2i)]", ""); fd.set("experience[end_date(3i)]", ""); fd.set("presentTime", "on");`}
+  fd.set("experience[description]", ${JSON.stringify(html)});
+  const token = document.querySelector("meta[name=csrf-token]");
+  const r = await fetch(f.action, { method: "POST", body: fd, credentials: "include", headers: { "X-CSRF-Token": token ? token.content : "", "X-Requested-With": "XMLHttpRequest", Accept: "text/javascript, application/json" } });
+  return { status: r.status, body: (await r.text()).slice(0, 300), filled: [] };
+})()`;
 
 /** Plain text (paragraphs, «- » lines) → the HTML the redactor fields store. */
 export function toRedactorHtml(text: string): string {
@@ -307,11 +388,22 @@ export async function writeHabrProfile(s: BrowserSession, p: HabrResumeProposal,
     await sleep(settleMs);
   }
 
+  // 3b. Jobs Habr does not have yet: the «Добавить опыт работы» form.
+  for (const e of p.newExperiences ?? []) {
+    await s.goto(`${HABR_ORIGIN}/profile/experiences/new`);
+    const spec = String(p.specializations[0] ?? 106);
+    const qual = String(QUALIFICATIONS[p.qualification]);
+    const r = (await s.evaluate<{ status: number; body: string } | null>(createExperienceJs(e, toRedactorHtml(e.description), spec, qual))) ?? { status: 0, body: "no result" };
+    out.push(experienceSaved(r) ? `новое место «${e.company}»: отправлено` : `новое место «${e.company}»: НЕ сохранено (HTTP ${r.status}: ${r.body.replace(/\s+/g, " ").slice(0, 200)})`);
+    await sleep(settleMs);
+  }
+
   // Verify from the public resume page.
   await s.goto(`${HABR_ORIGIN}/${login}`, { quick: true });
   const now = parseResumeState(extractSsrState(await s.html()));
   const aboutOk = now.about.slice(0, 40) === p.about.replace(/\s+/g, " ").trim().slice(0, 40) || now.about.includes(p.about.split("\n")[0]!.slice(0, 40));
   out.push(`проверка: о себе ${aboutOk ? "совпадает" : "НЕ совпадает"}, навыков ${now.skills.length}, мест работы ${now.companies.length}`);
+  for (const e of p.newExperiences ?? []) out.push(`проверка: новое место «${e.company}» ${now.companies.some((x) => alnum(x.title) === alnum(e.company)) ? "есть на Хабре" : "НЕ найдено на Хабре"}`);
   for (const e of p.experiences) {
     const c = now.companies.find((x) => x.title.trim().toLowerCase() === e.company.trim().toLowerCase());
     if (c) out.push(`проверка: опыт «${e.company}» ${sameStart(c.description, e.description) ? "совпадает" : "НЕ совпадает"}`);

@@ -5,13 +5,13 @@
 // With --apply: writes that proposal to the Habr edit pages. Run it only after the human approved the proposal.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { paths, type BrowserSession, type Cookie, type KbBrief } from "@sgz/shared";
+import { paths, tagKey, type BrowserSession, type Cookie, type KbBrief } from "@sgz/shared";
 import { openStore } from "../db/index.js";
 import { kbBrief, withKbNever } from "../kb/context.js";
 import { getJson } from "../career/http.js";
 import { loadConfig, loadProfileYaml } from "../config/index.js";
 import { createHabrClient } from "../habr/client.js";
-import { SPECIALIZATIONS, guardProposal, readHabrProfile, renderProposal, resolveHabrSkills, writeHabrProfile, type HabrResumeProposal } from "../habr/resume.js";
+import { MAX_SKILLS, SPECIALIZATIONS, guardProposal, newExperiencesFrom, readHabrProfile, renderProposal, resolveHabrSkills, writeHabrProfile, type HabrResumeProposal } from "../habr/resume.js";
 import { claimRegex } from "../llm/guards.js";
 import { createLLM, renderPrompt } from "../llm/index.js";
 import { neverClaimList, profileForLLM } from "../llm/format.js";
@@ -26,6 +26,7 @@ const SCHEMA = `\`\`\`json
   "about": string,                 // 4-6 абзацев через пустую строку
   "skills": string[],              // 25-30
   "experiences": [{ "company": string, "description": string }],
+  "new_experiences": [{ "company": string, "description": string }],
   "notes": string[]
 }
 \`\`\``;
@@ -121,15 +122,34 @@ export const habrResume = async (args: string[]): Promise<void> => {
   const allowed = [...profile.verified_skills, ...cvs.flatMap((cv) => [...cv.skills.flatMap((g) => g.items), ...cv.jobs.flatMap((j) => j.stack)])];
   const guarded = guardProposal(raw, allowed, profile, current.resume.companies.map((c) => c.title));
   const mapped = await resolveHabrSkills(guarded.skills, (u) => getJson(u));
+  // Jobs of the base CVs Habr does not have: created on apply, their facts (company, position, dates) are the CV's.
+  const fresh = newExperiencesFrom(cvs.flatMap((cv) => cv.jobs), current.resume.companies, (raw as { new_experiences?: { company: string; description: string }[] }).new_experiences ?? [], profile);
   // The dictionary titles are what gets published: never_claim is checked on them too, not only on the LLM's names.
   const never = claimRegex(profile.never_claim_skills);
+  // Habr only takes skills from its dictionary and a person's list is often mostly outside it: keep trying the rest of the
+  // verified skills and CV stacks (same facts, only the ones the model did not pick) until the profile is full.
+  const skills = mapped.skills.filter((t) => !never?.test(t));
+  const triedKeys = new Set([...guarded.skills, ...mapped.wider.map((w) => w.name)].map(tagKey));
+  const pool = [...new Map(allowed.filter((a) => a.trim() && !triedKeys.has(tagKey(a)) && !never?.test(a)).map((a) => [tagKey(a), a])).values()];
+  const filled: string[] = [];
+  if (skills.length < MAX_SKILLS && pool.length) {
+    for (const t of (await resolveHabrSkills(pool.slice(0, 80), (u) => getJson(u))).skills) {
+      if (skills.length < MAX_SKILLS && !never?.test(t) && !skills.some((x) => x.toLowerCase() === t.toLowerCase())) {
+        skills.push(t);
+        filled.push(t);
+      }
+    }
+  }
   const proposal: HabrResumeProposal = {
     ...guarded,
-    skills: mapped.skills.filter((t) => !never?.test(t)),
+    skills,
+    ...(fresh.items.length ? { newExperiences: fresh.items } : {}),
     notes: [
       ...guarded.notes,
+      ...fresh.notes,
       ...mapped.skills.filter((t) => never?.test(t)).map((t) => `guard: навык «${t}» из словаря Хабра убран - он в never_claim`),
-      ...mapped.missing.map((m) => `навык «${m}» не найден в словаре Хабра, не будет добавлен`),
+      ...(filled.length ? [`добавлены из твоего резюме и профиля (модель их не выбрала): ${filled.join(", ")}`] : []),
+      ...(mapped.missing.length ? [`в словаре Хабра нет, не добавлены: ${mapped.missing.join(", ")}`] : []),
       // Habr requires a qualification per job; hh-imported jobs have none, and filling it is a claim about past seniority.
       ...(guarded.experiences.length ? [`опыт: где на Хабре у места работы не указана квалификация, при записи будет поставлена «${guarded.qualification}» (обязательное поле) - поправьте на Хабре, если там вы были ниже`] : []),
       ...mapped.wider.map((x) => `навык «${x.name}»: в словаре Хабра только «${x.title}», это другое утверждение - не добавлен, добавьте вручную, если это правда`),
