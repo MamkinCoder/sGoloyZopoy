@@ -211,7 +211,7 @@ interface SpawnResult {
   aborted: boolean;
 }
 
-function spawnCollect(bin: string, args: string[], o: SpawnOpts): Promise<SpawnResult> {
+export function spawnCollect(bin: string, args: string[], o: SpawnOpts): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     const started = Date.now();
     let stdout = "";

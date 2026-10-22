@@ -205,6 +205,40 @@ const sameStart = (a: string, b: string): boolean => {
  * Writes an approved proposal to the Habr profile. Only called by `sgz habr-resume --apply`. Each page is
  * verified after saving; the returned lines say what was written and what could not be.
  */
+/** The skills on the Habr profile now (titles), from the specialization page's state. */
+export async function readHabrSkills(s: BrowserSession): Promise<string[]> {
+  await s.goto(`${HABR_ORIGIN}/profile/specialization`, { quick: true });
+  const st = extractSsrState(await s.html()) as { selectedSkills?: { title: string }[] };
+  return (st.selectedSkills ?? []).map((x) => x.title);
+}
+
+/** Replaces only the skills of the Habr profile (headline, specializations and qualification stay); `titles` are dictionary titles. */
+export async function writeHabrSkills(s: BrowserSession, titles: string[], settleMs = 2500): Promise<{ saved: number; missing: string[] }> {
+  await s.goto(`${HABR_ORIGIN}/profile/specialization`);
+  const js = `(async () => {
+    const f = document.querySelector("#user_resume_headline").closest("form");
+    const ids = [];
+    const missing = [];
+    for (const name of ${JSON.stringify(titles.slice(0, MAX_SKILLS))}) {
+      const r = await fetch("/api/frontend/suggestions/skills?term=" + encodeURIComponent(name), { credentials: "include" });
+      const list = r.ok ? (await r.json()).list || [] : [];
+      const hit = list.find((x) => x.title.toLowerCase() === name.toLowerCase());
+      if (hit && !ids.includes(hit.value)) ids.push(hit.value); else if (!hit) missing.push(name);
+    }
+    for (const i of f.querySelectorAll('input[name="user[user_skills_ids][]"]')) i.disabled = true;
+    for (const id of ids) {
+      const i = document.createElement("input");
+      i.type = "hidden"; i.name = "user[user_skills_ids][]"; i.value = String(id);
+      f.appendChild(i);
+    }
+    f.querySelector('input[type="submit"][name="commit"]').click();
+    return { ids: ids.length, missing };
+  })()`;
+  const r = await s.evaluate<{ ids: number; missing: string[] }>(js);
+  await sleep(settleMs);
+  return { saved: r.ids, missing: r.missing };
+}
+
 export async function writeHabrProfile(s: BrowserSession, p: HabrResumeProposal, settleMs = 2500): Promise<string[]> {
   const out: string[] = [];
   const { login, experiences } = await readHabrProfile(s);

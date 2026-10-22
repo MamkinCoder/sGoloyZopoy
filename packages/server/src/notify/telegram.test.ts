@@ -66,6 +66,90 @@ describe("telegram commands", () => {
   });
 });
 
+describe("telegram group topics", () => {
+  const user = { id: 3, slug: "anya", name: "Аня", tgChatId: "" } as never;
+  const make = (reply: (method: string, body: Record<string, unknown>) => Response) => {
+    const calls: { method: string; body: Record<string, unknown> }[] = [];
+    const settings = new Map<string, string>();
+    const f = (async (url: string, init: { body: string }) => {
+      const method = url.split("/").at(-1)!;
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      calls.push({ method, body });
+      return reply(method, body);
+    }) as unknown as typeof fetch;
+    const store = { getSetting: (k: string) => settings.get(k) ?? null, setSetting: (k: string, v: string) => void settings.set(k, v) };
+    return { calls, settings, n: createTelegram("t", "-100", "http://panel", { fetch: f, store, warn: () => undefined }) };
+  };
+  const ok = (result: unknown) => new Response(JSON.stringify({ ok: true, result }));
+
+  it("a user without a personal chat gets her own topic, made once and reused", async () => {
+    const { calls, settings, n } = make((m) => ok(m === "createForumTopic" ? { message_thread_id: 77 } : { message_id: 1 }));
+    await n.forUser!(user).alert("a", "b");
+    await n.forUser!(user).alert("c", "d");
+    expect(calls.filter((c) => c.method === "createForumTopic")).toHaveLength(1);
+    expect(calls.filter((c) => c.method === "sendMessage").map((c) => [c.body.chat_id, c.body.message_thread_id])).toEqual([["-100", 77], ["-100", 77]]);
+    expect(settings.get("tg_topic:3")).toBe("77");
+  });
+
+  it("with a personal chat: the feed (default) is still her topic, place dm is the personal chat only", async () => {
+    const { calls, n } = make((m) => ok(m === "createForumTopic" ? { message_thread_id: 5 } : { message_id: 1 }));
+    const me = { ...(user as object), tgChatId: "200" } as never;
+    await n.forUser!(me).ask!("vacancy card", [{ text: "ok", data: "x" }]);
+    await n.forUser!(me, "dm").alert("checklist", "b");
+    await n.forUser!(me, "dm").ask!("outcome?", [{ text: "ok", data: "x" }]);
+    expect(calls.filter((c) => c.method === "sendMessage").map((c) => [c.body.chat_id, c.body.message_thread_id])).toEqual([["-100", 5], ["200", undefined], ["200", undefined]]);
+  });
+
+  it("a deleted topic is made again once; no right to make topics falls back quietly", async () => {
+    let first = true;
+    const a = make((m) => {
+      if (m === "sendMessage" && first) return (first = false), new Response(JSON.stringify({ ok: false, description: "Bad Request: message thread not found" }), { status: 400 });
+      return ok(m === "createForumTopic" ? { message_thread_id: 9 } : { message_id: 1 });
+    });
+    a.settings.set("tg_topic:3", "4");
+    await a.n.forUser!(user).alert("a", "b");
+    expect(a.settings.get("tg_topic:3")).toBe("9");
+    const b = make((m) => (m === "createForumTopic" ? new Response(JSON.stringify({ ok: false, description: "not enough rights" }), { status: 400 }) : ok({ message_id: 1 })));
+    await b.n.forUser!(user).alert("a", "b");
+    expect(b.calls.find((c) => c.method === "sendMessage")?.body.message_thread_id).toBeUndefined();
+  });
+});
+
+describe("telegram strangers and files", () => {
+  it("a stranger reaches only onStranger; an allowed chat's PDF reaches onDocument", async () => {
+    const sent: string[] = [];
+    let polls = 0;
+    const fakeFetch = (async (url: string, init: { body: string }) => {
+      const method = url.split("/").at(-1)!;
+      if (method === "getUpdates") {
+        if (polls++) return new Promise(() => undefined);
+        const result = [
+          { update_id: 1, message: { chat: { id: 9 }, message_id: 1, text: "/start abc" } },
+          { update_id: 2, message: { chat: { id: 9 }, message_id: 2, text: "/status" } },
+          { update_id: 3, message: { chat: { id: 42 }, message_id: 3, document: { file_id: "f", file_name: "cv.pdf", file_size: 5 } } },
+        ];
+        return new Response(JSON.stringify({ ok: true, result }));
+      }
+      if (method === "sendMessage") sent.push((JSON.parse(init.body) as { text: string }).text);
+      return new Response(JSON.stringify({ ok: true, result: true }));
+    }) as unknown as typeof fetch;
+    const docs: string[] = [];
+    const stop = startTelegramCallbacks("t", async () => "", {
+      fetch: fakeFetch,
+      commands: {
+        chatIds: ["42"],
+        onCommand: async () => "command",
+        onStranger: async (chat, text) => (text.startsWith("/start") ? `welcome ${chat}` : null),
+        onDocument: async (chat, d) => (docs.push(`${chat}:${d.name}:${d.size}`), "got file"),
+      },
+    });
+    await vi.waitFor(() => expect(sent).toHaveLength(2));
+    stop();
+    expect(sent.sort()).toEqual(["got file", "welcome 9"]);
+    expect(docs).toEqual(["42:cv.pdf:5"]);
+  });
+});
+
 describe("telegram offset", () => {
   it("a free text replayed after a restart is handled once: the offset survives in the store", async () => {
     // Telegram drops an update only when a later getUpdates passes a higher offset; a SIGTERM before that poll
@@ -153,7 +237,7 @@ describe("telegram cards", () => {
     const sent: { url: string; body: Record<string, unknown> }[] = [];
     const fakeFetch = (async (url: string, init: { body: string }) => (sent.push({ url, body: JSON.parse(init.body) as Record<string, unknown> }), new Response(JSON.stringify({ ok: true, result: { message_id: 3 } })))) as unknown as typeof fetch;
     const tg = createTelegram("t", "42", "", { fetch: fakeFetch });
-    const her = tg.forUser!({ tgChatId: "555" });
+    const her = tg.forUser!({ tgChatId: "555" }, "dm");
     expect(await her.ask!("card", [])).toBe(3);
     await her.edit!(3, "card v2", []);
     await her.alert("t", "b");

@@ -26,7 +26,8 @@ import type {
 } from "@sgz/shared";
 import { z, type ZodType } from "zod";
 import { ClaudeError, TIER_MODEL, extractJson, runClaude } from "./claude.js";
-import { neverClaimList, profileForLLM, renderHistory, renderQuestions, renderResumes, renderVacancies, renderVacancy } from "./format.js";
+import { geminiModel, runGemini } from "./gemini.js";
+import { neverClaimList, profileForLLM, renderAnswers, renderHistory, renderQuestions, renderResumes, renderVacancies, renderVacancy } from "./format.js";
 import { LIMITS, blockedTech, claimRegex, ensureDecisions, enforceMax, normalizeProse, sanitizeLetter, stripLinkSentences, stripNeverClaimSentences } from "./guards.js";
 import {
   AnswersSchema,
@@ -79,11 +80,12 @@ export function createLLM(cfg: Config, store: Store | null, opts: LLMOptions = {
 
 async function invoke(ctx: Ctx, task: string, tier: Tier, prompt: string, attempt: number, jsonSchema?: unknown) {
   const started = Date.now();
+  const gemini = ctx.cfg.llmProvider === "gemini";
   const log = (ok: boolean, resultChars: number, error: string, durationMs: number) =>
-    ctx.store?.insertLLMCall({ runId: ctx.runId, task, model: TIER_MODEL[tier], promptChars: prompt.length, resultChars, durationMs, ok, error, attempt });
+    ctx.store?.insertLLMCall({ runId: ctx.runId, task, model: gemini ? geminiModel(tier) : TIER_MODEL[tier], promptChars: prompt.length, resultChars, durationMs, ok, error, attempt });
   try {
-    const r = await runClaude({
-      bin: ctx.cfg.claudeBin || "claude",
+    const r = await (gemini ? runGemini : runClaude)({
+      bin: (gemini ? ctx.cfg.geminiBin : ctx.cfg.claudeBin) || (gemini ? "gemini" : "claude"),
       cwd: ctx.cfg.repoDir,
       tier,
       prompt,
@@ -157,6 +159,21 @@ function makeClient(ctx: Ctx): LLMClient {
         kb: kb?.text,
       });
       const answers = await call(ctx, { task: "answer_questionnaire", tier: "write", prompt, schema: AnswersSchema, array: true });
+      return guardAnswers(qs, answers, blockedTech(profile));
+    },
+
+    async reviseAnswers(p: Profile, vacancy: Vacancy | null, qs: Question[], current: Answer[], instruction: string, kb?: KbBrief): Promise<Answer[]> {
+      const profile = withKbNever(p, kb);
+      const prompt = renderPrompt("revise_questionnaire", {
+        never_claim: neverClaimList(profile),
+        profile: profileForLLM(profile, { contacts: true }),
+        vacancy: vacancy ? renderVacancy(vacancy) : "",
+        questions: renderQuestions(qs),
+        current: renderAnswers(qs, current),
+        instruction,
+        kb: kb?.text,
+      });
+      const answers = await call(ctx, { task: "revise_questionnaire", tier: "write", prompt, schema: AnswersSchema, array: true });
       return guardAnswers(qs, answers, blockedTech(profile));
     },
 

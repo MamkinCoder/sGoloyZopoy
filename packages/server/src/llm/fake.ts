@@ -118,6 +118,11 @@ export class FakeLLM implements LLMClient {
     this.record("answerQuestionnaire", [profile, vacancy, qs, kb]);
     return this.onAnswerQuestionnaire(profile, vacancy, qs);
   }
+  onReviseAnswers: (qs: Question[], current: Answer[], instruction: string) => Answer[] = (_qs, current) => current;
+  async reviseAnswers(profile: Profile, vacancy: Vacancy | null, qs: Question[], current: Answer[], instruction: string, kb?: KbBrief): Promise<Answer[]> {
+    this.record("reviseAnswers", [profile, vacancy, qs, current, instruction, kb]);
+    return this.onReviseAnswers(qs, current, instruction);
+  }
   async answerChat(p: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[], kb?: KbBrief): Promise<ChatReply> {
     const profile = withKbNever(p, kb); // the profile the real client prompts with
     this.record("answerChat", [profile, vacancy, history, choices, kb]);

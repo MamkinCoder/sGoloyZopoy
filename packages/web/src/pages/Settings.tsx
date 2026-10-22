@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import {
   useAdapters,
+  useAutoReply,
+  useSetAutoReply,
   useCareerSiteMutations,
   useCareerSites,
   useLessons,
@@ -29,6 +31,20 @@ const TABS = [
   { key: "schedule", label: "Расписание" },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
+
+/** Does the bot answer employers in chats. Saved at once (not part of the user form); off = it only forwards messages to Telegram. */
+function AutoReplies({ slug }: { slug: string }) {
+  const q = useAutoReply(slug);
+  const set = useSetAutoReply(slug);
+  if (!q.data) return null;
+  const toggle = (site: "hh" | "habr", on: boolean) => set.mutate({ [site]: on }, { onSuccess: () => toast.ok("Сохранено") });
+  return (
+    <div className="flex flex-wrap gap-4 mt-3">
+      <Toggle checked={q.data.hh} onChange={(v) => toggle("hh", v)} label="Автоответы работодателям на hh.ru" />
+      <Toggle checked={q.data.habr} onChange={(v) => toggle("habr", v)} label="Автоответы на Хабр Карьере" />
+    </div>
+  );
+}
 
 export function SettingsPage() {
   const { slug = "" } = useParams();
@@ -253,6 +269,7 @@ function UserEditor({ slug }: { slug: string }) {
           <Toggle checked={u.allowOtherCountry} onChange={(v) => set("allowOtherCountry", v)} label="Откликаться на вакансии в других странах" />
           <Toggle checked={u.opusEnabled} onChange={(v) => set("opusEnabled", v)} label="Использовать Opus для решений" />
         </div>
+        <AutoReplies slug={u.slug} />
       </Section>
       <SaveBar dirty={dirty} pending={update.isPending} onReset={() => src && setU(src)} onSave={() => update.mutate(u, { onSuccess: () => toast.ok("Сохранено") })} />
     </div>

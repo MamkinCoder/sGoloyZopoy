@@ -92,6 +92,10 @@ export interface HHClient {
   duplicateResume(s: BrowserSession, baseResumeId: string, edit: ResumeEdit): Promise<string>; // new hh id
   /** Walks hh's «Дополнить резюме» wizard so a duplicated draft gets published. True once hh reports it published. */
   publishResume(s: BrowserSession, resumeId: string): Promise<boolean>;
+  /** The key-skill chips of a resume as the editor shows them (opens the editor, changes nothing). */
+  readResumeSkills(s: BrowserSession, resumeId: string): Promise<string[]>;
+  /** Replaces only the key skills of a resume (title and «О себе» stay). */
+  setResumeSkills(s: BrowserSession, resumeId: string, skills: string[]): Promise<void>;
   /** Rewrite title, «О себе» and key skills of an existing resume in place. */
   editResume(s: BrowserSession, resumeId: string, edit: ResumeEdit): Promise<void>;
   touchResume(s: BrowserSession, resumeUrl: string): Promise<void>; // «Поднять в поиске»; no-op if unavailable

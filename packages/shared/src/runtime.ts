@@ -11,6 +11,9 @@ export interface Config {
   tgChatId: string;
   chromiumBin: string; // CHROMIUM_BIN
   claudeBin: string; // default "claude"
+  geminiBin: string; // default "gemini" (Gemini CLI)
+  /** Which headless CLI answers LLM calls: SGZ_LLM=gemini, default claude. */
+  llmProvider: "claude" | "gemini";
   xelatexBin: string; // default "xelatex"
   scheduleAt: string; // "12:00"; "" → off
   scheduleJitterMin: number; // ±minutes, default 20
@@ -69,6 +72,8 @@ export interface RunService {
 export interface TgButton {
   text: string;
   data: string;
+  /** A link button (opens the URL, no callback); `data` is then unused. */
+  url?: string;
 }
 
 /** A button tap's answer: `note` pops up; `text` + `buttons` replace the tapped message (HTML, escaped by the caller). */
@@ -91,12 +96,14 @@ export interface Notifier {
   edit?(messageId: number, text: string, buttons: TgButton[][]): Promise<void>;
   /** Uploads a file (e.g. a generated CV PDF) to the chat via sendDocument. Optional like `ask`. */
   document?(doc: { path: string; filename?: string; caption?: string }): Promise<void>;
-  /** The same notifier bound to the seeker's own chat (`user.tgChatId`, else the owner's): alert/ask/edit go there. */
-  forUser?(user: Pick<User, "tgChatId">): Notifier;
+  /** The same notifier bound to one seeker. Default (the feed): her own topic in the group chat, where vacancies, skill
+   *  questions and reports are listed. `"dm"`: her personal chat with the bot (interview prep and checklists, outcome
+   *  asks, her CV files, onboarding), falling back to the topic when she has no personal chat. */
+  forUser?(user: Pick<User, "tgChatId">, place?: "dm"): Notifier;
 }
 
 /** `n` bound to the user's chat; `n` itself when it cannot bind (no Telegram, test fakes) or there is no user. */
-export const notifierFor = <N extends Partial<Notifier>>(n: N, user: Pick<User, "tgChatId"> | null | undefined): N => ((user && n.forUser?.(user)) as N | undefined) ?? n;
+export const notifierFor = <N extends Partial<Notifier>>(n: N, user: Pick<User, "tgChatId"> | null | undefined, place?: "dm"): N => ((user && n.forUser?.(user, place)) as N | undefined) ?? n;
 
 export interface Logger {
   info(stage: string, message: string, data?: Record<string, unknown>): void;

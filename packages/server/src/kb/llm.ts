@@ -124,6 +124,42 @@ export async function ingestKb(llm: LLMClient, input: IngestInput): Promise<KbSt
     .map((s) => ({ ...s, tags: s.tags.some((t) => tagKey(t) === tagKey(input.tag)) ? s.tags : [input.tag, ...s.tags] }));
 }
 
+export interface MergeInput extends IngestInput {
+  /** What is written under the tag now (all of it is replaced by the one merged entry). */
+  existing: KbStory[];
+}
+
+const storyBlock = (s: KbStory, i: number): string =>
+  `${i + 1}. ${[s.title, [s.company, s.period].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}\n${[s.context, s.did, s.result && `Итог: ${s.result}`].filter(Boolean).join(" ")}`;
+
+/**
+ * A skill is ONE entry: the LLM reads what is written and the new text (may be empty: just consolidate) and returns a single
+ * rewritten story. Numbers survive only from the old entries, the new text and the companies list. Null when nothing usable.
+ */
+export async function mergeKb(llm: LLMClient, input: MergeInput): Promise<KbStoryDraft | null> {
+  const text = input.text.trim();
+  if (!text && !input.existing.length) return null;
+  const companies = input.companies ?? [];
+  const existing = input.existing.map(storyBlock).join("\n\n");
+  const prompt = renderPrompt("kb_reconcile", { never_claim: "(список пуст)", tag: input.tag, existing: existing || "(пусто)", text: text || "(ничего нового, только объедини записи)", companies: companies.map((c) => `- ${c}`).join("\n") });
+  const raw = KbIngestSchema.parse(await llm.json<unknown>("kb_reconcile", "write", prompt, INGEST_SCHEMA));
+  const allowedNumbers = allowedIn(`${text} ${existing} ${companies.join(" ")} ${input.tag}`);
+  const draft = raw.stories.map((s) => guardStory(s, { allowedNumbers, never: [] })).find((s): s is KbStoryDraft => !!s);
+  return draft ? { ...draft, tags: draft.tags.some((t) => tagKey(t) === tagKey(input.tag)) ? draft.tags : [input.tag, ...draft.tags] } : null;
+}
+
+/** Replaces the skill's entries by the merged one (a story shared with other skills only loses this tag), marks the skill `yes`. */
+export function saveMerged(store: Store, userId: number, tag: string, merged: KbStoryDraft, replaced: KbStory[], source: "telegram" | "panel" = "telegram"): KbStory[] {
+  const t = store.upsertKbTag(userId, { name: tag, status: "yes" });
+  for (const s of replaced) {
+    if (s.tags.length <= 1) store.deleteKbStory(s.id);
+    else store.saveKbStory({ ...s, tagIds: s.tags.filter((x) => x.id !== t.id).map((x) => x.id) });
+  }
+  const { added } = addStories(store, userId, [merged], { source, confirmed: true });
+  syncProfileSkills(store, userId);
+  return added;
+}
+
 /** Saves ingested stories (confirmed: the human wrote them) and marks the tag `yes`, then syncs the profile. */
 export function saveIngested(store: Store, userId: number, tag: string, drafts: KbStoryDraft[], source: "telegram" | "panel" = "telegram"): KbStory[] {
   store.upsertKbTag(userId, { name: tag, status: "yes" });

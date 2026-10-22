@@ -48,6 +48,8 @@ export interface LLMClient {
   decide(input: DecideInput): Promise<Decision[]>;
   /** `kb` (optional everywhere below): the knowledge-base block for this text; its `no` tags join never_claim. */
   answerQuestionnaire(profile: Profile, vacancy: Vacancy | null, qs: Question[], kb?: KbBrief): Promise<Answer[]>;
+  /** Applies the seeker's free-text correction («зарплату побольше») to already drafted `current` answers; returns the full set. */
+  reviseAnswers(profile: Profile, vacancy: Vacancy | null, qs: Question[], current: Answer[], instruction: string, kb?: KbBrief): Promise<Answer[]>;
   /** `choices`: quick-reply buttons on the employer's last message; the reply must be exactly one of them. */
   /** `kb`: the knowledge-base block for the asked topics (kb/context.ts renderKb), the only material about experience. */
   answerChat(profile: Profile, vacancy: Vacancy | null, history: ChatMessage[], choices?: string[], kb?: KbBrief): Promise<ChatReply>;

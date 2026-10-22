@@ -26,6 +26,8 @@ export const cfg: Config = {
   tgChatId: "",
   chromiumBin: "",
   claudeBin: STUB_BIN,
+  geminiBin: "gemini",
+  llmProvider: "claude",
   xelatexBin: "xelatex",
   scheduleAt: "",
   scheduleJitterMin: 0,

@@ -11,6 +11,8 @@ export const telegramFetch = (env: NodeJS.ProcessEnv = process.env): typeof fetc
   return p && /^http:\/\//.test(p) ? proxiedFetch(p) : undefined;
 };
 
+const REQUEST_IDLE_MS = 90_000;
+
 function proxiedFetch(proxyUrl: string): typeof fetch {
   const proxy = new URL(proxyUrl);
   const agent = new https.Agent({ keepAlive: false });
@@ -40,6 +42,10 @@ function proxiedFetch(proxyUrl: string): typeof fetch {
         res.on("error", reject);
       });
       req.on("error", reject);
+      // A tunnel that dies silently (VPN blip) leaves the request hanging forever, and the long-poll loop with it:
+      // an idle socket for longer than a long poll (50 s) is dead.
+      req.setTimeout(REQUEST_IDLE_MS, () => req.destroy(new Error("telegram: request timed out")));
+      init?.signal?.addEventListener("abort", () => req.destroy(new Error("telegram: request aborted")), { once: true });
       req.end(body);
     });
   }) as typeof fetch;

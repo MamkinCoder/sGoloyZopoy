@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, NavLink, Outlet, useParams } from "react-router-dom";
-import { useLogout, useMe, useQueue, useUsers } from "../api/hooks";
+import { useLogout, useMe, useQueue, useUpdateUser, useUsers } from "../api/hooks";
+import { toast } from "../lib/toast";
 import { HealthChip } from "./HealthChip";
 import { RunDialog } from "./RunDialog";
 import { Spinner } from "./Ui";
@@ -49,6 +50,22 @@ function ThemeToggle() {
   );
 }
 
+/** Master switch of the selected user: off = no scheduled runs, no chat sync, no auto-replies for them. */
+function ActiveToggle({ slug, active }: { slug: string; active: boolean }) {
+  const update = useUpdateUser(slug);
+  return (
+    <button
+      type="button"
+      className={`btn btn-sm ${active ? "" : "btn-danger"}`}
+      disabled={update.isPending}
+      onClick={() => update.mutate({ active: !active }, { onSuccess: () => toast.ok(active ? "Выключен: бот ничего не делает" : "Включён") })}
+      title={active ? "Нажми, чтобы остановить автоотклики и чаты этого пользователя" : "Бот для этого пользователя выключен"}
+    >
+      {active ? "● Включён" : "○ Выключен"}
+    </button>
+  );
+}
+
 export function Layout() {
   const { slug = "" } = useParams();
   const { data: users, isLoading } = useUsers();
@@ -87,6 +104,7 @@ export function Layout() {
               ))}
             </nav>
             <div className="ml-auto flex items-center gap-2">
+              {users?.some((u) => u.slug === slug) && <ActiveToggle slug={slug} active={!!users.find((u) => u.slug === slug)?.active} />}
               <HealthChip slug={slug} />
               <ThemeToggle />
               <button type="button" className="btn btn-sm btn-primary" onClick={() => setRunOpen(true)}>

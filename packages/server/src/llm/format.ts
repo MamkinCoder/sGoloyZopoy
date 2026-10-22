@@ -1,5 +1,5 @@
 // Renders domain objects into the plain-text blocks the prompt templates expect.
-import type { ChatMessage, HHResume, Profile, Question, Vacancy } from "@sgz/shared";
+import type { Answer, ChatMessage, HHResume, Profile, Question, Vacancy } from "@sgz/shared";
 
 const DESCRIPTION_MAX = 3000;
 
@@ -61,6 +61,18 @@ export function renderQuestions(qs: Question[]): string {
     .map((q) => {
       const opts = q.options?.length ? `\n  варианты: ${q.options.map((o, i) => `[${i}] ${o}`).join("; ")}` : "";
       return `- idx=${q.idx} (${q.kind}${q.required ? ", обязательный" : ""}): ${q.text}${opts}`;
+    })
+    .join("\n");
+}
+
+/** The answers as lines `idx=N: value`, option answers by their text (the model revises them, the card shows them). */
+export function renderAnswers(qs: Question[], answers: Answer[]): string {
+  return qs
+    .map((q) => {
+      const a = answers.find((x) => x.idx === q.idx);
+      const picked = (a?.option_idxs ?? (a?.option_idx === undefined ? [] : [a.option_idx])).flatMap((i) => (q.options?.[i] !== undefined ? [`[${i}] ${q.options[i]}`] : []));
+      const value = q.options?.length ? picked.join("; ") : (a?.text ?? "");
+      return `- idx=${q.idx}: ${value.trim() || "(пусто)"}`;
     })
     .join("\n");
 }

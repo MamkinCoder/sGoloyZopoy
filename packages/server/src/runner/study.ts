@@ -156,7 +156,7 @@ export interface StudyDeps {
 export function studyTap(d: StudyDeps, cb: { threadId: number; regen: boolean }, now = new Date()): string {
   const t = d.store.getChatThread(cb.threadId);
   if (!t) return "диалог не найден";
-  const n = notifierFor(d.notifier, d.store.listUsers().find((u) => u.id === t.userId));
+  const n = notifierFor(d.notifier, d.store.listUsers().find((u) => u.id === t.userId), "dm");
   const warn = (e: unknown) => n.alert("📚 Чеклист не собрался", `${t.employer}: ${errMessage(e)}`).catch(() => undefined);
   if (t.study && !cb.regen && now.getTime() - Date.parse(t.study.at) < STUDY_TTL_MS) {
     void deliverStudy(n, t.study, t.id).catch(warn);

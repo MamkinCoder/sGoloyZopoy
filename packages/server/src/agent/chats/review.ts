@@ -5,7 +5,7 @@
 // one kb_reviews row per shown topic. «Дополнить» asks for a story; the next free text in that chat is ingested
 // by the `kb.ingest` job. Setting kb_review_mode: always (default) | new_only | off.
 import { notifierFor, tagIs, type ChatTask, type ChatTopic, type KbReview, type KbStory, type KbTag, type KbTagStatus, type Notifier, type TapReply, type TgButton } from "@sgz/shared";
-import { ingestKb, saveIngested } from "../../kb/llm.js";
+import { mergeKb, saveMerged } from "../../kb/llm.js";
 import { syncProfileSkills } from "../../kb/write.js";
 import { escapeHtml } from "../../notify/format.js";
 import { userById, userNotifier, type ChatEnv, type ChatStore } from "./env.js";
@@ -112,6 +112,9 @@ export function kbReviewGate(store: ChatStore, notifier: Pick<Notifier, "ask" | 
       { text: `Дополнить ${tp.name}`, data: kbCallback(review.id, "e") },
       { text: `Нет навыка ${tp.name}`, data: kbCallback(review.id, "d") },
     ]);
+    // One place to answer every waiting skill at once: the personal chat (/pending), opened from the group card.
+    const bot = store.getSetting("tg_bot_username");
+    if (pending.length && bot) buttons.push([{ text: "📋 Все вопросы по навыкам - в личке", data: "noop", url: `https://t.me/${bot}?start=pending` }]);
     const tail = footer ?? (pending.length ? "Подтверди, дополни или отметь «Нет навыка» по каждой теме. Ответ работодателю уйдёт, когда ответишь на все." : READY_FOOTER);
     const head = `<b>${escapeHtml(thread(task)?.employer || "Работодатель")}</b> спрашивает:\n«${escapeHtml(asked(task))}»`;
     let text = "";
@@ -209,6 +212,44 @@ function confirmStories(env: ChatEnv, task: ChatTask, tagId: number): void {
   }
 }
 
+/** Pending skill questions of a user across all tasks, one per tag, the ones that still wait for an answer. */
+export function pendingSkills(env: ChatEnv, userId: number): { tag: KbTag; reviews: KbReview[]; employers: string[] }[] {
+  const tags = env.store.listKbTags(userId);
+  const by = new Map<number, KbReview[]>();
+  for (const r of env.store.pendingKbReviews(userId)) {
+    if (!liveTarget(env, r)) continue;
+    by.set(r.tagId, [...(by.get(r.tagId) ?? []), r]);
+  }
+  return [...by.entries()].flatMap(([tagId, reviews]) => {
+    const tag = tags.find((t) => t.id === tagId);
+    const employers = [...new Set(reviews.map((r) => (r.taskId === null ? null : env.store.getChatTask(r.taskId)) ).flatMap((t) => (t ? [env.store.getChatThread(t.threadId)?.employer ?? ""] : [])).filter(Boolean))];
+    return tag ? [{ tag, reviews, employers }] : [];
+  });
+}
+
+/**
+ * One answer for a skill in every task that waits for it (the same tag asked by several employers): each task's topic is
+ * answered and its group card edited. The tag status is set even when no task waits any more. Returns how many tasks it answered.
+ */
+export async function answerTagEverywhere(env: ChatEnv, userId: number, tagId: number, has: boolean): Promise<number> {
+  const tag = env.store.listKbTags(userId).find((t) => t.id === tagId);
+  if (!tag) return 0;
+  let n = 0;
+  for (const r of env.store.pendingKbReviews(userId).filter((x) => x.tagId === tagId)) {
+    const live = liveTarget(env, r);
+    if (!live) continue;
+    const done = answerTopic(env, live.task, live.review.topic, has);
+    if (!done) continue;
+    n++;
+    if (done.tgMessageId != null) {
+      const c = env.review.card(done, done.state === "awaiting_review" ? undefined : READY_FOOTER);
+      await userNotifier(env, done.userId).edit?.(done.tgMessageId, c.text, c.buttons).catch(() => undefined);
+    }
+  }
+  if (!n) env.review.record(userId, tag.name, has);
+  return n;
+}
+
 /** A button of the KB card. `chatId`: where it was tapped («Дополнить» waits for the next text there). */
 export function onKbTap(env: ChatEnv, tap: { reviewId: number; action: KbAction }, chatId: string): TapReply | string {
   const review = env.store.getKbReview(tap.reviewId);
@@ -228,6 +269,7 @@ export function onKbTap(env: ChatEnv, tap: { reviewId: number; action: KbAction 
   if (tap.action === "c") confirmStories(env, task, r.tagId);
   const done = answerTopic(env, task, r.topic, tap.action === "c");
   if (!done) return { note: "уже учтено", ...env.review.card(own, stateFooter(own)) };
+  void answerTagEverywhere(env, task.userId, r.tagId, tap.action === "c"); // other employers asking the same skill
   return { note: tap.action === "c" ? `✅ ${r.topic}` : `❌ ${r.topic}: нет навыка`, ...env.review.card(done, done.state === "awaiting_review" ? undefined : READY_FOOTER) };
 }
 
@@ -270,24 +312,28 @@ export async function ingestReview(env: ChatEnv, reviewId: number, text: string)
   const tag = env.store.listKbTags(first.userId).find((t) => t.id === first.tagId);
   if (!tag) return;
   const companies = [...new Set(env.store.listKbStories(first.userId).map((s) => [s.company, s.period].filter(Boolean).join(", ")).filter(Boolean))];
-  const drafts = await ingestKb(env.llm, { tag: tag.name, text, companies });
+  const existing = env.store.listKbStories(first.userId, tag.id);
+  const merged = await mergeKb(env.llm, { tag: tag.name, text, companies, existing });
   // Re-read after the LLM: «Нет навыка» tapped meanwhile is the human's last word, the tag stays «no».
   const review = env.store.getKbReview(reviewId);
   if (!review || review.state === "denied") return;
-  if (!drafts.length) {
+  if (!merged) {
     await userNotifier(env, review.userId).ask?.(`Не получилось собрать историю про <b>${escapeHtml(tag.name)}</b> из этого текста. Нажми «Дополнить» ещё раз и напиши подробнее: где, что делал, какой результат.`, []).catch(() => undefined);
     await refreshCard(env, review);
     return;
   }
-  saveIngested(env.store, review.userId, tag.name, drafts);
+  saveMerged(env.store, review.userId, tag.name, merged, existing);
   if (review.state === "expanded" || review.state === "confirmed") return; // one more story for an answered topic: saved
   const live = liveTarget(env, review);
   env.store.resolveKbReview(review.id, "expanded", iso(env));
-  if (!live) return; // the task moved on (fallback, answered by hand): the story is kept anyway
-  env.store.resolveKbReview(live.review.id, "expanded", iso(env));
-  const done = answerTopic(env, live.task, live.review.topic, true);
-  if (done?.tgMessageId != null) {
-    const c = env.review.card(done, done.state === "awaiting_review" ? undefined : READY_FOOTER);
-    await userNotifier(env, done.userId).edit?.(done.tgMessageId, c.text, c.buttons).catch(() => undefined);
+  if (live) {
+    env.store.resolveKbReview(live.review.id, "expanded", iso(env));
+    const done = answerTopic(env, live.task, live.review.topic, true);
+    if (done?.tgMessageId != null) {
+      const c = env.review.card(done, done.state === "awaiting_review" ? undefined : READY_FOOTER);
+      await userNotifier(env, done.userId).edit?.(done.tgMessageId, c.text, c.buttons).catch(() => undefined);
+    }
   }
+  // The same skill asked by other employers is answered by this story too (the task moved on, the story is kept anyway).
+  await answerTagEverywhere(env, review.userId, review.tagId, true);
 }

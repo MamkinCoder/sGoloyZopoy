@@ -8,9 +8,12 @@ import { followupChats } from "../../runner/interview.js";
 import { ensureVacancy, skeletonVacancy } from "../../runner/filters.js";
 import { alertWithStudy } from "../../runner/study.js";
 import { errMessage } from "../../runner/util.js";
+import { autoReply } from "./auto.js";
 import { userNotifier, type ChatEnv } from "./env.js";
 import { reconcileThread, settleThread } from "./tasks.js";
 import { kbForVacancy } from "../../kb/context.js";
+import { extractFormUrls, formKey } from "../../gforms/index.js";
+import { claimForm, isLinkOnly } from "./gform.js";
 import { renderQuestions } from "../../llm/format.js";
 
 export const CHAT_TRACK_SINCE_DEFAULT = "2026-09-23";
@@ -100,6 +103,7 @@ async function askFeedback(env: ChatEnv, s: BrowserSession, chatUrl: string, emp
 }
 
 export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
+  const auto = autoReply(env.store, user.id, "hh");
   const s = await env.browser.openHH(user);
   const known = new Map(env.store.listChatThreads(user.id).map((t) => [t.hhNegotiationId, t]));
   // hh marks a chat read as soon as anyone opens it (the seeker on the phone), so "unread" alone loses
@@ -181,7 +185,7 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
         // the «да» in the chat is the application (hh's assistant files it). The human gets the links to check.
         const said = detail.messages.find((m) => m.direction === "in" && m.text.trim())?.text.trim().slice(0, 500);
         const vlink = ext ? `\n${vacancyUrl(ext)}` : "";
-        await userNotifier(env, user.id).alert(`✉️ Работодатель написал первым: ${t.employer}`, `${user.name}${vacancy?.title ? `, ${vacancy.title}` : ""}.${said ? `\n\n«${said}»\n` : ""}\nАгент ответит в чате; если нужен отклик через hh, откликнись по ссылке.${vlink}\n${t.chatUrl}`).catch(() => undefined);
+        await userNotifier(env, user.id).alert(`✉️ Работодатель написал первым: ${t.employer}`, `${user.name}${vacancy?.title ? `, ${vacancy.title}` : ""}.${said ? `\n\n«${said}»\n` : ""}\n${auto ? "Агент ответит в чате; если нужен отклик через hh, откликнись по ссылке." : "Автоответы выключены: ответь сам."}${vlink}\n${t.chatUrl}`).catch(() => undefined);
       }
       if (detail.thread.state === "invited" && prev?.state !== "invited") {
         env.log.info("chats", `${t.employer}: INVITATION`, { thread_id: thread.id });
@@ -195,7 +199,7 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
       if (detail.thread.state === "rejected" && prev?.state !== "rejected") {
         // The thread is stored rejected already: a failed feedback request must still mark the rejection
         // handled, or the next sync forwards the rejection itself as «Фидбек».
-        await askFeedback(env, s, t.chatUrl, t.employer, thread.id, detail.writable).catch((e: unknown) => env.log.warn("chats", `${t.employer}: feedback request not sent: ${errMessage(e)}`, { thread_id: thread.id }));
+        if (auto) await askFeedback(env, s, t.chatUrl, t.employer, thread.id, detail.writable).catch((e: unknown) => env.log.warn("chats", `${t.employer}: feedback request not sent: ${errMessage(e)}`, { thread_id: thread.id }));
         settleThread(env, thread.id, "отказ");
         continue;
       }
@@ -210,7 +214,7 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
       // ponytail: the survey's LLM call runs inside this browser job; a job of its own if surveys get frequent.
       const surveyKey = `survey_done:${thread.id}`;
       const surveySig = JSON.stringify(detail.survey.map((q) => q.text));
-      if (detail.survey.length && env.store.getSetting(surveyKey) !== surveySig) {
+      if (auto && detail.survey.length && env.store.getSetting(surveyKey) !== surveySig) {
         const answers = await env.llm.answerQuestionnaire(env.store.getProfile(user.id)!, vacancy, detail.survey, kbForVacancy(env.store, user.id, vacancy, renderQuestions(detail.survey)));
         await env.hh.submitSurvey(s, t.chatUrl, answers);
         env.store.setSetting(surveyKey, surveySig);
@@ -221,7 +225,20 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
         await env.throttle.afterMutation();
         history = env.store.listChatMessages(thread.id);
       }
-      if (letterFollowup(env, thread, history, t.chatUrl, detail.writable, since, letters)) continue;
+      // A Google Form link after our last message: the form is filled in a job (card in Telegram), a message that
+      // is just the link needs no chat reply.
+      const lastOutIdx = history.findLastIndex((m) => m.direction === "out");
+      const linkOnly: number[] = [];
+      for (const m of history.slice(lastOutIdx + 1).filter((x) => x.direction === "in" && !x.answered)) {
+        const urls = extractFormUrls(m.text);
+        for (const url of urls) if (claimForm(env, thread.id, url)) env.enqueue("chats.gform", { threadId: thread.id, url }, { key: `gform:${thread.id}:${formKey(url)}` });
+        if (urls.length && isLinkOnly(m.text, urls)) linkOnly.push(m.id);
+      }
+      if (linkOnly.length) {
+        env.store.markAnswered(linkOnly);
+        history = env.store.listChatMessages(thread.id);
+      }
+      if (auto && letterFollowup(env, thread, history, t.chatUrl, detail.writable, since, letters)) continue;
       if (prev?.state === "needs_human" && inserted === 0) {
         env.log.info("chats", `${t.employer}: still waiting for a human`, { thread_id: thread.id });
         settleThread(env, thread.id, "ждёт человека"); // the human answers on hh; new messages reopen it
@@ -241,11 +258,22 @@ export async function syncHHChats(env: ChatEnv, user: User): Promise<void> {
         await env.throttle.afterRead();
         continue;
       }
+      if (!auto) {
+        // Auto-reply is off: tell the user once per employer message, the bot writes nothing.
+        const last = history.filter((m) => m.direction === "in" && !m.answered).at(-1);
+        const seen = `hh_wait_seen:${thread.id}`;
+        if (last && env.store.getSetting(seen) !== String(last.id)) {
+          env.store.setSetting(seen, String(last.id));
+          const text = history.filter((m) => m.direction === "in" && !m.answered).map((m) => m.text).join("\n\n").slice(0, 1500);
+          await userNotifier(env, user.id).alert(`hh.ru: ${t.employer} ждёт ответа`, `${user.name}: ${text}\n${t.chatUrl}`).catch(() => undefined);
+        }
+        continue;
+      }
       reconcileThread(env, thread, t.chatUrl, detail.choices ?? []);
       await env.throttle.afterRead();
     } catch (e) {
       env.log.error("chats", `${t.employer}: ${errMessage(e)}`, { negotiation: t.negotiationId });
     }
   }
-  await followupChats(env, user, s, all.filter((t) => !threads.includes(t)), known);
+  if (auto) await followupChats(env, user, s, all.filter((t) => !threads.includes(t)), known);
 }

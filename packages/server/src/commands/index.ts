@@ -10,6 +10,7 @@ import { serve } from "./serve.js";
 import { pool } from "./pool.js";
 import { resume } from "./resume.js";
 import { site } from "./site.js";
+import { user } from "./user.js";
 
 export type Command = (args: string[]) => Promise<void>;
 export const commands: Record<string, Command> = {
@@ -25,4 +26,5 @@ export const commands: Record<string, Command> = {
   resume,
   site,
   kb,
+  user,
 };

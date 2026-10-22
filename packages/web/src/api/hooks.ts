@@ -85,6 +85,16 @@ export function useLogout() {
 // ---- users & profile
 export const useUsers = () => useQuery({ queryKey: keys.users, queryFn: () => api<UserDTO[]>("/users"), staleTime: 60_000 });
 
+export type AutoReplyDTO = { hh: boolean; habr: boolean };
+export const useAutoReply = (slug: string) => useQuery({ queryKey: ["auto-reply", slug], queryFn: () => api<AutoReplyDTO>(`/users/${slug}/auto-reply`) });
+export function useSetAutoReply(slug: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<AutoReplyDTO>) => api<AutoReplyDTO>(`/users/${slug}/auto-reply`, { method: "PUT", body: patch }),
+    onSuccess: (data) => qc.setQueryData(["auto-reply", slug], data),
+  });
+}
+
 export function useUpdateUser(slug: string) {
   const qc = useQueryClient();
   return useMutation({

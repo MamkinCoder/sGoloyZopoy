@@ -5,6 +5,7 @@
 //   failed: a job exhausted its retries, or a send could not be confirmed (alerted per task by failTask)
 // Every step is a job keyed by the task id, reads the task from the DB and moves it with compare-and-set,
 // so repeats, restarts and a sync racing a draft are harmless.
+import { autoReply } from "./auto.js";
 import { notifierFor, OPEN_TASK_STATES, tagIs, type BrowserSession, type ChatMessage, type ChatTask, type ChatThread, type ChatTopic, type KbBrief, type Profile, type User, type Vacancy } from "@sgz/shared";
 import { conversationUrl, type HabrMessage } from "../../habr/state.js";
 import { kbBrief } from "../../kb/context.js";
@@ -290,6 +291,12 @@ export function repliedOnPage(page: PageMessage[], stored: ChatMessage[], task: 
 
 export async function sendTask(env: ChatEnv, taskId: number): Promise<void> {
   const task = env.store.getChatTask(taskId);
+  // Auto-reply switched off after the draft was made: nothing is sent.
+  const queued = task && env.store.getChatThread(task.threadId);
+  if (task && queued && !autoReply(env.store, task.userId, queued.hhNegotiationId.startsWith("habr:") ? "habr" : "hh")) {
+    closeTask(env, task, "автоответы выключены");
+    return;
+  }
   if (!task || !env.store.moveChatTask(task.id, ["ready", "sending"], "sending", {}, iso(env))) return;
   const thread = env.store.getChatThread(task.threadId);
   const user = userById(env.store, task.userId);

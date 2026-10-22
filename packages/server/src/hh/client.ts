@@ -481,16 +481,37 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     await step("edit_about_open", R.editAbout, "Нажми на кнопку редактирования раздела «О себе»");
     await fill("edit_about_fill", R.aboutInput, edit.about, "Очисти поле «О себе» и введи %value%");
     await step("edit_about_save", R.save, "Нажми «Сохранить» в форме редактирования");
+    await fillSkills(s, resumeId, edit.keySkills);
+  };
+
+  /** Opens the skills editor of an already opened resume page and replaces the chips. */
+  const fillSkills = async (s: BrowserSession, resumeId: string, skills: string[]): Promise<void> => {
+    const R = SEL.resumes;
+    const step = (name: string, sel: string, instruction: string, variables?: Record<string, string>) => resumeStep(s, resumeId, name, sel, instruction, variables);
     await step("edit_skills_open", R.editSkills, "Нажми на кнопку редактирования раздела «Ключевые навыки»");
     if (await s.waitForSelector(R.skillInput, 5_000)) {
       for (let i = 0; i < 40 && (await s.exists(R.skillChipDelete)); i++) await s.click(R.skillChipDelete);
-      for (const skill of edit.keySkills) {
+      for (const skill of skills) {
         await s.fill(R.skillInput, skill);
         await s.pressKey("Enter");
         await sleep(200);
       }
-    } else await step("edit_skills_fill", R.skillInput, "Замени список ключевых навыков на следующие, каждый как отдельный навык: %skills%", { skills: edit.keySkills.join(", ") });
+    } else await step("edit_skills_fill", R.skillInput, "Замени список ключевых навыков на следующие, каждый как отдельный навык: %skills%", { skills: skills.join(", ") });
     await step("edit_skills_save", R.save, "Нажми «Сохранить» в форме редактирования");
+  };
+
+  const setResumeSkills: HHClient["setResumeSkills"] = async (s, resumeId, skills) => {
+    await open(s, resumeUrl(resumeId));
+    await fillSkills(s, resumeId, skills);
+  };
+
+  const readResumeSkills: HHClient["readResumeSkills"] = async (s, resumeId) => {
+    await open(s, resumeUrl(resumeId));
+    await resumeStep(s, resumeId, "read_skills_open", SEL.resumes.editSkills, "Нажми на кнопку редактирования раздела «Ключевые навыки»");
+    await s.waitForSelector(SEL.resumes.skillInput, 5_000);
+    const chips = await s.evaluate<string[]>(`Array.from(document.querySelectorAll('[data-qa^="chips-trigger-chip-"]')).map((e) => (e.textContent || "").trim()).filter(Boolean)`);
+    await s.pressEscape();
+    return Array.isArray(chips) ? chips : [];
   };
 
   const duplicateResume: HHClient["duplicateResume"] = async (s, baseResumeId, edit) => {
@@ -714,5 +735,5 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     return Array.isArray(rows) ? rows : [];
   };
 
-  return { checkLogin, assertNotBlocked, search, fetchVacancy, apply, syncResumes, resumeText, resumeCapacity, duplicateResume, editResume, publishResume, touchResume, listThreads, listChats, readThread, sendMessage, submitSurvey, listResumeViewers };
+  return { checkLogin, assertNotBlocked, search, fetchVacancy, apply, syncResumes, resumeText, resumeCapacity, duplicateResume, editResume, readResumeSkills, setResumeSkills, publishResume, touchResume, listThreads, listChats, readThread, sendMessage, submitSurvey, listResumeViewers };
 };

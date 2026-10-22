@@ -1,5 +1,5 @@
 // Composition root: config, store, LLM, browser, hh, career, resume, notifier, runner, scheduler, agent.
-import type { Config, LLMClient, Notifier } from "@sgz/shared";
+import type { BrowserLauncher, Config, LLMClient, Notifier } from "@sgz/shared";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { paths } from "@sgz/shared";
@@ -24,6 +24,7 @@ export interface AppContext {
   store: SqliteStore;
   notifier: Notifier;
   llm: LLMClient;
+  launcher: BrowserLauncher;
   runner: Runner;
   scheduler: Scheduler | null;
   /** The always-on agent (serve only; not started yet) and the env its chat jobs run with. */
@@ -84,7 +85,7 @@ export async function createAppContext(opts: { withScheduler?: boolean } = {}): 
   const habr = createHabrClient();
   const career = createCareerAgent(llm);
 
-  const notifier = createTelegram(cfg.tgBotToken, cfg.tgChatId, cfg.panelUrl, { tz: cfg.tz, warn, fetch: telegramFetch() });
+  const notifier = createTelegram(cfg.tgBotToken, cfg.tgChatId, cfg.panelUrl, { tz: cfg.tz, warn, fetch: telegramFetch(), store });
   const runner = createRunner({ cfg, store, launcher, hh, habr, career, llm, notifier, resume, loadCookies });
   const startedAt = new Date();
   const always = opts.withScheduler ? createAppAgent({ cfg, store, launcher, loadCookies, hh, habr, llm, notifier, runner, owed: () => ctx.scheduler?.owed() ?? false /* lazy: serve may replace the scheduler */, startedAt }) : null;
@@ -96,6 +97,7 @@ export async function createAppContext(opts: { withScheduler?: boolean } = {}): 
     store,
     notifier,
     llm,
+    launcher,
     runner,
     scheduler,
     agent: always?.agent ?? null,

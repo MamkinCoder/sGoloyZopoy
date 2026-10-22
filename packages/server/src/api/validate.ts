@@ -98,6 +98,8 @@ export const UserPatchSchema = z.object({
   opusEnabled: z.boolean().optional(),
 });
 
+export const AutoReplySchema = z.object({ hh: z.boolean().optional(), habr: z.boolean().optional() });
+
 export const StartRunSchema = z.object({
   user: z.string().min(1),
   source: z.enum(["hh", "habr", "career", "all", "pool"]),

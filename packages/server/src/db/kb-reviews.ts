@@ -29,6 +29,8 @@ export interface KbReviewsRepo {
   awaitKbReviewText(id: number, chatId: string, nowISO: string): boolean;
   /** Pending reviews waiting for text in this chat, the one to answer first at [0]. */
   awaitingKbReviews(chatId: string): KbReview[];
+  /** Every pending review of a user (all tasks), oldest first. */
+  pendingKbReviews(userId: number): KbReview[];
 }
 
 export function kbReviewsRepo(s: Sql): KbReviewsRepo {
@@ -54,6 +56,9 @@ export function kbReviewsRepo(s: Sql): KbReviewsRepo {
     awaitKbReviewText(id, chatId, nowISO) {
       if (!chatId) return s.run("UPDATE kb_reviews SET awaiting_chat = '', awaiting_at = NULL WHERE id = ?", id).changes > 0;
       return s.run("UPDATE kb_reviews SET awaiting_chat = ?, awaiting_at = COALESCE(awaiting_at, ?) WHERE id = ? AND state = 'pending'", chatId, nowISO, id).changes > 0;
+    },
+    pendingKbReviews(userId) {
+      return s.all("SELECT * FROM kb_reviews WHERE user_id = ? AND state = 'pending' ORDER BY id", userId).map(mapReview);
     },
     awaitingKbReviews(chatId) {
       return s.all("SELECT * FROM kb_reviews WHERE awaiting_chat = ? AND state = 'pending' ORDER BY awaiting_at, id", chatId).map(mapReview);

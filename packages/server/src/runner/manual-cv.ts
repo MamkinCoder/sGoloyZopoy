@@ -73,7 +73,7 @@ export async function generateManualCV(
   deps: ManualCVDeps,
   input: { user: User; profile: Profile; base: { path: string; direction: string }; parsed: { title: string; company: string; descriptionText: string } },
 ): Promise<void> {
-  const target = notifierFor(deps.notifier, input.user);
+  const target = notifierFor(deps.notifier, input.user, "dm");
   try {
     const base = loadCV(input.base.path);
     const vacancy = deps.store.upsertVacancy(

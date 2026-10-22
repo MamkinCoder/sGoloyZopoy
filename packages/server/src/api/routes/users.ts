@@ -2,11 +2,12 @@ import { Hono } from "hono";
 import type { ProfileDTO, StatsDTO, User } from "@sgz/shared";
 import type { ApiDeps } from "../deps.js";
 import { badRequest } from "../errors.js";
-import { parseBody, ProfileSchema, UserPatchSchema } from "../validate.js";
+import { AutoReplySchema, parseBody, ProfileSchema, UserPatchSchema } from "../validate.js";
 import { userOr404 } from "./common.js";
 import { readLessons, writeLessons } from "../../runner/learn.js";
 import { weeklyRetro } from "../../notify/retro.js";
 import { applyProfileSkills, syncProfileSkills } from "../../kb/write.js";
+import { autoReply, setAutoReply, type ReplySite } from "../../agent/chats/auto.js";
 
 const EMPTY_PROFILE: ProfileDTO = ProfileSchema.parse({});
 
@@ -51,6 +52,16 @@ export function userRoutes({ store }: ApiDeps): Hono {
       opusEnabled: p.opus_enabled ?? p.opusEnabled ?? u.opusEnabled,
     };
     return c.json(store.upsertUser(next));
+  });
+
+  // Does the bot answer employers in chats of each site (hh default on, Habr default off).
+  const replies = (id: number) => ({ hh: autoReply(store, id, "hh"), habr: autoReply(store, id, "habr") });
+  r.get("/users/:slug/auto-reply", (c) => c.json(replies(userOr404(store, c.req.param("slug")).id)));
+  r.put("/users/:slug/auto-reply", async (c) => {
+    const u = userOr404(store, c.req.param("slug"));
+    const p = await parseBody(c, AutoReplySchema);
+    for (const site of ["hh", "habr"] as ReplySite[]) if (p[site] !== undefined) setAutoReply(store, u.id, site, p[site]);
+    return c.json(replies(u.id));
   });
 
   r.get("/users/:slug/profile", (c) => {

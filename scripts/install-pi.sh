@@ -41,7 +41,7 @@ step "apt: update + install runtime packages"
 sudo DEBIAN_FRONTEND=noninteractive apt-get update -q
 # --no-install-recommends keeps the multi-hundred-MB texlive-*-doc packages off the SD card.
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
-  chromium fonts-liberation fonts-dejavu fonts-noto-core \
+  chromium poppler-utils fonts-liberation fonts-dejavu fonts-noto-core \
   texlive-latex-base texlive-latex-recommended texlive-latex-extra \
   texlive-fonts-recommended texlive-fonts-extra texlive-lang-cyrillic \
   rsync sqlite3 curl ca-certificates xz-utils

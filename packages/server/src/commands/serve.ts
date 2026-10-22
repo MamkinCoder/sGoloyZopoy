@@ -12,6 +12,7 @@ import { createScheduler } from "../scheduler/index.js";
 import { telegramFetch } from "../notify/proxy.js";
 import { startTelegramCallbacks } from "../notify/telegram.js";
 import { kbText, onKbTap, parseKbCallback } from "../agent/chats/review.js";
+import { gformOwner, gformText, onGformTap, parseGformCallback } from "../agent/chats/gform.js";
 import { handleQueueTap, parseQueueCallback } from "../runner/queue-cards.js";
 import { buildDigest, queueList } from "../notify/digest.js";
 import { OUTCOME_LABEL, parseOutcomeCallback } from "../runner/interview.js";
@@ -20,6 +21,8 @@ import { formatBand } from "../db/salary.js";
 import { buildRetro, MIN_SENT } from "../notify/retro.js";
 import { mockAnswer, startMock, stopMock } from "../runner/mock.js";
 import { parseStudyCallback, studyCommand, studyTap } from "../runner/study.js";
+import { wireOnboarding } from "../onboarding/index.js";
+import { createSkillsHub, parseSkillsCallback } from "../skills/hub.js";
 
 export async function serve(): Promise<void> {
   const app = await createAppContext({ withScheduler: true });
@@ -69,8 +72,15 @@ export async function serve(): Promise<void> {
   const usersOf = (chatId: string) => app.store.listUsers(true).filter((u) => chatId === app.cfg.tgChatId || u.tgChatId === chatId);
   const digestAll = (chatId: string) => usersOf(chatId).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
   const retroAll = (chatId: string) => usersOf(chatId).map((u) => `${u.name}\n${buildRetro(app.store, u, app.cfg.tz, new Date()) ?? `Мало данных: за неделю меньше ${MIN_SENT} откликов`}`).join("\n\n");
+  const onboarding = wireOnboarding(app);
+  const hub = createSkillsHub({ store: app.store, llm: app.llm, notifier: app.notifier, chats, now: () => new Date() });
   const HELP = [
     "Команды:",
+    "/onboard - подключить hh.ru и Хабр Карьеру (вход, резюме)",
+    "/off, /on - выключить и включить бота для себя (в личке)",
+    "/pending - все вопросы по навыкам в одном списке (в личке)",
+    "/skills - твои навыки: посмотреть, дополнить, поправить, убрать, добавить (в личке)",
+    "/cvsync - обновить резюме на hh.ru и Хабре по подтверждённым навыкам (в личке)",
     "/cv <вакансия> - резюме и сопроводительное под вакансию (PDF + текст письма)",
     "/status - итоги дня",
     "/queue - очередь откликов",
@@ -83,6 +93,12 @@ export async function serve(): Promise<void> {
     "/help - этот список",
   ].join("\n");
   const BOT_MENU = [
+    { command: "onboard", description: "Подключить hh.ru и Хабр" },
+    { command: "pending", description: "Вопросы по навыкам списком" },
+    { command: "skills", description: "Мои навыки" },
+    { command: "cvsync", description: "Обновить резюме по навыкам" },
+    { command: "off", description: "Выключить бота для меня" },
+    { command: "on", description: "Включить бота для меня" },
     { command: "cv", description: "Резюме и письмо под вакансию" },
     { command: "status", description: "Итоги дня" },
     { command: "queue", description: "Очередь откликов" },
@@ -95,12 +111,44 @@ export async function serve(): Promise<void> {
     { command: "help", description: "Список команд" },
   ];
   const onCommand = async (cmd: string, args = "", chatId = "") => {
-    if (cmd === "/start") {
+    if (cmd === "/start" && args !== "pending" && onboarding.active(chatId)) {
+      const me = app.store.listUsers().find((u) => u.tgChatId === chatId);
+      if (me) return onboarding.resume(me, chatId);
+    }
+    if (cmd === "/start" && args !== "pending") {
       // Access is managed in the panel (users.tgChatId); a chat reaching here is already allowlisted.
       const who = app.store.listUsers().find((u) => u.tgChatId === chatId);
       return `Привет${who ? `, ${who.name}` : ""}! Пришли мне текст вакансии командой /cv - верну резюме под неё в PDF и сопроводительное письмо. Я также веду отклики и собеседования.\n\n${HELP}`;
     }
     if (cmd === "/help") return HELP;
+    // The owner is the group chat and the personal chat of the first user (the one who set the bot up).
+    if (cmd === "/invite") return chatId === app.cfg.tgChatId || chatId === app.store.listUsers()[0]?.tgChatId ? onboarding.invite() : HELP;
+    if (cmd === "/pending" || cmd === "/confirm_all_skills" || cmd === "/skills" || cmd === "/cvsync" || (cmd === "/start" && args === "pending")) {
+      // Personal chat only: skills, their texts and the resumes belong to one person.
+      const me = app.store.listUsers().find((u) => u.tgChatId === chatId);
+      if (!me || chatId === app.cfg.tgChatId) return "Это работает только в личных сообщениях с ботом";
+      if (onboarding.active(chatId)) return "Сначала закончи настройку.";
+      if (cmd === "/skills") return hub.openList(me);
+      if (cmd === "/cvsync") {
+        if (!chats) return AGENT_OFF;
+        chats.enqueue("cv.sync", { userId: me.id }, { key: `cvsync:${me.id}` });
+        return "Обновляю резюме на hh.ru и Хабре по твоим подтверждённым навыкам. Пришлю итог сюда, это пара минут.";
+      }
+      return hub.openPending(me);
+    }
+    if (cmd === "/off" || cmd === "/on") {
+      // Personal chat only: the group is nobody's own chat, so nobody can switch another person off from it.
+      const me = app.store.listUsers().find((u) => u.tgChatId === chatId);
+      if (!me || chatId === app.cfg.tgChatId) return "Это работает только в личных сообщениях с ботом";
+      if (onboarding.active(chatId)) return "Сначала закончи настройку, потом можно включать и выключать.";
+      app.store.upsertUser({ ...me, active: cmd === "/on" });
+      return cmd === "/on" ? "Включил: ищу вакансии и откликаюсь." : "Выключил: никаких откликов и ответов работодателям, пока не напишешь /on.";
+    }
+    if (cmd === "/onboard") {
+      // All users, also the inactive one who has not finished: that is exactly who comes back here. «/onboard заново» starts over.
+      const me = app.store.listUsers().find((u) => u.tgChatId === chatId);
+      return me ? onboarding.resume(me, chatId, /^заново/i.test(args.trim())) : "Не нашёл пользователя для этого чата";
+    }
     if (cmd === "/status") return `${app.runner.active() ? `Идёт прогон #${app.runner.active()!.id}` : "Бот свободен"}\n\n${digestAll(chatId)}`;
     if (cmd === "/queue") return usersOf(chatId).map((u) => queueList(app.store, u, app.cfg.panelUrl)).join("\n\n");
     if (cmd === "/company") return companyReport(app.store, args, usersOf(chatId));
@@ -132,12 +180,16 @@ export async function serve(): Promise<void> {
   const NOT_YOURS = "это не твоя карточка";
   const tapAllowed = (userId: number | undefined, chatId: string) => canTap(app.store.listUsers(), app.cfg.tgChatId, userId, chatId);
   // Free text: a story for a KB review that asked for one («Дополнить») first, otherwise a /mock answer.
-  const onText = async (chatId: string, text: string) => (chats ? kbText(chats, chatId, text) : null) ?? mockAnswer(app.store, app.llm, chatId, text, new Date());
+  const onText = async (chatId: string, text: string, msg?: { remove(): Promise<void> }) => (await onboarding.text(chatId, text, msg)) ?? (await hub.text(chatId, text)) ?? (chats ? kbText(chats, chatId, text) : null) ?? (chats ? await gformText(chats, chatId, text) : null) ?? mockAnswer(app.store, app.llm, chatId, text, new Date());
   const stopCallbacks = app.cfg.tgBotToken
     ? startTelegramCallbacks(app.cfg.tgBotToken, async (data, chatId) => {
+        if (parseSkillsCallback(data)) return hub.tap(data, chatId);
         const kr = parseKbCallback(data);
         if (kr && !tapAllowed(app.store.getKbReview(kr.reviewId)?.userId, chatId)) return NOT_YOURS;
         if (kr) return chats ? onKbTap(chats, kr, chatId) : AGENT_OFF;
+        const gf = parseGformCallback(data);
+        if (gf && chats && !tapAllowed(gformOwner(chats, gf.id), chatId)) return NOT_YOURS;
+        if (gf) return chats ? onGformTap(chats, gf) : AGENT_OFF;
         const q = parseQueueCallback(data);
         if (q && !tapAllowed(app.store.getApplication(q.id)?.application.userId, chatId)) return NOT_YOURS;
         if (q) return handleQueueTap(app.store, app.runner, q);
@@ -162,6 +214,8 @@ export async function serve(): Promise<void> {
           menu: BOT_MENU,
           onCommand,
           onText,
+          onDocument: async (chatId, doc) => onboarding.document(chatId, doc),
+          onStranger: async (chatId, text) => onboarding.redeem(chatId, text),
         },
       })
     : null;

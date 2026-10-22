@@ -44,7 +44,7 @@ trap 'rm -rf "$STAGE"' EXIT
 # CLAUDE.md + .claude/ are the cwd contents `claude -p` reads (SGZ_REPO_DIR=/opt/sgz/app).
 FILES=(
   package.json pnpm-workspace.yaml pnpm-lock.yaml
-  CLAUDE.md .claude
+  CLAUDE.md GEMINI.md .claude
   deploy scripts docs
   packages/server/package.json packages/server/dist packages/server/prompts packages/server/spa packages/server/certs
   packages/server/src/db/migrations
