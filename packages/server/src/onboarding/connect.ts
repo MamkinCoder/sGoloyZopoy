@@ -17,6 +17,24 @@ const HABR_COOKIE = /(^|\.)habr\.com$/i;
 
 export type Site = "hh" | "habr";
 
+/** Selectors of the login screens, recorded from the live pages in 2026-10. */
+const HH = {
+  submit: "[data-qa=submit-button]",
+  credEmail: "[data-qa=credential-type-email]",
+  emailInput: "[data-qa=applicant-login-input-email]",
+  phoneInput: "[data-qa=magritte-phone-input-national-number-input]",
+  codeInput: '[data-sgz-code="1"]',
+} as const;
+const HABR = { email: "input[name=email]", password: "input[name=password]" } as const;
+
+/** «8 900 111-22-33», «900…», «+375 29 …» → «+7900…» / «+375…»; hh's phone field splits the country code by itself. */
+export const normalizePhone = (raw: string): string => {
+  const d = raw.replace(/\D/g, "");
+  if (raw.trim().startsWith("+")) return `+${d}`;
+  if (d.length === 11 && d.startsWith("8")) return `+7${d.slice(1)}`;
+  return d.length === 10 ? `+7${d}` : `+${d}`;
+};
+
 export interface Connector {
   /** Opens the login and enters the identifier (hh: phone / e-mail → a code is sent; habr: e-mail). Throws a message fit for the user. */
   begin(site: Site, slug: string, identifier: string): Promise<void>;
@@ -56,9 +74,15 @@ export function createConnector(cfg: Config, launcher: BrowserLauncher): Connect
     await mkdir(dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(cookies, null, 2), { encoding: "utf8", mode: 0o600 });
   };
-  const step = async (s: BrowserSession, instruction: string, variables: Record<string, string>, cacheKey: string): Promise<void> => {
-    const r = await s.act(instruction, { cacheKey, variables });
-    if (!r.success) throw new Error(r.message);
+  const wait = async (s: BrowserSession, sel: string, what: string, ms = 15_000): Promise<void> => {
+    if (!(await s.waitForSelector(sel, ms))) {
+      await s.snapshot(`onboard-${what}`).catch(() => "");
+      throw new Error(`на странице входа нет «${what}»`);
+    }
+  };
+  const pageSays = async (s: BrowserSession, re: RegExp, ms: number): Promise<boolean> => {
+    for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 500))) if (await s.evaluate<boolean>(`${re}.test(document.body.innerText)`).catch(() => false)) return true;
+    return false;
   };
 
   return {
@@ -71,11 +95,30 @@ export function createConnector(cfg: Config, launcher: BrowserLauncher): Connect
       try {
         s = await open(slug);
         if (site === "hh") {
+          // Recorded 2026-10: screen 1 = account type («Соискатель» preselected) + «Войти»; screen 2 = phone / e-mail + «Дальше».
           await s.goto(loginUrl());
-          await step(s, "Выбери вход по телефону или почте, введи %id% в поле и нажми кнопку «Дальше» / «Получить код»", { id: identifier }, "onboard.hh.id");
+          await wait(s, HH.submit, "кнопка «Войти»", 20_000);
+          await s.click(HH.submit);
+          const email = identifier.includes("@");
+          if (email) {
+            await wait(s, HH.credEmail, "выбор «Почта»");
+            await s.click(HH.credEmail);
+            await wait(s, HH.emailInput, "поле почты");
+            await s.fill(HH.emailInput, identifier);
+          } else {
+            await wait(s, HH.phoneInput, "поле телефона");
+            await s.fill(HH.phoneInput, normalizePhone(identifier)); // the page splits +375… into country code and number itself
+          }
+          await s.click(HH.submit);
+          if (!(await pageSays(s, /код/i, 20_000))) {
+            await s.snapshot("onboard-hh-no-code").catch(() => "");
+            throw new Error("hh.ru не прислал код (проверь номер; возможно, нужна капча)");
+          }
         } else {
-          await s.goto("https://account.habr.com/login?consumer=career");
-          await step(s, "Введи %email% в поле e-mail", { email: identifier }, "onboard.habr.email");
+          // Habr: one form at account.habr.com (reached through career.habr.com): e-mail + password.
+          await s.goto("https://career.habr.com/users/auth/tmid");
+          await wait(s, HABR.email, "поле e-mail", 20_000);
+          await s.fill(HABR.email, identifier);
         }
       } catch (e) {
         await s?.close().catch(() => undefined);
@@ -91,12 +134,20 @@ export function createConnector(cfg: Config, launcher: BrowserLauncher): Connect
       if (!l) throw new Error("сессия входа закрылась по таймауту, начни подключение заново");
       try {
         if (site === "hh") {
-          await step(l.s, "Введи код подтверждения %code% в поле для кода", { code: secret }, "onboard.hh.code");
+          // The code field has no recorded selector: the first visible text input that is not the phone / e-mail one.
+          const tagged = await l.s.evaluate<boolean>(`(() => { const el = [...document.querySelectorAll("input")].find((i) => !["hidden", "radio", "checkbox"].includes(i.type) && i.offsetParent !== null && !/phone-input|login-input-email|credential/.test(i.getAttribute("data-qa") || "")); if (!el) return false; el.setAttribute("data-sgz-code", "1"); return true; })()`);
+          if (!tagged) throw new Error("на странице нет поля для кода");
+          await l.s.fill(HH.codeInput, secret);
+          await new Promise((r) => setTimeout(r, 2500)); // a six-digit code usually submits itself
+          if (!(await hh.checkLogin(l.s)) && (await l.s.exists(HH.submit))) await l.s.click(HH.submit).catch(() => undefined);
           for (let i = 0; i < 10 && !(await hh.checkLogin(l.s)); i++) await new Promise((r) => setTimeout(r, 2000));
           if (!(await hh.checkLogin(l.s))) return false;
           await save(paths.cookies(cfg, slug), (await l.s.cookies()).filter((c) => HH_COOKIE.test(c.domain.replace(/^\./, ""))));
         } else {
-          await step(l.s, "Введи пароль %password% в поле пароля и нажми «Войти»", { password: secret }, "onboard.habr.password");
+          await wait(l.s, HABR.password, "поле пароля");
+          await l.s.fill(HABR.password, secret);
+          await l.s.pressKey("Enter");
+          for (let i = 0; i < 20 && /account\.habr\.com/.test(await l.s.url().catch(() => "")); i++) await new Promise((r) => setTimeout(r, 1000));
           await l.s.goto("https://career.habr.com/");
           if (!(await habr.checkLogin(l.s))) return false;
           await save(paths.habrCookies(cfg, slug), (await l.s.cookies()).filter((c) => HABR_COOKIE.test(c.domain.replace(/^\./, ""))));

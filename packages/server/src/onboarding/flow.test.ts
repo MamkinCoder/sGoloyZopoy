@@ -135,3 +135,10 @@ describe("onboarding conversation", () => {
     expect(await ob.document("7", { name: "cv.docx", size: 1, download: async () => Buffer.alloc(0) })).toContain("PDF");
   });
 });
+
+describe("normalizePhone", () => {
+  it("makes a full international number for hh's phone field", async () => {
+    const { normalizePhone } = await import("./connect.js");
+    expect(["8 900 111-22-33", "900 111 22 33", "+375 29 123-45-67", "79001112233"].map(normalizePhone)).toEqual(["+79001112233", "+79001112233", "+375291234567", "+79001112233"]);
+  });
+});
