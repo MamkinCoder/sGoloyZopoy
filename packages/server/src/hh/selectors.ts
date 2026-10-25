@@ -55,6 +55,8 @@ export const SEL = {
     skillInput: '[data-qa="chips-trigger-input"]',
     skillChipDelete: '[data-qa^="chips-trigger-chip-"] [data-qa="chip-delete-action"]',
     save: '[data-qa="resume-partial-edit-save"]',
+    cancel: '[data-qa="resume-partial-edit-cancel"]',
+    titleOption: '[role="option"]',
     // «Дополнить резюме» wizard (/profile/resume?resume=<hash>): a duplicate stays a draft until it is walked.
     wizardSelectJob: '[data-qa="resume-profile-card-select-job"]',
     wizardNext: '[data-qa="resume-profile-next-screen"]',

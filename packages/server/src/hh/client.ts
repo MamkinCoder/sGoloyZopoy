@@ -478,6 +478,23 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     await step("edit_title_open", R.editTitle, "Нажми на кнопку редактирования желаемой должности резюме");
     await fill("edit_title_fill", R.titleInput, edit.title, "Очисти поле желаемой должности и введи %value%");
     await step("edit_title_save", R.save, "Нажми «Сохранить» в форме редактирования");
+    // The profession is an autosuggest: a title hh does not list keeps the form open and every later step finds the wrong page.
+    const formClosed = async (): Promise<boolean> => {
+      for (let i = 0; i < 10; i++) {
+        if (!(await s.exists(R.save))) return true;
+        await sleep(500);
+      }
+      return false;
+    };
+    if (!(await formClosed())) {
+      if (await s.exists(R.titleOption)) await s.click(R.titleOption).catch(() => undefined);
+      if (await s.exists(R.save)) await s.click(R.save).catch(() => undefined);
+      if (!(await formClosed())) {
+        log("hh.resume", { id: resumeId, note: "title not accepted, keeping the copy's title" });
+        if (await s.exists(R.cancel)) await s.click(R.cancel).catch(() => undefined);
+        await sleep(settleMs);
+      }
+    }
     await step("edit_about_open", R.editAbout, "Нажми на кнопку редактирования раздела «О себе»");
     await fill("edit_about_fill", R.aboutInput, edit.about, "Очисти поле «О себе» и введи %value%");
     await step("edit_about_save", R.save, "Нажми «Сохранить» в форме редактирования");
