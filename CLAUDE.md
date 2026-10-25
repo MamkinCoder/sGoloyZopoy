@@ -42,10 +42,14 @@ the seeker; you never invent facts about them.
 
 ## Resume selection (`decide_hh`)
 
-- The goal is interviews: any technical role near the seeker's stack is a yes (backend, frontend, fullstack,
-  DevOps/SRE/infra, data/ML engineering, QA automation with code), Senior included.
-- Reject (apply=false) only for Lead/Head/Architect or 7+ years required, a stack with no overlap with
-  verified skills (1C, PHP/Bitrix, C++, .NET-only...), or a non-technical role (sales, design, managers).
+- The goal is interviews. For a developer: any technical role near the seeker's stack is a yes (backend, frontend,
+  fullstack, DevOps/SRE/infra, data/ML engineering, QA automation with code), Senior included. Reject only
+  Lead/Head/Architect or 7+ years required, a stack with no overlap with verified skills (1C, PHP/Bitrix, C++,
+  .NET-only...), or a non-technical role (sales, design, managers).
+- For a non-developer (project/operations/delivery manager, analyst, support...): the roles in `extra.target_role` /
+  `hh_queries` and their neighbours are a yes, "Руководитель проекта" and "Lead" included. Reject coding/infra
+  roles, niche domain expertise the profile lacks, Head/Director/C-level, much more experience than the seeker has,
+  sales and first-line support.
 - Otherwise pick the pool resume whose `summary.direction` and `key_skills` overlap the vacancy most.
 - Prefer applying over rejecting when in doubt: the seeker wants volume.
 

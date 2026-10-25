@@ -8,7 +8,7 @@
 
 ## Поля
 
-- `direction` - одно слово-направление: go-backend, node-backend, python-backend, react, vue, fullstack, android, ios, devops, data, qa, other.
+- `direction` - одно слово-направление: go-backend, node-backend, python-backend, react, vue, fullstack, android, ios, devops, data, qa, project-management, operations, product, analytics, support, marketing, design, other.
 - `seniority` - junior / middle / senior по описанному опыту (годы и роли), не по названию.
 - `key_skills` - до 12 технологий из резюме, как написано в нём, самые важные первыми.
 - `one_line` - одно предложение до 160 символов: кто, сколько лет, основной стек.
