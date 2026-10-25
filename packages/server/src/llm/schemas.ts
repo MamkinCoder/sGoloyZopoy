@@ -11,6 +11,7 @@ export const DecisionSchema = z.object({
   direction: z.string().default(""),
   seniority: z.string().default(""),
   red_flags: z.array(z.string()).default([]),
+  missing_skills: z.array(z.string()).optional().catch(undefined),
   resume_fit: z.enum(["good", "poor"]).catch("good"),
   tailored: z.object({ title: z.string(), about: z.string().default(""), key_skills: z.array(z.string()).default([]) }).optional().catch(undefined),
   // No fake default: a missing or garbled score stays undefined and the UI shows no chip.

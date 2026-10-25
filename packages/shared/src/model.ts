@@ -141,6 +141,8 @@ export interface Decision {
   direction: string;
   seniority: string;
   red_flags: string[];
+  /** apply=false only: concrete skills (1-3) whose absence is the one thing standing in the way; the seeker is asked about them. */
+  missing_skills?: string[];
   /** How well the chosen pool resume fits this vacancy. Missing = "good" (older rows). */
   resume_fit?: "good" | "poor";
   /** Sanitized edit for a tailored resume; present only when resume_fit is "poor" and apply is true. */

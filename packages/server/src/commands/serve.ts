@@ -11,6 +11,7 @@ import { readMemAvailableMB } from "../runner/budget.js";
 import { createScheduler } from "../scheduler/index.js";
 import { telegramFetch } from "../notify/proxy.js";
 import { startTelegramCallbacks } from "../notify/telegram.js";
+import { handleSkillAskTap, parseSkillAskCallback } from "../runner/skill-ask.js";
 import { kbText, onKbTap, parseKbCallback } from "../agent/chats/review.js";
 import { gformOwner, gformText, onGformTap, parseGformCallback } from "../agent/chats/gform.js";
 import { handleQueueTap, parseQueueCallback } from "../runner/queue-cards.js";
@@ -190,6 +191,9 @@ export async function serve(): Promise<void> {
         const gf = parseGformCallback(data);
         if (gf && chats && !tapAllowed(gformOwner(chats, gf.id), chatId)) return NOT_YOURS;
         if (gf) return chats ? onGformTap(chats, gf) : AGENT_OFF;
+        const ms = parseSkillAskCallback(data);
+        if (ms && !tapAllowed(app.store.getApplication(ms.appId)?.application.userId, chatId)) return NOT_YOURS;
+        if (ms) return handleSkillAskTap(app.store, app.runner, ms);
         const q = parseQueueCallback(data);
         if (q && !tapAllowed(app.store.getApplication(q.id)?.application.userId, chatId)) return NOT_YOURS;
         if (q) return handleQueueTap(app.store, app.runner, q);

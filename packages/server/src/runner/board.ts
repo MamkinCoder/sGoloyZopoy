@@ -5,6 +5,7 @@ import { RunAbortError, Status, type BrowserSession, type Card, type Decision, t
 import type { RunContext } from "./context.js";
 import { classify, companyQuotaSkip, createRunCompanyTracker, ensureVacancy, filterOpts, recordSkip, skeletonVacancy, type ClassifyOpts, type RunCompanyTracker } from "./filters.js";
 import { decideExtras, decideKb, readLessons } from "./learn.js";
+import { askMissingSkills, MAX_ASKS } from "./skill-ask.js";
 import type { UserRun } from "./user.js";
 import { errMessage, isStop, parseSalary } from "./util.js";
 
@@ -157,13 +158,15 @@ export async function decideStage(ctx: RunContext, u: UserRun, fetched: Fetched[
   const byId = new Map(decisions.map((d) => [d.vacancy_id, d]));
   const approved: Approved[] = [];
   let rejected = 0;
+  let asked = 0;
   for (const f of fetched) {
     const v = f.vacancy;
     const d = byId.get(v.id) ?? { vacancy_id: v.id, apply: false, reason: "no decision returned", resume_id: "", cover_letter: "", direction: "", seniority: "", red_flags: [] };
     if (!d.apply) {
       rejected++;
       stats.record(Status.SKIP_LLM_REJECT);
-      ctx.store.insertApplication({ ...newApp(ctx, user.id, v.id, Status.SKIP_LLM_REJECT, d.reason), llmDecision: d });
+      const app = ctx.store.insertApplication({ ...newApp(ctx, user.id, v.id, Status.SKIP_LLM_REJECT, d.reason), llmDecision: d });
+      if (d.missing_skills?.length && asked < MAX_ASKS && (await askMissingSkills(ctx.store, ctx.deps.notifier, user, v, app.id, d.missing_skills))) asked++;
       continue;
     }
     approved.push({ vacancy: v, decision: d, companyKey: f.companyKey, lockedDirection: f.lockedDirection });
