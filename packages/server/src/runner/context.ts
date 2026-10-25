@@ -89,6 +89,7 @@ export function createBrowserHandle(deps: Pick<RunnerDeps, "cfg" | "launcher" | 
   let session: BrowserSession | null = null;
   let sessionSlug = "";
   let habrChecked: BrowserSession | null = null;
+  let hhChecked: BrowserSession | null = null;
   // The Chrome being shut down: a new one on the same profile waits for it (profile lock, leftover-kill by dir).
   let closing: Promise<void> = Promise.resolve();
 
@@ -128,9 +129,9 @@ export function createBrowserHandle(deps: Pick<RunnerDeps, "cfg" | "launcher" | 
   return {
     open: launch,
     async openHH(user) {
-      const wasOpen = !!session && sessionSlug === user.slug;
       const s = await launch(user);
-      if (wasOpen) return s;
+      // «Open» is not «logged in to hh»: a session opened for Habr (or a send) has not been checked for hh yet.
+      if (hhChecked === s) return s;
       let ok = await deps.hh.checkLogin(s);
       if (!ok) {
         const cookies = await loadCookies(paths.cookies(deps.cfg, user.slug));
@@ -141,6 +142,7 @@ export function createBrowserHandle(deps: Pick<RunnerDeps, "cfg" | "launcher" | 
         }
       }
       if (!ok) throw new RunAbortError(Status.FAILED_LOGIN_EXPIRED, `hh.ru session for ${user.slug} is not authenticated; run \`sgz hh-login --user ${user.slug}\``);
+      hhChecked = s;
       log.info("session", "hh login ok");
       return s;
     },

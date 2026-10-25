@@ -5,6 +5,24 @@ import { createBrowserHandle } from "./context.js";
 const silent = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
 describe("createBrowserHandle", () => {
+  it("openHH checks hh login even when the session was opened for Habr first (the /cvsync order), and only once per session", async () => {
+    const s = { cookies: async () => [], setCookies: vi.fn(async () => undefined) } as unknown as BrowserSession;
+    const checks: boolean[] = [false, true]; // logged out until the saved cookies are injected
+    const hh = { checkLogin: vi.fn(async () => checks.shift() ?? true) };
+    const habr = { checkLogin: vi.fn(async () => true) };
+    const b = createBrowserHandle(
+      { cfg: { dataDir: "/tmp/sgz-bh", chromiumBin: "", userAgent: "" } as never, launcher: { launch: async () => s }, hh: hh as never, habr: habr as never, loadCookies: async () => [{ name: "hhtoken" } as never] },
+      { profileDir: () => "/tmp/p", snapshotDir: "/tmp/s", log: silent },
+    );
+    const user = { slug: "y" } as User;
+    await b.openHabr(user);
+    await b.openHH(user);
+    expect(hh.checkLogin).toHaveBeenCalledTimes(2);
+    expect(s.setCookies).toHaveBeenCalledTimes(1);
+    await b.openHH(user);
+    expect(hh.checkLogin).toHaveBeenCalledTimes(2);
+  });
+
   it("a new Chrome on the profile waits until a fire-and-forget close finished", async () => {
     let closed = () => undefined as void;
     const order: string[] = [];

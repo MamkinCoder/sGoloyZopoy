@@ -45,7 +45,7 @@ export async function cvSyncJob(env: ChatEnv, userId: number): Promise<void> {
         const r = await writeHabrSkills(s, next);
         lines.push(`Хабр Карьера: ${delta(current, next)}${r.missing.length ? `. Нет в словаре Хабра: ${r.missing.join(", ")}` : ""}`);
       }
-      if (mapped.missing.length) lines.push(`Хабр: нет в словаре и не добавлено: ${mapped.missing.join(", ")}`);
+      if (mapped.missing.length) lines.push(`Хабр: нет в словаре, не добавлено (${mapped.missing.length}): ${mapped.missing.slice(0, 8).join(", ")}${mapped.missing.length > 8 ? " и др." : ""}`);
     } catch (e) {
       lines.push(`Хабр Карьера: не получилось (${errMessage(e)})`);
     }
