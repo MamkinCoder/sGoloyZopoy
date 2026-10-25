@@ -120,7 +120,7 @@ export function createOnboarding(d: OnboardDeps) {
     if (!code || !(d.now().getTime() - at < INVITE_TTL_MS)) return null;
     if (chatId.startsWith("-")) return "Эта ссылка работает только в личных сообщениях: открой бота и напиши ему /start с кодом там.";
     d.store.setSetting(`invite:${code}`, "");
-    const user = d.store.upsertUser({ slug: `u${chatId.replace(/\D/g, "")}`, name: "Новый", tgChatId: chatId, dailyLimitHH: 25, dailyLimitCareer: 10, active: false, allowOtherCountry: false, poolExpandPerDay: 3, opusEnabled: false });
+    const user = d.store.upsertUser({ slug: `u${chatId.replace(/\D/g, "")}`, name: "Новый", tgChatId: chatId, dailyLimitHH: 25, dailyLimitCareer: 10, active: false, allowOtherCountry: true, poolExpandPerDay: 3, opusEnabled: false });
     return start(user, chatId);
   }
 
