@@ -39,6 +39,7 @@ export const SEL = {
     submit: ['[data-qa="vacancy-response-submit-popup"]', '[data-qa="vacancy-response-letter-submit"]', 'button[type="submit"][data-qa*="response"]'],
     success: ['[data-qa="vacancy-response-link-view-topic"]', '[data-qa="vacancy-response-success"]'],
   },
+  cookieAccept: '[data-qa="cookies-policy-informer-accept"]',
   resumes: {
     card: '[data-qa="resume"]',
     titleLink: '[data-qa="resume-title-link"]',

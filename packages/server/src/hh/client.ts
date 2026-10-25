@@ -90,6 +90,8 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
   const open = async (s: BrowserSession, url: string, quick = false): Promise<void> => {
     await s.goto(url, { quick });
     await assertNotBlocked(s);
+    // hh's cookie banner sits over the editors' «Сохранить» bar: a click there lands on the banner.
+    if (!quick && (await s.exists(SEL.cookieAccept))) await s.click(SEL.cookieAccept).catch(() => undefined);
   };
   const ensureAt = async (s: BrowserSession, url: string): Promise<void> => {
     if (norm(await s.url()) !== norm(url)) await open(s, url);
