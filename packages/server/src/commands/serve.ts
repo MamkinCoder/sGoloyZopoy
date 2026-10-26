@@ -11,7 +11,7 @@ import { readMemAvailableMB } from "../runner/budget.js";
 import { createScheduler } from "../scheduler/index.js";
 import { telegramFetch } from "../notify/proxy.js";
 import { startTelegramCallbacks } from "../notify/telegram.js";
-import { handleSkillAskTap, parseSkillAskCallback } from "../runner/skill-ask.js";
+import { afterSkill, handleSkillAskTap, parseSkillAskCallback } from "../runner/skill-ask.js";
 import { kbText, onKbTap, parseKbCallback } from "../agent/chats/review.js";
 import { gformOwner, gformText, onGformTap, parseGformCallback } from "../agent/chats/gform.js";
 import { handleQueueTap, parseQueueCallback } from "../runner/queue-cards.js";
@@ -74,7 +74,8 @@ export async function serve(): Promise<void> {
   const digestAll = (chatId: string) => usersOf(chatId).map((u) => `${u.name}\n${buildDigest(app.store, u, app.cfg.tz, new Date(), app.cfg.panelUrl)}`).join("\n\n");
   const retroAll = (chatId: string) => usersOf(chatId).map((u) => `${u.name}\n${buildRetro(app.store, u, app.cfg.tz, new Date()) ?? `Мало данных: за неделю меньше ${MIN_SENT} откликов`}`).join("\n\n");
   const onboarding = wireOnboarding(app);
-  const hub = createSkillsHub({ store: app.store, llm: app.llm, notifier: app.notifier, chats, now: () => new Date() });
+  const askDeps = { store: app.store, runner: app.runner, notifier: app.notifier };
+  const hub = createSkillsHub({ store: app.store, llm: app.llm, notifier: app.notifier, chats, now: () => new Date(), afterSkill: (userId, tagId) => afterSkill(askDeps, userId, tagId) });
   const HELP = [
     "Команды:",
     "/onboard - подключить hh.ru и Хабр Карьеру (вход, резюме)",
@@ -193,7 +194,7 @@ export async function serve(): Promise<void> {
         if (gf) return chats ? onGformTap(chats, gf) : AGENT_OFF;
         const ms = parseSkillAskCallback(data);
         if (ms && !tapAllowed(app.store.getApplication(ms.appId)?.application.userId, chatId)) return NOT_YOURS;
-        if (ms) return handleSkillAskTap(app.store, app.runner, ms);
+        if (ms) return handleSkillAskTap(askDeps, ms);
         const q = parseQueueCallback(data);
         if (q && !tapAllowed(app.store.getApplication(q.id)?.application.userId, chatId)) return NOT_YOURS;
         if (q) return handleQueueTap(app.store, app.runner, q);

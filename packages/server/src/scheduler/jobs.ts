@@ -11,6 +11,7 @@ import { careerRotation } from "../runner/career.js";
 import { askOutcomes, interviewsDue, remindInterviews } from "../runner/interview.js";
 import { refreshLessons } from "../runner/learn.js";
 import { readPending, startPendingSend } from "../runner/queue-cards.js";
+import { hasParkedForce, startPendingForce } from "../runner/skill-ask.js";
 import { errMessage } from "../runner/util.js";
 import { nextJob } from "./autopilot.js";
 import { chatStallChanged, checkChatStall, checkHeartbeat, heartbeatChanged } from "./health.js";
@@ -85,6 +86,7 @@ export function serveJobs(d: ServeJobsDeps): { handlers: Record<string, JobHandl
         async run(_job, ctx) {
           if (d.runner.active()) return;
           if (await startPendingSend(store, d.runner).catch((e: unknown) => (warn("queued send")(e), false))) return;
+          if (await startPendingForce(store, d.runner).catch((e: unknown) => (warn("skill apply")(e), false))) return;
           if (!idle()) return; // a run started meanwhile, or the daily run's retry owns the slot
           const job = autopilotNext(ctx.now());
           // touch_last_at only once the run really started: a RunBusyError must not skip the raise for 4 h.
@@ -98,7 +100,7 @@ export function serveJobs(d: ServeJobsDeps): { handlers: Record<string, JobHandl
       { kind: "interviews.remind", everyMs: MIN, due: (now) => interviewsDue(store, notifier, now) },
       { kind: "health.heartbeat", everyMs: 30 * MIN, due: (now) => heartbeatChanged(store, d.startedAt, now) },
       { kind: "learn.lessons", everyMs: 60 * MIN, due: idle },
-      { kind: "runner.autopilot", everyMs: MIN, due: (now) => !d.runner.active() && (readPending(store).length > 0 || (!d.owed() && autopilotNext(now) !== null)) },
+      { kind: "runner.autopilot", everyMs: MIN, due: (now) => !d.runner.active() && (readPending(store).length > 0 || hasParkedForce(store) || (!d.owed() && autopilotNext(now) !== null)) },
     );
     if (d.chatsPolled) schedules.push({ kind: "health.chats", everyMs: MIN, due: (now) => chatStallChanged(store, lastChatDone(), now.getTime()) });
   }

@@ -20,6 +20,8 @@ export interface HubDeps {
   /** The agent's env: needed for the pending list (chat tasks); null when the runner is off. */
   chats: ChatEnv | null;
   now(): Date;
+  /** A skill got a story (or «-»): vacancy questions waiting for it are settled. */
+  afterSkill?(userId: number, tagId: number): Promise<void>;
 }
 
 type Wait = { kind: "more"; tagId: number } | { kind: "edit"; storyId: number } | { kind: "newname" };
@@ -258,6 +260,7 @@ export function createSkillsHub(d: HubDeps) {
       store.setKbTagStatus(tag.id, "yes");
       syncProfileSkills(store, user.id);
       if (d.chats) await answerTagEverywhere(d.chats, user.id, tag.id, true);
+      await d.afterSkill?.(user.id, tag.id).catch(() => undefined);
       return `Добавил «${tag.name}» без описания. Резюме обновятся командой /cvsync.`;
     }
     // One entry per skill: the LLM reads what is written and the new text and rewrites them into a single entry.
@@ -269,6 +272,7 @@ export function createSkillsHub(d: HubDeps) {
     }
     saveMerged(store, user.id, tag.name, merged, existing);
     if (d.chats) await answerTagEverywhere(d.chats, user.id, tag.id, true);
+    await d.afterSkill?.(user.id, tag.id).catch(() => undefined);
     return `Обновил запись про ${tag.name}: ${merged.title}. Посмотреть: /skills. Резюме на hh и Хабре обновятся командой /cvsync.`;
   }
 
