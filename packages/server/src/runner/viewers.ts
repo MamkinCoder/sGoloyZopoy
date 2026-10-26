@@ -5,7 +5,7 @@ import { notifierFor, RunAbortError, Status, companyKey, type HHResume } from "@
 import type { RunContext } from "./context.js";
 import { applyStage, decideStage, fetchStage, type Candidate } from "./board.js";
 import { classify, ensureVacancy, filterOpts, skeletonVacancy, type RunCompanyTracker } from "./filters.js";
-import { hhBoard, IT_ROLES } from "./hh.js";
+import { hhBoard, searchScope } from "./hh.js";
 import type { UserRun } from "./user.js";
 import { errMessage, isStop, parseSalary } from "./util.js";
 
@@ -59,7 +59,7 @@ export async function viewersStage(ctx: RunContext, u: UserRun, pool: HHResume[]
     ctx.checkAbort();
     const lead: Lead = { key, employer: v.employer, candidates: [] };
     try {
-      const cards = await ctx.hh.search(s, { query: "", employerId: v.employerId, period: 30, area: profile.hh_area || undefined, roles: IT_ROLES });
+      const cards = await ctx.hh.search(s, { query: "", employerId: v.employerId, period: 30, area: profile.hh_area || undefined, ...searchScope(profile) });
       for (const card of cards) {
         if (lead.candidates.length >= PER_EMPLOYER) break;
         const vacancy = ensureVacancy(ctx.store, skeletonVacancy("hh", card.externalId, card.url, card.title, card.company, parseSalary(card.salaryRaw)));

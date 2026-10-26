@@ -12,6 +12,7 @@ export const searchUrl = (p: SearchParams): string => {
   q.set("page", String(p.page ?? 0));
   if (p.area) q.set("area", p.area);
   for (const r of p.roles ?? []) q.append("professional_role", r);
+  if (p.titleOnly) q.set("search_field", "name");
   if (p.employerId) q.set("employer_id", p.employerId);
   return `${HH_ORIGIN}/search/vacancy?${q.toString()}`;
 };

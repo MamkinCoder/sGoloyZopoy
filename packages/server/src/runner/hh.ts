@@ -1,10 +1,10 @@
 // hh.ru stages for one user. Sequential; browser closed for the LLM batch (decide); abort checked
 // between items so stop() takes effect quickly.
-import { RunAbortError, Status, type Answer, type BrowserSession, type Decision, type HHResume, type Question } from "@sgz/shared";
+import { RunAbortError, Status, type Answer, type BrowserSession, type Decision, type HHResume, type Profile, type Question } from "@sgz/shared";
 import { forceApply, newApp, runBoard, sendFailed, type Board } from "./board.js";
 import { dailyBudget } from "./budget.js";
 import type { RunContext } from "./context.js";
-import { createRunCompanyTracker } from "./filters.js";
+import { createRunCompanyTracker, settingInt } from "./filters.js";
 import { expandPool, syncPool, syncIsStale } from "./pool.js";
 import { kbForVacancy } from "../kb/context.js";
 import { renderQuestions } from "../llm/format.js";
@@ -58,7 +58,7 @@ export function hhBoard(ctx: RunContext, u: UserRun, pool: HHResume[]): Board {
     maxPages: 5,
     open: () => ctx.browser.openHH(user),
     async search(s, query, page) {
-      const cards = await ctx.hh.search(s, { query, page, period: 1, area: profile.hh_area || undefined, roles: IT_ROLES });
+      const cards = await ctx.hh.search(s, { query, page, period: settingInt(ctx.store, "hh_search_days", 1), area: profile.hh_area || undefined, ...searchScope(profile) });
       return cards.length ? { cards, more: true } : null;
     },
     async fetch(s, c, forced) {
@@ -206,3 +206,9 @@ async function touchStage(ctx: RunContext, u: UserRun, pool: HHResume[]): Promis
  * Without it short queries like «go» return couriers and marketers that only burn fetch + decide time.
  * ponytail: one list for every user; move to profile when a non-developer user appears. */
 export const IT_ROLES = ["96", "160", "124", "165", "114"];
+
+const NON_DEV_DIRECTIONS = ["other", "project-management", "operations", "product", "analytics", "support", "marketing", "design"];
+
+/** A developer searches the IT roles; anyone else (managers, operations...) searches by title in every role. */
+export const searchScope = (p: Pick<Profile, "directions">): { roles?: string[]; titleOnly?: boolean } =>
+  p.directions.length && p.directions.every((d) => NON_DEV_DIRECTIONS.includes(d)) ? { titleOnly: true } : { roles: IT_ROLES };

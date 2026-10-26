@@ -12,6 +12,8 @@ export interface SearchParams {
   area?: string;
   /** hh professional_role ids (api.hh.ru/professional_roles); empty = any role. */
   roles?: string[];
+  /** Match the query against vacancy titles only (hh search_field=name); drops description-only hits. */
+  titleOnly?: boolean;
   /** hh employer id: only this employer's vacancies. */
   employerId?: string;
 }
