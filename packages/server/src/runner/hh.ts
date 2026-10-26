@@ -209,6 +209,8 @@ export const IT_ROLES = ["96", "160", "124", "165", "114"];
 
 const NON_DEV_DIRECTIONS = ["other", "project-management", "operations", "product", "analytics", "support", "marketing", "design"];
 
-/** A developer searches the IT roles; anyone else (managers, operations...) searches by title in every role. */
-export const searchScope = (p: Pick<Profile, "directions">): { roles?: string[]; titleOnly?: boolean } =>
+/** A developer searches the IT roles; anyone else (managers, operations...) searches by title in every role.
+ *  `profile.extra.search_scope` ("it" | "any") overrides the guess from the directions (a developer the onboarding filed under «other»). */
+export const searchScope = (p: Pick<Profile, "directions" | "extra">): { roles?: string[]; titleOnly?: boolean } =>
+  p.extra?.search_scope === "it" ? { roles: IT_ROLES } : p.extra?.search_scope === "any" ? { titleOnly: true } :
   p.directions.length && p.directions.every((d) => NON_DEV_DIRECTIONS.includes(d)) ? { titleOnly: true } : { roles: IT_ROLES };
