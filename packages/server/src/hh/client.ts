@@ -319,7 +319,9 @@ export const createHHClient = (opts: HHClientOptions): HHClient => {
     if (await isSuccessShown(s)) return true;
     const per = Math.max(1000, Math.floor(confirmTimeoutMs / TEXT.applySuccess.length));
     for (const t of TEXT.applySuccess) if (await s.waitForText(t, per)) return true;
-    return isSuccessShown(s);
+    if (await isSuccessShown(s)) return true;
+    // A «укажите город» popup can cover the success text; the page behind it already shows the response (we skipped applied vacancies before submitting).
+    return !!(await textHas(s, ["Откликнуться повторно", ...TEXT.alreadyApplied]));
   };
 
   const apply = async (s: BrowserSession, req: ApplyRequest): Promise<ApplyResult> => {
