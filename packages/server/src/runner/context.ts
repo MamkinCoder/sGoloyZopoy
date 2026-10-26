@@ -50,6 +50,8 @@ export function createContext(deps: RunnerDeps, run: Run, req: RunRequest, log: 
     log,
     checkAbort,
     loadImages: String(req.stage ?? "").startsWith("send:"),
+    images: !req.stage || String(req.stage).startsWith("force:"), // runs that apply
+
   });
 
   return {
@@ -79,6 +81,8 @@ export interface BrowserHandleOpts {
   checkAbort?: () => void;
   /** Keep images on and run headful (career `send:<id>` runs submit a form; everything else reads pages). */
   loadImages?: boolean;
+  /** Images on in the usual headless Chrome (hh shows a captcha to a browser that never loads one). */
+  images?: boolean;
 }
 
 /** One lazily launched Chrome with the user's persistent profile; the hh / Habr login is verified on first use
@@ -106,7 +110,7 @@ export function createBrowserHandle(deps: Pick<RunnerDeps, "cfg" | "launcher" | 
       userAgent: deps.cfg.userAgent || undefined,
       snapshotDir: o.snapshotDir,
       blockAssets: true,
-      ...(o.loadImages ? { loadImages: true } : {}),
+      ...(o.loadImages || o.images ? { loadImages: true } : {}),
       cacheDir: paths.actionCache(deps.cfg),
     });
     sessionSlug = user.slug;

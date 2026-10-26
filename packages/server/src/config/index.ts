@@ -21,8 +21,8 @@ const DEFAULTS = {
   scheduleAt: "12:00",
   scheduleJitterMin: 20,
   tz: "Europe/Moscow",
-  throttleMinMs: 8000,
-  throttleMaxMs: 20000,
+  throttleMinMs: 12000,
+  throttleMaxMs: 30000,
   memoryGuardMB: 450,
 } as const;
 

@@ -68,8 +68,8 @@ describe("loadConfig", () => {
     expect(c.scheduleJitterMin).toBe(20);
     expect(c.tz).toBe("Europe/Moscow");
     expect(c.runnerEnabled).toBe(true);
-    expect(c.throttleMinMs).toBe(8000);
-    expect(c.throttleMaxMs).toBe(20000);
+    expect(c.throttleMinMs).toBe(12000);
+    expect(c.throttleMaxMs).toBe(30000);
     expect(c.memoryGuardMB).toBe(450);
     expect(c.userAgent).toBe(DEFAULT_USER_AGENT); // "": the launcher derives it from the installed Chromium
     expect(c.panelUrl).toBe("http://localhost:3002");
