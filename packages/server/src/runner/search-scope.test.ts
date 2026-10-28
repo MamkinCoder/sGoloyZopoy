@@ -13,3 +13,14 @@ describe("hh search scope", () => {
     expect(url).not.toContain("professional_role");
   });
 });
+
+describe("career keywords", () => {
+  it("a manager's discovery keeps manager titles, a developer's keeps the developer list", async () => {
+    const { careerKeywords } = await import("./career.js");
+    const mgr = careerKeywords({ directions: ["other"], extra: { target_role: "Project manager, Operations manager" }, hh_queries: ["delivery manager"] });
+    expect(mgr).toContain("менеджер");
+    expect(mgr).toContain("project");
+    expect(mgr).not.toContain("golang");
+    expect(careerKeywords({ directions: ["go-backend"], extra: {}, hh_queries: ["go"] })).toContain("golang");
+  });
+});

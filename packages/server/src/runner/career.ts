@@ -1,7 +1,7 @@
 // Career-site stages for one user: onboard → discover → dedup → fetch → decide → tailor CV (browser
 // closed) → build PDF → cover letter → QUEUED for human review. Nothing is submitted automatically:
 // the panel starts stage send:<id> (submit) or inspect:<id> (fill the form, don't submit) per item.
-import { notifierFor, paths, RunAbortError, Status, type ATSKind, type Answer, type CareerSite, type Decision, type Discovered, type Question, type Vacancy } from "@sgz/shared";
+import { notifierFor, paths, RunAbortError, Status, type ATSKind, type Answer, type CareerSite, type Decision, type Discovered, type Profile, type Question, type Vacancy } from "@sgz/shared";
 import { tailorToPdf, tierFor, type TailorPipelineResult } from "./tailor-pipeline.js";
 import { dailyBudget } from "./budget.js";
 import { atsClientFor } from "../career/ats/index.js";
@@ -24,6 +24,16 @@ const DEFAULT_CAREER_KEYWORDS = ["разработчик", "developer", "про�
   // transliterated slugs (sitemap-based clients)
   "razrabotchik", "programmist"];
 import { errMessage, isStop } from "./util.js";
+import { searchScope } from "./hh.js";
+
+// Whole-word title matching: Russian forms are listed, not stemmed.
+const MANAGER_KEYWORDS = ["менеджер", "manager", "руководитель", "руководителя", "project", "проект", "проекта", "проектов", "проектный", "operations", "операционный", "операционной", "операций", "delivery", "product", "продукта", "продуктов", "координатор", "coordinator", "владелец продукта"];
+
+/** Title keywords of career-site discovery: the developer list, or for a non-developer the words of their own searches plus the management list. */
+export const careerKeywords = (p: Pick<Profile, "directions" | "extra" | "hh_queries">): string[] =>
+  searchScope(p).titleOnly
+    ? [...new Set([...MANAGER_KEYWORDS, ...[...p.hh_queries, p.extra?.target_role ?? ""].flatMap((q) => q.toLowerCase().split(/[^\p{L}\d.+#]+/u)).filter((w) => w.length >= 4)])]
+    : DEFAULT_CAREER_KEYWORDS;
 
 export interface CareerPlan {
   /** Only onboard this site id (stage `onboard:<id>`); null = normal flow. */
@@ -166,7 +176,7 @@ async function runSite(ctx: RunContext, u: UserRun, site: CareerSite, budget: nu
   const career = ctx.deps.career!;
   // Discovery needs a browser only for sites without a client; applying opens its own session later.
   const session = site.ats === "custom" ? await ctx.browser.open(user) : null;
-  const discovered = await career.discover(session, site, site.profile.filters?.length ? site.profile.filters : DEFAULT_CAREER_KEYWORDS);
+  const discovered = await career.discover(session, site, site.profile.filters?.length ? site.profile.filters : careerKeywords(profile));
   stats.found(discovered.length);
   ctx.log.info("discover", `${site.name}: ${discovered.length} vacancies`, { site_id: site.id, found: discovered.length });
 
