@@ -12,8 +12,9 @@ export interface Config {
   chromiumBin: string; // CHROMIUM_BIN
   claudeBin: string; // default "claude"
   geminiBin: string; // default "gemini" (Gemini CLI)
+  agyBin: string; // default "agy" (Antigravity CLI)
   /** Which headless CLI answers LLM calls: SGZ_LLM=gemini, default claude. */
-  llmProvider: "claude" | "gemini";
+  llmProvider: "claude" | "gemini" | "agy";
   xelatexBin: string; // default "xelatex"
   scheduleAt: string; // "12:00"; "" → off
   scheduleJitterMin: number; // ±minutes, default 20
