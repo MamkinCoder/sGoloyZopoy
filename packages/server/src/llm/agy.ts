@@ -1,14 +1,36 @@
-// `agy -p` wrapper (Antigravity CLI, the successor of Gemini CLI), the same contract as runClaude: one headless process per
+// `agy -p` wrapper (Antigravity CLI), the same contract as runClaude: one headless process per
 // call, serialized by the same mutex. Selected with SGZ_LLM=agy. agy ignores stdin in print mode, so the whole prompt is the
-// argument of --print; it answers with a JSON envelope. Google must be reached through the VPN proxy (same as gemini.ts).
+// argument of --print; it answers with a JSON envelope.
 import type { Tier } from "@sgz/shared";
 import { ClaudeError, spawnCollect, type RunClaudeOpts, type RunClaudeResult } from "./claude.js";
-import { geminiProxyEnv } from "./gemini.js";
 import { claudeMutex, llmCaller } from "./mutex.js";
 
 /** Model ids of `agy models`; AGY_MODEL_FAST / _WRITE / _TAILOR override. */
 export const agyModel = (tier: Tier, env: NodeJS.ProcessEnv = process.env): string =>
   (tier === "fast" ? env.AGY_MODEL_FAST : tier === "write" ? env.AGY_MODEL_WRITE : env.AGY_MODEL_TAILOR) || (tier === "fast" ? "gemini-3.8-flash-medium" : "claude-sonnet-4-6");
+
+/**
+ * Google must be reached through the VPN proxy (the Pi's own IP is Russian and Google rejects it): the child gets the proxy
+ * in every spelling Node tools read, and without any proxy configured the call is refused instead of going out directly.
+ * SGZ_LLM_PROXY wins over HTTPS_PROXY / ALL_PROXY; SGZ_LLM_DIRECT=1 allows no proxy (a dev machine outside Russia).
+ */
+export function agyProxyEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const proxy = env.SGZ_LLM_PROXY || env.HTTPS_PROXY || env.https_proxy || env.ALL_PROXY || env.all_proxy || "";
+  if (!proxy) {
+    if (env.SGZ_LLM_DIRECT === "1") return {};
+    throw new ClaudeError("agy: no proxy configured (set SGZ_LLM_PROXY or HTTPS_PROXY): refusing to call Google directly", -1, "", 0);
+  }
+  return {
+    HTTPS_PROXY: proxy,
+    https_proxy: proxy,
+    HTTP_PROXY: proxy,
+    http_proxy: proxy,
+    ALL_PROXY: proxy,
+    all_proxy: proxy,
+    NO_PROXY: "127.0.0.1,localhost,::1",
+    no_proxy: "127.0.0.1,localhost,::1",
+  };
+}
 
 const DEFAULT_TIMEOUT_MS = 300_000;
 const STDERR_TAIL = 2000;
@@ -36,7 +58,7 @@ export async function runAgy(opts: RunClaudeOpts): Promise<RunClaudeResult> {
   if (Buffer.byteLength(opts.prompt) > MAX_PROMPT_BYTES) throw new ClaudeError(`agy: prompt of ${Buffer.byteLength(opts.prompt)} bytes does not fit one argument`, -1, "", 0);
   const caller = llmCaller.getStore();
   const signal = opts.signal ?? caller?.signal;
-  const proxyEnv = geminiProxyEnv({ ...process.env, ...opts.env });
+  const proxyEnv = agyProxyEnv({ ...process.env, ...opts.env });
   return claudeMutex.run(async () => {
     if (signal?.aborted) throw new ClaudeError("agy aborted before start", -1, "", 0);
     const r = await spawnCollect(opts.bin, buildAgyArgs(opts.tier, opts.prompt), {

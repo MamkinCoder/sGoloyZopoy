@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { agyModel, buildAgyArgs, parseAgyOutput } from "./agy.js";
+import { agyModel, agyProxyEnv, buildAgyArgs, parseAgyOutput } from "./agy.js";
+
+describe("agy goes through the VPN proxy only", () => {
+  it("passes the proxy in every spelling, SGZ_LLM_PROXY first", () => {
+    const e = agyProxyEnv({ HTTPS_PROXY: "http://a:1", SGZ_LLM_PROXY: "http://b:2" });
+    expect([e.HTTPS_PROXY, e.https_proxy, e.ALL_PROXY, e.http_proxy]).toEqual(["http://b:2", "http://b:2", "http://b:2", "http://b:2"]);
+  });
+  it("refuses to run without a proxy unless SGZ_LLM_DIRECT=1", () => {
+    expect(() => agyProxyEnv({})).toThrow(/refusing to call Google directly/);
+    expect(agyProxyEnv({ SGZ_LLM_DIRECT: "1" })).toEqual({});
+  });
+});
 
 describe("agy wrapper", () => {
   it("maps tiers to models, overridable by env", () => {

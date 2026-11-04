@@ -55,7 +55,6 @@ export function fakeConfig(dataDir: string): Config {
     tgChatId: "",
     chromiumBin: "chromium",
     claudeBin: "claude",
-    geminiBin: "gemini",
     llmProvider: "claude",
     xelatexBin: "xelatex",
     scheduleAt: "12:00",

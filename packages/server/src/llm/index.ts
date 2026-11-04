@@ -27,7 +27,6 @@ import type {
 import { z, type ZodType } from "zod";
 import { ClaudeError, TIER_MODEL, extractJson, runClaude } from "./claude.js";
 import { agyModel, runAgy } from "./agy.js";
-import { geminiModel, runGemini } from "./gemini.js";
 import { neverClaimList, profileForLLM, renderAnswers, renderHistory, renderQuestions, renderResumes, renderVacancies, renderVacancy } from "./format.js";
 import { LIMITS, blockedTech, claimRegex, ensureDecisions, enforceMax, normalizeProse, sanitizeLetter, stripLinkSentences, stripNeverClaimSentences } from "./guards.js";
 import {
@@ -83,10 +82,10 @@ async function invoke(ctx: Ctx, task: string, tier: Tier, prompt: string, attemp
   const started = Date.now();
   const provider = ctx.cfg.llmProvider;
   const log = (ok: boolean, resultChars: number, error: string, durationMs: number) =>
-    ctx.store?.insertLLMCall({ runId: ctx.runId, task, model: provider === "agy" ? agyModel(tier) : provider === "gemini" ? geminiModel(tier) : TIER_MODEL[tier], promptChars: prompt.length, resultChars, durationMs, ok, error, attempt });
+    ctx.store?.insertLLMCall({ runId: ctx.runId, task, model: provider === "agy" ? agyModel(tier) : TIER_MODEL[tier], promptChars: prompt.length, resultChars, durationMs, ok, error, attempt });
   try {
-    const r = await (provider === "agy" ? runAgy : provider === "gemini" ? runGemini : runClaude)({
-      bin: (provider === "agy" ? ctx.cfg.agyBin : provider === "gemini" ? ctx.cfg.geminiBin : ctx.cfg.claudeBin) || provider,
+    const r = await (provider === "agy" ? runAgy : runClaude)({
+      bin: (provider === "agy" ? ctx.cfg.agyBin : ctx.cfg.claudeBin) || (provider === "agy" ? "agy" : "claude"),
       cwd: ctx.cfg.repoDir,
       tier,
       prompt,
